@@ -10,7 +10,7 @@ from CRM.jmschatagents_views import *
 urlpatterns = [
 
     path('webhook/', webhook, name="webhook"),
-    path('', home, name='home'),
+    # path('', home, name='home'),
 
 
     path("api/industry/dashboard/",                              dashboard_summary,       name="industry_dashboard"),
