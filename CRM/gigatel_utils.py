@@ -216,10 +216,7 @@ def check_otdr_fault_side(
     circuit_detail: dict | None = None,
 ) -> dict | None:
     """
-    Calls OTDRCheckCustomerOrGigatel to determine fault side, then cross-checks
-    the result against the circuit's last-mile ownership data
-    (fromLastMileManagedBy / toLastMileManagedBy + bifurcation last-mile segment)
-    and overrides the API result when it contradicts that data.
+    Calls OTDRCheckCustomerOrGigatel to determine fault side and returns the result.
     """
     logger.debug(
         "[CRM] check_otdr_fault_side: circuit_id=%s otdr_from_to=%s otdr=%s",
@@ -243,58 +240,6 @@ def check_otdr_fault_side(
         logger.error("[CRM] check_otdr_fault_side: EXCEPTION circuit_id=%s error=%s", circuit_id, exc)
         return None
 
-    raw_fault_side = str((data or {}).get("data", "")).strip().lower()
-
-    # ── Last-mile sanity check / override ───────────────────────────────────
-    if circuit_detail:
-        last_mile_owner = (
-            circuit_detail.get("toLastMileManagedBy")
-            if otdr_from_to.lower() == "to"
-            else circuit_detail.get("fromLastMileManagedBy")
-        )
-        last_mile_owner_norm = (last_mile_owner or "").strip().lower()
-
-        last_mile_seg = get_last_mile_segment(circuit_detail, otdr_from_to)
-        last_mile_length = (
-            float(last_mile_seg.get("fiberLength") or 0) if last_mile_seg else None
-        )
-
-        logger.info(
-            "[CRM] check_otdr_fault_side: last_mile_check side=%s owner=%s length=%s "
-            "otdr=%s api_result=%s",
-            otdr_from_to, last_mile_owner, last_mile_length, otdr_value, raw_fault_side
-        )
-
-        if last_mile_owner_norm == "gigatel":
-            if raw_fault_side != "gigatel":
-                logger.warning(
-                    "[CRM] check_otdr_fault_side: ⚠️ API said %r but %s-side last-mile is "
-                    "Gigatel-owned (circuit_id=%s) — overriding to 'Gigatel'",
-                    raw_fault_side, otdr_from_to, circuit_id
-                )
-            data["data"] = "Gigatel"
-            return data
-
-        if last_mile_owner_norm == "customer" and last_mile_length is not None:
-            if otdr_value <= last_mile_length:
-                if raw_fault_side != "customer":
-                    logger.warning(
-                        "[CRM] check_otdr_fault_side: ⚠️ API said %r but OTDR=%.3f is within "
-                        "%s-side customer last-mile (%.3fm) — overriding to 'Customer'",
-                        raw_fault_side, otdr_value, otdr_from_to, last_mile_length
-                    )
-                data["data"] = "Customer"
-            else:
-                if raw_fault_side != "gigatel":
-                    logger.warning(
-                        "[CRM] check_otdr_fault_side: ⚠️ API said %r but OTDR=%.3f exceeds "
-                        "%s-side customer last-mile (%.3fm) — overriding to 'Gigatel'",
-                        raw_fault_side, otdr_value, otdr_from_to, last_mile_length
-                    )
-                data["data"] = "Gigatel"
-            return data
-
-    logger.info("[CRM] check_otdr_fault_side: final result=%s", data)
     return data
 
 
