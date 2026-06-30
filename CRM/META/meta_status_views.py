@@ -123,19 +123,7 @@ class WhatsAppAccountStatusView(APIView):
             # ─────────────────────────────────
 
             if "error" in phone_data:
-
-                return Response(
-                    {
-                        "success": False,
-                        "type": "phone_api_error",
-                        "message": (
-                            phone_data["error"]
-                            .get("message")
-                        ),
-                        "details": phone_data
-                    },
-                    status=400
-                )
+                phone_data = {}
 
             # ─────────────────────────────────
             # WABA DETAILS API
@@ -174,19 +162,7 @@ class WhatsAppAccountStatusView(APIView):
             # ─────────────────────────────────
 
             if "error" in waba_data:
-
-                return Response(
-                    {
-                        "success": False,
-                        "type": "waba_api_error",
-                        "message": (
-                            waba_data["error"]
-                            .get("message")
-                        ),
-                        "details": waba_data
-                    },
-                    status=400
-                )
+                waba_data = {}
 
             # ─────────────────────────────────
             # THROUGHPUT
@@ -235,7 +211,7 @@ class WhatsAppAccountStatusView(APIView):
                     # BASIC
 
                     "waba_name":
-                        waba_data.get("name"),
+                        waba_data.get("name") or client.waba_name,
 
                     "waba_id":
                         client.waba_id,
@@ -248,7 +224,7 @@ class WhatsAppAccountStatusView(APIView):
                     "phone_number":
                         phone_data.get(
                             "display_phone_number"
-                        ),
+                        ) or client.phone_number,
 
                     "phone_number_id":
                         client.phone_number_id,

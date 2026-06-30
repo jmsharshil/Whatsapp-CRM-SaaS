@@ -16,3 +16,8 @@ admin.site.register(Template)
 admin.site.register(ConversationState)
 admin.site.register(Campaign)
 admin.site.register(CampaignRecipient)
+
+admin.site.register(WhatsAppMessage)
+admin.site.register(WhatsAppSession)
+
+admin.site.register(MetaRegistrationDetails)

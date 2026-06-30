@@ -1,6 +1,6 @@
 # user_auth/serializers.py
 from rest_framework import serializers
-from .models import User, EmailVerificationCode, Organization, OrganizationMember, ClientAccount, ClientMember
+from .models import *
 
 
 class EmailRequestSerializer(serializers.Serializer):
@@ -119,3 +119,20 @@ class ClientMemberSerializer(serializers.ModelSerializer):
         instance.role = validated_data.get("role", instance.role)
         instance.save()
         return instance
+
+class WhatsAppSessionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WhatsAppSession
+        fields = "__all__"
+
+
+class WhatsAppMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WhatsAppMessage
+        fields = "__all__"
+
+class MetaRegistrationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MetaRegistrationDetails
+        exclude = ('client',)
+        read_only_fields = ('created_at', 'updated_at')

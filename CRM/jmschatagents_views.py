@@ -210,7 +210,7 @@ IND_SESSION_TTL = 60 * 60
 # SHARED DB HELPERS
 # ═════════════════════════════════════════════════════════════════════════════
 
-def save_message(phone, content, reply_of=None, client_name=None,client_obj=None):
+def save_message(phone, content, reply_of=None, client_name=None, client_obj=None, phone_number_id=None):
     """Create or update Customer + Conversation + Message rows."""
     try:
         name_value = (client_name or "").strip() or "Unknown"
@@ -222,7 +222,18 @@ def save_message(phone, content, reply_of=None, client_name=None,client_obj=None
             if client_name and customer.name != client_name:
                 customer.name = client_name
                 customer.save(update_fields=["name"])
-            conversation, _ = Conversation.objects.get_or_create(customer=customer)
+            
+            # Use phone_number_id for conversation isolation, fallback to client_obj's ID
+            pid = phone_number_id
+            if not pid and client_obj:
+                pid = client_obj.phone_number_id
+                
+            conversation, _ = Conversation.objects.get_or_create(
+                customer=customer, 
+                phone_number_id=pid,
+                defaults={'client': client_obj}
+            )
+            
             msg = Message.objects.create(
                 customer=customer,
                 client=client_obj,
@@ -230,6 +241,7 @@ def save_message(phone, content, reply_of=None, client_name=None,client_obj=None
                 content=content,
                 reply_of=reply_of,
                 client_name=client_name,
+                direction='inbound',
             )
         return msg
     except Exception as e:
@@ -238,20 +250,24 @@ def save_message(phone, content, reply_of=None, client_name=None,client_obj=None
 
 
 def _save_reply(msg_id, text):
-    """Append bot reply text to Message.reply_of (low-level, no send)."""
+    """Create a new outbound Message row for the bot reply."""
     if not msg_id:
         return
     try:
-        with transaction.atomic():
-            msg = Message.objects.select_for_update().filter(id=msg_id).first()
-            if not msg:
-                return
-            msg.reply_of = (
-                msg.reply_of.rstrip() + "\n\n" + text.strip()
-                if msg.reply_of
-                else text.strip()
-            )
-            msg.save(update_fields=["reply_of"])
+        inbound_msg = Message.objects.filter(id=msg_id).first()
+        if not inbound_msg:
+            return
+        
+        # Create a new outbound message for the bot reply
+        Message.objects.create(
+            conversation=inbound_msg.conversation,
+            client=inbound_msg.client,
+            customer=inbound_msg.customer,
+            direction="outbound",
+            message_type="text",
+            content=text,
+            status="sent"
+        )
     except Exception as e:
         logger.exception("_save_reply failed: %s", e)
 
@@ -656,7 +672,7 @@ def get_tech_qna_history(phone, limit=10):
         return []
 
 
-def _jms_handle_message(phone: str, text: str):
+def _jms_handle_message(phone: str, text: str, phone_number_id: str = None):
     """
     Core JMS-Tech conversation state machine.
     Called once per inbound message after routing decides this is a JMS session.
@@ -679,7 +695,7 @@ def _jms_handle_message(phone: str, text: str):
                 jms_save_session(existing_session)
             else:
                 logger.info("🧑‍💼 Human handoff active – JMS bot suppressed for %s", phone)
-                save_message(phone=phone, content=text.strip(), reply_of=None)
+                save_message(phone=phone, content=text.strip(), reply_of=None, phone_number_id=phone_number_id)
                 existing_session["last_user_text"] = text.strip()
                 jms_save_session(existing_session)
                 return HttpResponse("Human handoff – bot suppressed", status=200)
@@ -696,7 +712,7 @@ def _jms_handle_message(phone: str, text: str):
         is_first_response = True
 
         session  = jms_get_session(phone)
-        user_msg = save_message(phone=phone, content=text, reply_of=None)
+        user_msg = save_message(phone=phone, content=text, reply_of=None, phone_number_id=phone_number_id)
         if user_msg:
             session["last_msg_id"] = user_msg.id
         session["last_user_text"] = text
@@ -726,7 +742,7 @@ def _jms_handle_message(phone: str, text: str):
     session  = jms_get_session(phone)
     raw_text = text.strip()
 
-    user_msg = save_message(phone=phone, content=raw_text, reply_of=None)
+    user_msg = save_message(phone=phone, content=raw_text, reply_of=None, phone_number_id=phone_number_id)
     if user_msg:
         session["last_msg_id"] = user_msg.id
     session["last_user_text"] = raw_text
@@ -1032,7 +1048,7 @@ def _wa_clean_text(text: str) -> str:
     return text.strip()
 
 
-def _handle_wa_bot(phone: str, text: str) -> bool:
+def _handle_wa_bot(phone: str, text: str, phone_number_id: str = None) -> bool:
     """Handle WhatsApp-API assistant bot. Returns True if message was handled."""
     text_lower = text.strip().lower()
 
@@ -1689,186 +1705,13 @@ def set_human_handoff(request):
     return JsonResponse({"status": "ok", "phone": phone, "human_handoff": handoff})
 
 
+
 # ═════════════════════════════════════════════════════════════════════════════
-# ─────────────────────────────────────────────────────────────────────────────
-#  UNIFIED WEBHOOK  — routes between all three bots
-# ─────────────────────────────────────────────────────────────────────────────
+# NOTE: Webhook has been moved to CRM/META/webhook_views.py
+# All bot routing (industry/wa/jms-tech + client bots) is now handled by
+# WhatsAppWebhookView with multi-tenant phone_number_id routing.
 # ═════════════════════════════════════════════════════════════════════════════
 
-def _verify_webhook(request) -> bool:
-    if settings.DEBUG:
-        return True
-    app_secret = getattr(settings, "META_APP_SECRET", None)
-    if not app_secret:
-        logger.warning("META_APP_SECRET not set – skipping")
-        return True
-    sig_header = request.headers.get("X-Hub-Signature-256", "")
-    if not sig_header.startswith("sha256="):
-        logger.warning("Missing X-Hub-Signature-256 header")
-        return False
-    expected = hmac.new(
-        app_secret.encode("utf-8"), request.body, hashlib.sha256
-    ).hexdigest()
-    provided = sig_header[len("sha256="):]
-    ok       = hmac.compare_digest(expected, provided)
-    if not ok:
-        logger.warning("Webhook signature mismatch")
-    return ok
-
-
-@csrf_exempt
-def webhook(request):
-    # ── GET: Meta hub verification ────────────────────────────────────────────
-    if request.method == "GET":
-        mode      = request.GET.get("hub.mode")
-        token     = request.GET.get("hub.verify_token")
-        challenge = request.GET.get("hub.challenge")
-        verify_token = getattr(settings, "VERIFY_TOKEN", None)
-        if mode == "subscribe" and token == verify_token:
-            return HttpResponse(challenge, content_type="text/plain", status=200)
-        return JsonResponse({"error": "Forbidden"}, status=403)
-
-    if request.method != "POST":
-        return JsonResponse({"error": "Method not allowed"}, status=405)
-
-    if not _verify_webhook(request):
-        return JsonResponse({"error": "invalid_signature"}, status=401)
-
-    try:
-        data = json.loads(request.body)
-
-        if data.get("object") != "whatsapp_business_account":
-            return HttpResponse("Not a WhatsApp event", status=200)
-
-        for entry in data.get("entry", []):
-            for change in entry.get("changes", []):
-                value    = change.get("value", {})
-                messages = value.get("messages", [])
-                if not messages:
-                    continue
-
-                for msg in messages:
-                    raw_phone = msg.get("from", "").strip()
-                    if not raw_phone:
-                        continue
-                    if not raw_phone.startswith("+"):
-                        raw_phone = f"+{raw_phone}"
-
-                    # ── Deduplication ─────────────────────────────────────────
-                    msg_id_wa = msg.get("id", "")
-                    if msg_id_wa:
-                        dedup_key = f"wamid_u:{msg_id_wa}"
-                        if cache.get(dedup_key):
-                            logger.info("Duplicate wamid %s skipped", msg_id_wa)
-                            continue
-                        cache.set(dedup_key, "1", timeout=300)
-
-                    # ── Extract text ──────────────────────────────────────────
-                    msg_type = msg.get("type", "")
-                    text = None
-                    if msg_type == "text":
-                        text = msg.get("text", {}).get("body", "").strip()
-                    elif msg_type == "interactive":
-                        interactive = msg.get("interactive", {})
-                        itype = interactive.get("type", "")
-                        if itype == "button_reply":
-                            text = interactive.get("button_reply", {}).get("id", "").strip()
-                        elif itype == "list_reply":
-                            text = (
-                                interactive.get("list_reply", {}).get("id", "").strip()
-                                or interactive.get("list_reply", {}).get("title", "").strip()
-                            )
-                    elif msg_type == "image":
-                        text = msg.get("image", {}).get("caption", "").strip() or None
-                    elif msg_type == "document":
-                        text = msg.get("document", {}).get("caption", "").strip() or None
-
-                    if not text:
-                        continue
-
-                    text_lower = text.lower().strip()
-                    print(f"[WEBHOOK] from={raw_phone} text={text_lower!r}")
-
-                    # ── Route decision ────────────────────────────────────────
-                    go_industry = False
-                    go_wa_bot   = False
-                    skip_all    = False
-
-                    if text_lower in INDUSTRY_TRIGGERS:
-                        go_industry = True
-                    else:
-                        ind_sess = ind_sessions.get(_sess_key(raw_phone))
-
-                        if ind_sess and ind_sess.get("stage", "idle") != "idle":
-                            if text_lower in FAREWELL_KEYWORDS:
-                                # End industry session gracefully
-                                ind_sess["stage"]        = "idle"
-                                ind_sess["active_bot"]   = None
-                                ind_sess["chat_history"] = []
-                                ind_sessions.set(_sess_key(raw_phone), ind_sess, timeout=IND_SESSION_TTL)
-                                _send(
-                                    raw_phone,
-                                    f"Thank you for using Technova AI! 😊\n\n"
-                                    f"Send *{BOT_TRIGGER_KEYWORD}* anytime to start again.",
-                                )
-                                skip_all = True
-
-                            elif text_lower == "jms":
-                                # Hand off to JMS bot; clear industry session
-                                ind_sess["stage"]        = "idle"
-                                ind_sess["active_bot"]   = None
-                                ind_sess["chat_history"] = []
-                                ind_sessions.set(_sess_key(raw_phone), ind_sess, timeout=IND_SESSION_TTL)
-                                go_industry = False   # falls through to JMS bot
-
-                            else:
-                                go_industry = True
-
-                    if skip_all:
-                        continue
-
-                    # ── Dispatch ──────────────────────────────────────────────
-                    if go_industry:
-                        print(f"[WEBHOOK] → INDUSTRY BOT")
-                        try:
-                            contacts    = value.get("contacts", [])
-                            client_name = contacts[0].get("profile", {}).get("name", "") if contacts else ""
-                            db_msg      = save_message(
-                                phone=raw_phone, content=text,
-                                reply_of=None, client_name=client_name,
-                            )
-                            ind_msg_id = db_msg.id if db_msg else None
-
-                            ind_sess = ind_get_session(raw_phone)
-                            ind_sess["last_msg_id"]    = ind_msg_id
-                            ind_sess["last_user_text"] = text
-                            ind_save_session(ind_sess)
-
-                            _process_meta_message(msg, value)
-                        except Exception as e:
-                            logger.exception("Industry bot error: %s", e)
-
-                    else:
-                        # Check WhatsApp-API bot first
-                        wa_sess = wa_sessions.get(raw_phone)
-                        if text_lower == WA_BOT_TRIGGER or (wa_sess and wa_sess.get("stage") == "active"):
-                            print(f"[WEBHOOK] → WHATSAPP BOT")
-                            try:
-                                _handle_wa_bot(raw_phone, text)
-                            except Exception as e:
-                                logger.exception("WhatsApp bot error: %s", e)
-                        else:
-                            print(f"[WEBHOOK] → JMS-TECH BOT")
-                            try:
-                                _jms_handle_message(raw_phone, text)
-                            except Exception as e:
-                                logger.exception("JMS-Tech bot error: %s", e)
-
-        return HttpResponse("OK", status=200)
-
-    except Exception as exc:
-        logger.exception("❌ Unified webhook error: %s", exc)
-        return JsonResponse({"error": str(exc)}, status=500)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -2103,7 +1946,7 @@ def customer_list(request):
         last_seen=Max("messages__timestamp"),
         reply_count=Count(
             "messages",
-            filter=Q(messages__reply_of__isnull=False) & ~Q(messages__reply_of=""),
+            filter=Q(messages__direction="outbound"),
             distinct=True,
         ),
         first_message_content=Subquery(first_msg_subq),

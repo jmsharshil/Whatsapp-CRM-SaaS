@@ -3,13 +3,16 @@ from CRM.META.campaign_views import *
 from CRM.META.meta_status_views import *
 from CRM.META.webhook_views import *
 from CRM.META.waba_views import *
+from CRM.META.client_views import *
 from .views import *
+from CRM.views import MetaConversationMessageListView
 from CRM.jmschatagents_views import *
-
 
 urlpatterns = [
 
-    path('webhook/', webhook, name="webhook"),
+    # Old webhook path → now uses multi-tenant WhatsAppWebhookView
+    path('webhook/', WhatsAppWebhookView.as_view(), name="webhook"),
+
     # path('', home, name='home'),
 
 
@@ -18,6 +21,7 @@ urlpatterns = [
     path("api/industry/customers/<str:phone>/",                  customer_detail,         name="industry_customer_detail"),
     path("api/industry/conversations/",                          conversation_list,       name="industry_conversation_list"),
     path("api/industry/conversations/<int:conversation_id>/messages/", conversation_messages, name="industry_conversation_messages"),
+    path("api/v1/conversations/<int:conversation_id>/messages/", MetaConversationMessageListView.as_view()),
     path("api/industry/messages/recent/",                        recent_messages,         name="industry_recent_messages"),
     path("api/industry/analytics/messages/",                     analytics_messages,      name="industry_analytics_messages"),
     path("api/industry/analytics/customers/",                    analytics_customers,     name="industry_analytics_customers"),
@@ -66,5 +70,7 @@ urlpatterns = [
 
     path("api/techprovider/clients/",          TechProviderClientListView.as_view()),
     path("api/techprovider/clients/<int:pk>/", TechProviderClientDetailView.as_view()),
-
+    
+    path("api/meta-registration/", ClientMetaRegistrationView.as_view()),
+    path("api/techprovider/clients/<int:pk>/meta-registration/", TechProviderMetaRegistrationView.as_view()),
 ]

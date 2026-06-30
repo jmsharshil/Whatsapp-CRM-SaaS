@@ -1,3 +1,4 @@
+import os
 import random
 from django.core.mail import send_mail, EmailMultiAlternatives
 from rest_framework.views import APIView
@@ -658,14 +659,21 @@ class MetaDashboardAPIView(APIView):
 
         try:
             waba = org.waba_account
+            phone_number_id = waba.phone_number_id
         except WABAAccount.DoesNotExist:
             return Response({"status": "not_connected"})
 
-        # ✅ FIXED: Filter messages by organization's clients
-        messages = Message.objects.filter(
-            conversation__client__tech_provider=org,
-            direction='outbound'  # ← Only count sent messages
-        )
+        # ✅ FIXED: Filter messages correctly for both Tech Providers and direct clients
+        if phone_number_id:
+            messages = Message.objects.filter(
+                conversation__client__phone_number_id=phone_number_id,
+                direction='outbound'  # ← Only count sent messages
+            )
+        else:
+            messages = Message.objects.filter(
+                conversation__client__tech_provider=org,
+                direction='outbound'  # ← Only count sent messages
+            )
 
         templates = Template.objects.filter(organization=org)
 
@@ -704,6 +712,46 @@ class MetaDashboardAPIView(APIView):
             .order_by("-sent")[:10]  # Top 10 templates
         )
 
+        # 📊 NEW: Client Summary (Total Customers, Active Today, Leads, Prospects)
+        from CRM.models import WhatsAppSession, ConversationState, Customer
+        from datetime import date
+        
+        if phone_number_id:
+            client_customers = Customer.objects.filter(conversations__client__phone_number_id=phone_number_id).distinct()
+            active_today = client_customers.filter(conversations__messages__timestamp__date=date.today()).distinct().count()
+        else:
+            client_customers = Customer.objects.filter(conversations__client__tech_provider=org).distinct()
+            active_today = client_customers.filter(conversations__messages__timestamp__date=date.today()).distinct().count()
+
+        raw_ticket_phones = WhatsAppSession.objects.exclude(ticket_id="").values_list("mobile_number", flat=True)
+        ticket_phones_10d = set(p[-10:] for p in raw_ticket_phones if p)
+        
+        ticket_customer_ids = []
+        for c in client_customers:
+            c_phone = c.phone[-10:] if c.phone else ""
+            if c_phone in ticket_phones_10d:
+                ticket_customer_ids.append(c.id)
+
+        completed_conv_ids = ConversationState.objects.filter(
+            organization=org,
+            is_complete=True
+        ).values_list("conversation_id", flat=True)
+
+        leads_count = client_customers.filter(
+            Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids)
+        ).distinct().count()
+
+        prospects_count = client_customers.exclude(
+            Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids)
+        ).distinct().count()
+
+        client_summary = {
+            "total_customers": client_customers.count(),
+            "active_today": active_today,
+            "leads": leads_count,
+            "prospects": prospects_count
+        }
+
         return Response({
             "status": "connected",
 
@@ -713,6 +761,8 @@ class MetaDashboardAPIView(APIView):
                 "phone_number": waba.phone_number,
                 "status": waba.status,
             },
+
+            "client_summary": client_summary,
 
             "totals": {
                 "messages": total_messages,
@@ -866,7 +916,18 @@ class TemplateListCreateView(APIView):
         if err:
             return Response(err, status=400)
 
-        data = request.data
+        # Convert request.data to a regular dict to avoid pickling errors with files
+        data = {}
+        for key, value in request.data.items():
+            data[key] = value
+        
+        # If data came via FormData, buttons might be a string
+        import json
+        if isinstance(data.get("buttons"), str):
+            try:
+                data["buttons"] = json.loads(data["buttons"])
+            except json.JSONDecodeError:
+                data["buttons"] = []
 
         # Basic validation
         required = ["name", "body_text", "category", "language"]
@@ -899,6 +960,61 @@ class TemplateListCreateView(APIView):
 
         # ── 2. Submit to Meta Graph API ──────────────────────────────────────
         components = _build_meta_components(data)
+        
+        # Handle media upload for header
+        example_media = request.FILES.get("example_media")
+        header_type = data.get("header_type", "")
+        
+        import os
+        token = os.environ.get("WHATSAPP_TOKEN", waba.access_token)
+        
+        if example_media and header_type in ("IMAGE", "VIDEO", "DOCUMENT"):
+            app_id = os.environ.get("META_APP_ID")
+            if not app_id:
+                template.delete()
+                return Response({"error": "META_APP_ID is missing in server config."}, status=500)
+            
+            # Step 1: Initialize session
+            init_url = f"{META_GRAPH_URL}/{app_id}/uploads"
+            init_params = {
+                "file_length": example_media.size,
+                "file_type": example_media.content_type,
+            }
+            init_headers = {"Authorization": f"Bearer {token}"}
+            
+            try:
+                init_resp = requests.post(init_url, params=init_params, headers=init_headers, timeout=15)
+                if not init_resp.ok:
+                    template.delete()
+                    err_msg = init_resp.json().get("error", {}).get("message", "Unknown Meta error on upload init")
+                    return Response({"error": f"Failed to initialize upload: {err_msg}"}, status=400)
+                
+                session_id = init_resp.json().get("id")
+                
+                # Step 2: Upload file data
+                upload_url = f"{META_GRAPH_URL}/{session_id}"
+                upload_headers = {
+                    "Authorization": f"OAuth {token}",
+                    "file_offset": "0",
+                }
+                upload_resp = requests.post(upload_url, headers=upload_headers, data=example_media.read(), timeout=30)
+                
+                if not upload_resp.ok:
+                    template.delete()
+                    err_msg = upload_resp.json().get("error", {}).get("message", "Unknown Meta error on upload")
+                    return Response({"error": f"Failed to upload media: {err_msg}"}, status=400)
+                    
+                header_handle = upload_resp.json().get("h")
+                
+                # Inject example into components
+                for comp in components:
+                    if comp.get("type") == "HEADER" and comp.get("format") == header_type:
+                        comp["example"] = {"header_handle": [header_handle]}
+                        break
+                        
+            except requests.RequestException as exc:
+                template.delete()
+                return Response({"error": f"Meta Upload API call failed: {exc}"}, status=502)
 
         meta_payload = {
             "name":       name,
@@ -908,8 +1024,9 @@ class TemplateListCreateView(APIView):
         }
 
         meta_url = f"{META_GRAPH_URL}/{waba.waba_id}/message_templates"
+        token = os.environ.get("WHATSAPP_TOKEN", waba.access_token)
         headers  = {
-            "Authorization": f"Bearer {waba.access_token}",
+            "Authorization": f"Bearer {token}",
             "Content-Type":  "application/json",
         }
 
@@ -979,6 +1096,41 @@ class TemplateDetailView(APIView):
             if field in request.data:
                 setattr(template, field, request.data[field])
 
+        # If it's already synced to Meta, push the edit
+        if template.template_id and waba:
+            # Build components from updated template fields
+            # We construct a dict simulating request.data for the builder
+            comp_data = {
+                "header_type": template.header_type,
+                "header_text": template.header_text,
+                "body_text":   template.body_text,
+                "footer_text": template.footer_text,
+                "buttons":     template.buttons,
+            }
+            components = _build_meta_components(comp_data)
+
+            import os
+            token = os.environ.get("WHATSAPP_TOKEN", waba.access_token)
+            meta_url = f"{META_GRAPH_URL}/{template.template_id}"
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type":  "application/json",
+            }
+            meta_payload = {
+                "components": components,
+            }
+
+            try:
+                resp = requests.post(meta_url, json=meta_payload, headers=headers, timeout=15)
+                if not resp.ok:
+                    meta_error = resp.json().get("error", {}).get("message", "Unknown Meta error")
+                    return Response({"error": f"Failed to update on Meta: {meta_error}"}, status=400)
+                
+                # Edit successful, Meta puts it back in PENDING
+                template.status = "PENDING"
+            except requests.RequestException as exc:
+                return Response({"error": f"Meta API call failed: {exc}"}, status=502)
+
         template.save()
 
         return Response({
@@ -1009,9 +1161,11 @@ class TemplateDetailView(APIView):
         # Delete from Meta if we have a template_id and waba
         if template.template_id and waba:
             try:
-                meta_url = f"{META_GRAPH_URL}/{template.template_id}"
-                headers  = {"Authorization": f"Bearer {waba.access_token}"}
-                params   = {"name": template.name, "hsm_id": template.template_id}
+                import os
+                token = os.environ.get("WHATSAPP_TOKEN", waba.access_token)
+                meta_url = f"{META_GRAPH_URL}/{waba.waba_id}/message_templates"
+                headers  = {"Authorization": f"Bearer {token}"}
+                params   = {"name": template.name}
                 resp = requests.delete(meta_url, headers=headers, params=params, timeout=15)
                 meta_deleted = resp.ok
                 if not resp.ok:
@@ -1095,8 +1249,11 @@ class TemplateSyncAllView(APIView):
             return Response({"error": "WABA not connected."}, status=400)
 
         meta_url = f"{META_GRAPH_URL}/{waba.waba_id}/message_templates"
-        headers  = {"Authorization": f"Bearer {waba.access_token}"}
-        params   = {"fields": "id,name,status,category,language", "limit": 250}
+        
+        # Use permanent TechProvider token if available, else fallback
+        token = os.environ.get("WHATSAPP_TOKEN", waba.access_token)
+        headers  = {"Authorization": f"Bearer {token}"}
+        params   = {"fields": "id,name,status,category,language,components", "limit": 250}
 
         try:
             resp = requests.get(meta_url, headers=headers, params=params, timeout=20)
@@ -1120,13 +1277,24 @@ class TemplateSyncAllView(APIView):
             meta_name   = mt.get("name", "")
             meta_cat    = mt.get("category", "UTILITY").upper()
             meta_lang   = mt.get("language", "en")
+            
+            # Extract body text from components
+            meta_components = mt.get("components", [])
+            body_text = ""
+            for comp in meta_components:
+                if comp.get("type") == "BODY":
+                    body_text = comp.get("text", "")
+                    break
+
+            import re
+            variables_count = len(re.findall(r"\{\{\d+\}\}", body_text))
 
             if not meta_id or not meta_status:
                 continue
 
             rows = Template.objects.filter(organization=org, template_id=meta_id)
             if rows.exists():
-                rows.update(status=meta_status)
+                rows.update(status=meta_status, body_text=body_text, variables_count=variables_count)
                 updated += rows.count()
             else:
                 # Template exists on Meta but not locally — create it
@@ -1137,7 +1305,8 @@ class TemplateSyncAllView(APIView):
                     status=meta_status,
                     category=meta_cat if meta_cat in ("MARKETING", "UTILITY", "AUTHENTICATION") else "UTILITY",
                     language=meta_lang,
-                    body_text="",   # full body can be filled via template detail/edit
+                    body_text=body_text,
+                    variables_count=variables_count,
                 )
                 created += 1
 
@@ -1174,10 +1343,12 @@ class MetaCustomerListView(APIView):
         except Exception:
             pass
  
+        from django.db.models import Q
+        
         # ── Base queryset ─────────────────────────────────────────────────────
         if phone_number_id:
             qs = Conversation.objects.select_related("customer").filter(
-                client__phone_number_id=phone_number_id   # ← FIXED (was: phone_number_id=...)
+                Q(client__phone_number_id=phone_number_id) | Q(phone_number_id=phone_number_id)
             ).order_by("-created_at")
         else:
             # Fallback: if no WABA connected yet, filter by org's clients
@@ -1235,6 +1406,60 @@ class MetaCustomerListView(APIView):
             "waba_phone": waba_phone,  # shown as badge in sidebar
         })
 
+class MetaConversationMessageListView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, conversation_id):
+        user = request.user
+        org = getattr(user, "organization", None)
+        if not org and hasattr(user, "membership"):
+            org = user.membership.organization
+        if not org and hasattr(user, "client_membership"):
+            org = user.client_membership.client
+
+        if not org:
+            return Response({"detail": "No organization found."}, status=400)
+
+        try:
+            conv = Conversation.objects.select_related("client").get(id=conversation_id)
+        except Conversation.DoesNotExist:
+            return Response({"error": "Conversation not found"}, status=404)
+
+        # Basic security check
+        phone_number_id = None
+        try:
+            phone_number_id = org.waba_account.phone_number_id
+        except Exception:
+            pass
+            
+        if phone_number_id:
+            # Check client's phone_number_id first
+            if conv.client and conv.client.phone_number_id == phone_number_id:
+                pass # Authorized
+            # Check conversation's own phone_number_id fallback
+            elif conv.phone_number_id == phone_number_id:
+                pass # Authorized
+            # Check if tech provider
+            elif conv.client and conv.client.tech_provider == org:
+                pass # Authorized
+            else:
+                return Response({"error": "Unauthorized"}, status=403)
+
+        messages = [
+            {
+                "id": m.id, 
+                "user_msg": m.content if m.direction == "inbound" else None, 
+                "bot_msg": m.content if m.direction == "outbound" else None,
+                "user_timestamp": m.timestamp.isoformat() if m.direction == "inbound" else None, 
+                "bot_timestamp": m.timestamp.isoformat() if m.direction == "outbound" else None,
+            }
+            for m in conv.messages.order_by("timestamp")
+        ]
+        return Response({
+            "conversationId": conv.id,
+            "messages": messages,
+        })
+
 
 class LeadsProspectsView(APIView):
     """
@@ -1287,27 +1512,41 @@ class LeadsProspectsView(APIView):
                 conversations__client__tech_provider=org
             ).distinct()
 
-        # ── Apply tab filter (Lead vs Prospect) ──────────────────────────
-        if tab == "leads":
-            # Customers with completed chatbot qualification
+        # ── Tab filtering ─────────────────────────────────────────────────
+        from CRM.models import WhatsAppSession
+        # A phone is considered a "ticket lead" if they have a non-empty ticket_id
+        raw_ticket_phones = WhatsAppSession.objects.exclude(ticket_id="").values_list("mobile_number", flat=True)
+        # Store as 10-digit formats to handle country code mismatch
+        ticket_phones_10d = set(p[-10:] for p in raw_ticket_phones if p)
+        
+        # We need a list of customer IDs that match the ticket phones
+        # because Q(phone__in=...) won't work perfectly if phone numbers have '91' prefix.
+        ticket_customer_ids = []
+        for c in customers:
+            c_phone = c.phone[-10:] if c.phone else ""
+            if c_phone in ticket_phones_10d:
+                ticket_customer_ids.append(c.id)
+
+        if tab in ["leads", "lead"]:
+            # Customers with a completed chatbot qualification OR a ticket
             completed_conv_ids = ConversationState.objects.filter(
                 organization=org,
                 is_complete=True
             ).values_list("conversation_id", flat=True)
             
             customers = customers.filter(
-                conversations__id__in=completed_conv_ids
+                Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids)
             )
         
-        elif tab == "prospects":
-            # Customers with incomplete chatbot qualification
-            incomplete_conv_ids = ConversationState.objects.filter(
+        elif tab in ["prospects", "prospect"]:
+            # Customers with incomplete chatbot qualification AND NO ticket
+            completed_conv_ids = ConversationState.objects.filter(
                 organization=org,
-                is_complete=False
+                is_complete=True
             ).values_list("conversation_id", flat=True)
             
-            customers = customers.filter(
-                conversations__id__in=incomplete_conv_ids
+            customers = customers.exclude(
+                Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids)
             )
 
         # ── Search filter ─────────────────────────────────────────────────
@@ -1343,12 +1582,15 @@ class LeadsProspectsView(APIView):
                     is_complete = state.is_complete
                 except ConversationState.DoesNotExist:
                     pass
+            
+            # Check if this customer has a ticket
+            has_ticket = customer.id in ticket_customer_ids
 
             results.append({
                 "id": customer.id,
                 "name": customer.name,
                 "phone": customer.phone,
-                "status": "Lead" if is_complete else "Prospect",
+                "status": "lead" if (is_complete or has_ticket) else "prospect",
                 "chatbot_stage": chatbot_stage,
                 "collected_fields": collected_fields,
                 "message_count": state.message_count if state else 0,
@@ -1416,8 +1658,8 @@ def _fetch_waba_meta_status(client, tech_provider_token: str) -> dict:
     Fetch live WABA + phone status from Meta for a ClientAccount.
 
     Priority:
-      1. client.access_token  (Embedded Signup token — always preferred)
-      2. tech_provider_token  (permanent token fallback)
+      1. tech_provider_token  (permanent token fallback)
+      2. client.access_token  (Embedded Signup token — fallback)
 
     Returns dict with meta_* keys that get merged into the client payload.
     These are exactly what TechProviderClients.jsx reads:
@@ -1431,7 +1673,9 @@ def _fetch_waba_meta_status(client, tech_provider_token: str) -> dict:
     if not waba_id:
         return {"meta_status": "no_waba"}
 
-    token = client.access_token or tech_provider_token
+    # 1. tech_provider_token  (permanent system token — always preferred to avoid expiry)
+    # 2. client.access_token  (Embedded Signup token fallback)
+    token = tech_provider_token or client.access_token
     if not token:
         return {"meta_status": "no_token"}
 
@@ -1643,3 +1887,80 @@ class TechProviderClientDetailView(APIView):
             "status":  client.status,
             "message": "Client status updated successfully.",
         })
+
+class ClientMetaRegistrationView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_client(self, request):
+        if hasattr(request.user, "client_membership"):
+            return request.user.client_membership.client
+            
+        # If the user is a tech provider, they might be testing or setting up their own WABA.
+        # Let's resolve their organization and treat them as their own client.
+        org = None
+        if hasattr(request.user, "organization") and request.user.organization:
+            org = request.user.organization
+        elif hasattr(request.user, "membership") and request.user.membership:
+            org = request.user.membership.organization
+            
+        if org:
+            # Get or create a "Self" client account for the tech provider
+            email = org.email or request.user.email
+            try:
+                client = ClientAccount.objects.get(email=email)
+                # Ensure it belongs to this tech provider (optional, but good for data integrity)
+                if client.tech_provider_id != org.id:
+                    client.tech_provider = org
+                    client.save(update_fields=['tech_provider'])
+            except ClientAccount.DoesNotExist:
+                client = ClientAccount.objects.create(
+                    tech_provider=org,
+                    email=email,
+                    name=f"{org.name} (Self)",
+                    status="active",
+                    website=org.website
+                )
+            return client
+            
+        return None
+
+    def get(self, request):
+        client = self.get_client(request)
+        if not client:
+            return Response({"error": "User is not associated with a client account."}, status=403)
+        
+        obj, created = MetaRegistrationDetails.objects.get_or_create(client=client)
+        serializer = MetaRegistrationSerializer(obj)
+        return Response(serializer.data)
+
+    def put(self, request):
+        client = self.get_client(request)
+        if not client:
+            return Response({"error": "User is not associated with a client account."}, status=403)
+            
+        obj, created = MetaRegistrationDetails.objects.get_or_create(client=client)
+        
+        # Update using partial=True and support for form-data
+        serializer = MetaRegistrationSerializer(obj, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)
+
+
+class TechProviderMetaRegistrationView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        org = _get_tech_org(request.user)
+        if not org:
+            return Response({"error": "Access denied. Tech-provider credentials required."}, status=403)
+            
+        try:
+            client = org.clients.get(pk=pk)
+        except ClientAccount.DoesNotExist:
+            return Response({"error": "Client not found."}, status=404)
+            
+        obj, created = MetaRegistrationDetails.objects.get_or_create(client=client)
+        serializer = MetaRegistrationSerializer(obj)
+        return Response(serializer.data)

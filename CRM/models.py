@@ -122,7 +122,10 @@ class Conversation(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="prospect")
     client_name = models.CharField(max_length=255, null=True, blank=True)
+    phone_number_id = models.CharField(max_length=100, blank=True, null=True)
 
+    bot_state = models.CharField(max_length=50, blank=True, default="INIT")
+    bot_metadata = models.JSONField(default=dict, blank=True)
 
     def __str__(self):
         return f"Conversation {self.id} with {self.customer.name}"
@@ -438,3 +441,124 @@ class ChatMessage(models.Model):
 
     class Meta:
         ordering = ["created_at"]
+
+
+#gigatel 
+from django.db import models
+from django.db.models.signals import pre_delete
+from django.dispatch import receiver
+
+
+class WhatsAppSession(models.Model):
+    """Tracks per-user conversation state."""
+
+    STATE_CHOICES = [
+        ("INIT",                    "Awaiting greeting"),
+        ("AWAIT_CIRCUIT_DIGITS",            "Awaiting last 4 digits of Circuit ID"),
+        ("AWAIT_CIRCUIT_DIGITS_FOR_TICKET", "Awaiting last 4 digits (ticket check)"),
+        ("AWAIT_CIRCUIT_CONFIRM",           "Confirming matched circuit"),
+        ("AWAIT_CIRCUIT_CONFIRM_FOR_TICKET","Confirming matched circuit (ticket check)"),
+        ("MENU",                    "Main Menu"),
+        ("CIRCUIT_LIST",            "Showing Circuit List"),
+        ("CIRCUIT_LIST_FOR_TICKET", "Showing Circuit List for Ticket"),
+        ("COMPLAINT_TYPE",          "Selecting Fault Type"),
+        ("AWAIT_OTDR",              "Awaiting OTDR Yes/No"),
+        ("AWAIT_OTDR_FROM",         "Awaiting OTDR From (source station)"),
+        ("AWAIT_OTDR_TO",           "Awaiting OTDR To (destination station)"),
+        ("AWAIT_OTDR_VALUE",        "Awaiting OTDR Value (reading in metres)"),
+        ("AWAIT_REMARK",            "Awaiting Plain Remark"),
+        ("AWAIT_OTDR_IMAGE",        "Awaiting First OTDR Image"),
+        ("AWAIT_OTDR_IMAGE2",       "Awaiting Optional Second OTDR Image"),
+        ("AWAIT_FAULT_SIDE_CHECK", "Validating OTDR fault side"),
+        ("AWAIT_RAISE_ANYWAY",     "Awaiting Raise Ticket Anyway? Yes/No"),
+        ("DONE",                    "Flow Complete"),
+    ]
+
+    mobile_number        = models.CharField(max_length=15, unique=True)
+    customer_id          = models.IntegerField(null=True, blank=True)
+    customer_company_id  = models.IntegerField(null=True, blank=True)
+    contact_person_name  = models.CharField(max_length=200, blank=True)
+    customer_email = models.EmailField(blank=True, default="")
+    selected_circuit_id  = models.CharField(max_length=100, blank=True)
+    nature_of_fault_id   = models.IntegerField(null=True, blank=True)
+    ticket_id         = models.CharField(max_length=50,  blank=True, default="")
+    ticket_raised_on  = models.CharField(max_length=30,  blank=True, default="")
+    fault_label          = models.CharField(max_length=50, blank=True)
+    otdr_applicable      = models.BooleanField(null=True)
+    ticket_status_local = models.CharField(max_length=40, blank=True, default="")
+
+    # OTDR step-by-step fields
+    otdr_from        = models.CharField(max_length=200, blank=True, default="")
+    otdr_to          = models.CharField(max_length=200, blank=True, default="")
+    otdr_value       = models.CharField(max_length=50,  blank=True, default="")
+    otdr_remark      = models.CharField(max_length=500, blank=True, default="")
+    otdr_image1_path = models.CharField(max_length=500, blank=True, default="")  
+    otdr_image1_url  = models.TextField(blank=True, default="")
+    otdr_image2_url  = models.TextField(blank=True, default="")
+
+    fault_side       = models.CharField(max_length=20, blank=True, default="")  # Gigatel / Customer
+    circuit_numeric_id = models.IntegerField(null=True, blank=True)
+
+    state      = models.CharField(max_length=50, choices=STATE_CHOICES, default="INIT")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.mobile_number} — {self.state}"
+
+
+class WhatsAppMessage(models.Model):
+    """Stores every inbound and outbound message."""
+
+    DIRECTION_CHOICES = [("IN", "Inbound"), ("OUT", "Outbound")]
+
+    mobile_number       = models.CharField(max_length=15, db_index=True)
+    whatsapp_message_id = models.CharField(max_length=200, blank=True)
+    direction           = models.CharField(max_length=3, choices=DIRECTION_CHOICES)
+    message_type        = models.CharField(max_length=30, default="text")
+    body                = models.TextField(blank=True)
+    created_at          = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.direction} | {self.mobile_number} | {self.body[:60]}"
+    
+    @receiver(pre_delete, sender=WhatsAppSession)
+    def _delete_related_messages(sender, instance, **kwargs):
+        WhatsAppMessage.objects.filter(mobile_number=instance.mobile_number).delete()
+
+class MetaRegistrationDetails(models.Model):
+    """Stores the 19 required Meta Registration fields for a ClientAccount."""
+    client = models.OneToOneField('ClientAccount', on_delete=models.CASCADE, related_name='meta_registration')
+    
+    legal_business_name = models.CharField(max_length=255, blank=True, null=True)
+    business_type = models.CharField(max_length=100, blank=True, null=True)
+    official_website = models.URLField(blank=True, null=True)
+    domain_linked_email = models.EmailField(blank=True, null=True)
+    
+    business_logo = models.FileField(upload_to='meta_docs/logos/', blank=True, null=True)
+    verification_document = models.FileField(upload_to='meta_docs/verification/', blank=True, null=True)
+    
+    gst_number = models.CharField(max_length=50, blank=True, null=True)
+    dedicated_phone_number = models.CharField(max_length=50, blank=True, null=True)
+    meta_facebook_account = models.CharField(max_length=255, blank=True, null=True)
+    
+    facebook_email = models.CharField(max_length=255, blank=True, null=True)
+    facebook_password = models.CharField(max_length=255, blank=True, null=True)
+    
+    international_card_available = models.BooleanField(default=False)
+    international_card_number = models.CharField(max_length=100, blank=True, null=True)
+    international_card_image = models.FileField(upload_to='meta_docs/cards/', blank=True, null=True)
+    
+    bot_use_case_brief = models.TextField(blank=True, null=True)
+    bot_use_case_document = models.FileField(upload_to='meta_docs/use_cases/', blank=True, null=True)
+    business_display_name = models.CharField(max_length=255, blank=True, null=True)
+    business_category = models.CharField(max_length=100, blank=True, null=True)
+    business_description = models.TextField(blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Meta Registration for {self.client.name}"

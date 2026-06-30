@@ -89,27 +89,94 @@ def _build_template_components(template: Template, variables: dict) -> list:
     components = []
 
     # HEADER
-    if template.header_type and template.header_type.upper() == "TEXT" and template.header_text:
-        header_params = []
-        header_vars = re.findall(r"\{\{(\d+)\}\}", template.header_text)
-        for v in header_vars:
-            header_params.append({"type": "text", "text": variables.get(v, "")})
-        header_comp = {"type": "header"}
-        if header_params:
-            header_comp["parameters"] = header_params
-        components.append(header_comp)
+    if template.header_type:
+        header_type = template.header_type.upper()
+        if header_type == "TEXT" and template.header_text:
+            header_params = []
+            header_vars = re.findall(r"\{\{(\d+)\}\}", template.header_text)
+            unique_header_vars = sorted(list(set(header_vars)), key=int)
+            for v in unique_header_vars:
+                val = variables.get(v, "")
+                if not val:
+                    val = " "
+                header_params.append({"type": "text", "text": str(val)})
+            if header_params:
+                components.append({
+                    "type": "header",
+                    "parameters": header_params
+                })
+            
+        elif header_type in ["IMAGE", "VIDEO", "DOCUMENT"]:
+            media_url = variables.get("media_url")
+            media_id = variables.get("media_id")
+            
+            media_obj = {}
+            if media_id:
+                media_obj["id"] = media_id
+            elif media_url:
+                media_obj["link"] = media_url
+                
+            if media_obj:
+                components.append({
+                    "type": "header",
+                    "parameters": [
+                        {
+                            "type": header_type.lower(),
+                            header_type.lower(): media_obj
+                        }
+                    ]
+                })
 
-    # BODY — always present
+    # BODY
     body_params = []
     body_vars = re.findall(r"\{\{(\d+)\}\}", template.body_text or "")
-    for v in body_vars:
-        body_params.append({"type": "text", "text": variables.get(v, "")})
-    body_comp = {"type": "body"}
+    unique_body_vars = sorted(list(set(body_vars)), key=int)
+    for v in unique_body_vars:
+        val = variables.get(v, "")
+        if not val:
+            val = " "
+        body_params.append({"type": "text", "text": str(val)})
+    
     if body_params:
-        body_comp["parameters"] = body_params
-    components.append(body_comp)
+        components.append({
+            "type": "body",
+            "parameters": body_params
+        })
 
     return components
+
+
+def _upload_media_to_meta(file, phone_number_id: str, access_token: str) -> str:
+    """
+    Uploads a media file directly to Meta's /media endpoint and returns the media_id.
+    """
+    url = f"https://graph.facebook.com/{META_GRAPH_VERSION}/{phone_number_id}/media"
+    headers = {
+        "Authorization": f"Bearer {access_token}"
+    }
+    
+    import mimetypes
+    content_type = getattr(file, 'content_type', None)
+    if not content_type:
+        content_type = mimetypes.guess_type(file.name)[0] or 'application/octet-stream'
+
+    files = {
+        "file": (file.name, file.read(), content_type)
+    }
+    data = {
+        "messaging_product": "whatsapp"
+    }
+
+    try:
+        resp = requests.post(url, headers=headers, data=data, files=files, timeout=60)
+        resp_data = resp.json()
+        if resp.status_code == 200 and "id" in resp_data:
+            return resp_data["id"]
+        logger.error(f"Media upload failed: {resp_data}")
+        return None
+    except Exception as e:
+        logger.error(f"Media upload exception: {e}")
+        return None
 
 
 def _send_meta_template_message(
@@ -136,9 +203,10 @@ def _send_meta_template_message(
         "template": {
             "name": template_name,
             "language": {"code": language_code},
-            "components": components,
         },
     }
+    if components:
+        payload["template"]["components"] = components
 
     try:
         resp = requests.post(url, json=payload, headers=headers, timeout=15)
@@ -196,13 +264,37 @@ class CampaignListCreateView(APIView):
         if err:
             return Response(err, status=400)
 
-        data = request.data
+        # Convert request.data to a regular dict
+        data = {}
+        for key, value in request.data.items():
+            data[key] = value
 
         # ── 1. Validate inputs ───────────────────────────────────────────────
         name          = (data.get("name") or "").strip()
         template_id   = data.get("template_id")
-        phone_numbers = data.get("phone_numbers", [])
-        variables     = data.get("variables") or {}
+        
+        # Phone numbers might be stringified if sent via FormData
+        phone_numbers_raw = data.get("phone_numbers", [])
+        if isinstance(phone_numbers_raw, str):
+            import json
+            try:
+                phone_numbers = json.loads(phone_numbers_raw)
+            except:
+                phone_numbers = []
+        else:
+            phone_numbers = phone_numbers_raw
+            
+        variables_raw = data.get("variables") or {}
+        if isinstance(variables_raw, str):
+            import json
+            try:
+                variables = json.loads(variables_raw)
+            except:
+                variables = {}
+        else:
+            variables = variables_raw
+            
+        media_file = request.FILES.get("media_file")
 
         if not name:
             return Response({"error": "'name' is required."}, status=400)
@@ -256,6 +348,17 @@ class CampaignListCreateView(APIView):
                 status=400,
             )
 
+        import os
+        token = os.environ.get("WHATSAPP_TOKEN", waba.access_token)
+
+        # ── 3.5 Upload Media File (if provided) ──────────────────────────────
+        if media_file:
+            media_id = _upload_media_to_meta(media_file, waba.phone_number_id, token)
+            if media_id:
+                variables["media_id"] = media_id
+            else:
+                return Response({"error": "Failed to upload media file to Meta. Please try again."}, status=500)
+
         # ── 4. Create Campaign record ────────────────────────────────────────
         campaign = Campaign.objects.create(
             organization=org,
@@ -287,7 +390,7 @@ class CampaignListCreateView(APIView):
         for recipient in recipients:
             success, msg_id, error_detail = _send_meta_template_message(
                 phone_number_id=waba.phone_number_id,
-                access_token=waba.access_token,
+                access_token=token,
                 to_number=recipient.phone_number,
                 template_name=template.name,
                 language_code=template.language,
