@@ -130,6 +130,8 @@ class WebhookView(View):
                 body = idata["button_reply"]["id"]
             elif itype == "list_reply":
                 body = idata["list_reply"]["id"]
+        elif msg_type == "button":
+            body = msg.get("button", {}).get("payload", "").strip()
         elif msg_type == "image":
             body = "[image]"
 
