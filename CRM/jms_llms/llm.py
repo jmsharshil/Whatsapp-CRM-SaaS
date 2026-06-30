@@ -8,8 +8,8 @@ load_dotenv()
 
 import os
 logger = logging.getLogger(__name__)
-print("OPENAI_API_KEY:", os.getenv("OPENAI_API_KEY"))
-print("ENDPOINT_URL:", os.getenv("ENDPOINT_URL"))
+# print("OPENAI_API_KEY:", os.getenv("OPENAI_API_KEY"))
+# print("ENDPOINT_URL:", os.getenv("ENDPOINT_URL"))
 client = AzureOpenAI(
     api_key=os.environ.get("OPENAI_API_KEY"),
     api_version="2024-02-15-preview",

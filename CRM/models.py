@@ -479,7 +479,7 @@ class WhatsAppSession(models.Model):
     customer_company_id  = models.IntegerField(null=True, blank=True)
     contact_person_name  = models.CharField(max_length=200, blank=True)
     customer_email = models.EmailField(blank=True, default="")
-    selected_circuit_id  = models.CharField(max_length=100, blank=True)
+    selected_circuit_id  = models.TextField(blank=True, default="")
     nature_of_fault_id   = models.IntegerField(null=True, blank=True)
     ticket_id         = models.CharField(max_length=50,  blank=True, default="")
     ticket_raised_on  = models.CharField(max_length=30,  blank=True, default="")

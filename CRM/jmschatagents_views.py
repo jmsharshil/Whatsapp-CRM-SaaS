@@ -71,8 +71,8 @@ from CRM.jms_llms.views import get_client as _startup_client, AIC_REFERENCE as _
 from CRM.jms_llms.retriever import get_context as _get_context
 
 logger = logging.getLogger(__name__)
-print("settings.OPENAI_API_KEY =", getattr(settings, "OPENAI_API_KEY", None))
-print("settings.ENDPOINT_URL =", getattr(settings, "ENDPOINT_URL", None))
+# print("settings.OPENAI_API_KEY =", getattr(settings, "OPENAI_API_KEY", None))
+# print("settings.ENDPOINT_URL =", getattr(settings, "ENDPOINT_URL", None))
 # ── Azure OpenAI client (JMS-Tech bot & website analysis) ────────────────────
 openai_client = AzureOpenAI(
     api_key=settings.OPENAI_API_KEY,
