@@ -1,0 +1,270 @@
+import json
+import logging
+import os
+import re
+from datetime import datetime
+
+from CRM.models import Customer, Conversation, Message, ClientAccount, ConversationState
+from .globestar_utils import (
+    GLOBESTAR_PHONE_NUMBER_ID,
+    GLOBESTAR_PRODUCTS,
+    tpl_gs_welcome,
+    tpl_gs_main_menu,
+    tpl_gs_product_list,
+    tpl_gs_product_list_page2,
+    send_gs_product_detail,
+    send_gs_text
+)
+
+logger = logging.getLogger(__name__)
+
+class ConversationSession:
+    def __init__(self, conv):
+        self._conv = conv
+
+    def save(self):
+        self._conv.save()
+
+    @property
+    def mobile_number(self):
+        return self._conv.customer.phone
+
+    @property
+    def state(self):
+        return self._conv.bot_state
+
+    @state.setter
+    def state(self, value):
+        self._conv.bot_state = value
+
+    @property
+    def updated_at(self):
+        return self._conv.created_at
+
+    def __getattr__(self, item):
+        return self._conv.bot_metadata.get(item)
+
+    def __setattr__(self, key, value):
+        if key in ['_conv', 'state']:
+            super().__setattr__(key, value)
+        else:
+            if not isinstance(self._conv.bot_metadata, dict):
+                self._conv.bot_metadata = {}
+            self._conv.bot_metadata[key] = value
+
+def handle_globestar_message(msg: dict):
+    number   = msg.get("from", "")
+    msg_id   = msg.get("id", "")
+    msg_type = msg.get("type", "text")
+
+    body = ""
+    if msg_type == "text":
+        body = msg.get("text", {}).get("body", "").strip()
+    elif msg_type == "interactive":
+        idata = msg.get("interactive", {})
+        itype = idata.get("type")
+        if itype == "button_reply":
+            body = idata["button_reply"]["id"]
+        elif itype == "list_reply":
+            body = idata["list_reply"]["id"]
+    elif msg_type == "button":
+        body = msg.get("button", {}).get("payload", "").strip()
+    elif msg_type == "image":
+        body = "[image]"
+
+    logger.info("[GLOBESTAR] from=%s type=%s body=%r id=%s", number, msg_type, body, msg_id)
+
+    customer_obj, _ = Customer.objects.get_or_create(phone=number, defaults={'name': number})
+    gs_phone_id = GLOBESTAR_PHONE_NUMBER_ID
+    client_account_obj = ClientAccount.objects.filter(phone_number_id=gs_phone_id).first()
+
+    conv_obj, conv_created = Conversation.objects.get_or_create(
+        customer=customer_obj, 
+        phone_number_id=gs_phone_id, 
+        defaults={'client': client_account_obj}
+    )
+    Message.objects.create(
+        conversation=conv_obj,
+        client=client_account_obj,
+        customer=customer_obj,
+        meta_message_id=msg_id,
+        direction="inbound",
+        message_type=msg_type if msg_type in ['text', 'template', 'image', 'document', 'video'] else 'text',
+        content=body,
+        status='delivered'
+    )
+
+    if not conv_obj.bot_state:
+        conv_obj.bot_state = "INIT"
+        conv_obj.save()
+        conv_created = True
+
+    session = ConversationSession(conv_obj)
+    
+    # Reset flow on "hi", "hello" or if newly created and state is INIT
+    is_trigger = bool(re.search(r'\b(hi|hello|menu)\b', body.lower()))
+    
+    if conv_created or is_trigger:
+        session.state = "GS_INIT"
+        session.gs_selected_product = ""
+        session.gs_capacity = ""
+        session.gs_head = ""
+        session.gs_application = ""
+        session.gs_pump_type = ""
+        session.gs_specific_gravity = ""
+        session.save()
+
+    state = session.state
+
+    # Route based on state
+    if state == "GS_INIT":
+        import time
+        tpl_gs_welcome(number)
+        time.sleep(4)  # Delay to ensure WhatsApp delivers both messages
+        tpl_gs_main_menu(number)
+        session.state = "GS_MENU"
+        session.save()
+
+    elif state == "GS_MENU":
+        if body in ["1", "view_products"]:
+            tpl_gs_product_list(number)
+            session.state = "GS_PRODUCTS"
+            session.save()
+        elif body in ["2", "callback"]:
+            session.state = "GS_AWAIT_CAPACITY"
+            session.gs_selected_product = "General Request"
+            session.save()
+            send_gs_text(number, "📝To provide the best quotation, please share:\n1️⃣ Required Capacity (m³/hr)")
+        elif body in ["3", "talk_to_sales"]:
+            msg = "📞 Connecting you to our Sales Team...\n⏱ Office Hours:\nMon–Sat | 10:00 AM – 6:30 PM\n\n🙏 Thank you for contacting Globe Star Engineers.\n📲 You will receive a call shortly."
+            send_gs_text(number, msg)
+            session.state = "GS_DONE"
+            session.gs_selected_product = "Talk to Sales"
+            session.save()
+            logger.info("[GLOBESTAR] Lead generated: product=%s cap=%s head=%s app=%s type=%s sg=%s num=%s",
+                        session.gs_selected_product, session.gs_capacity, session.gs_head, 
+                        session.gs_application, session.gs_pump_type, session.gs_specific_gravity, number)
+        else:
+            tpl_gs_main_menu(number)
+
+    elif state == "GS_PRODUCTS":
+        if body == "99" or body == "more_products":
+            tpl_gs_product_list_page2(number)
+            # Do not change state, they are still browsing products
+        elif body.isdigit():
+            product_id = body
+            send_gs_product_detail(number, product_id)
+            session.state = "GS_PRODUCT_DETAIL"
+            session.gs_selected_product = product_id
+            session.save()
+        elif body in ["2", "callback"]:
+            session.state = "GS_AWAIT_CAPACITY"
+            session.gs_selected_product = "General Request"
+            session.save()
+            send_gs_text(number, "📝To provide the best quotation, please share:\n1️⃣ Required Capacity (m³/hr)")
+        else:
+            tpl_gs_product_list(number)
+
+    elif state == "GS_PRODUCT_DETAIL":
+        if body.isdigit() and body != "0":
+            session.state = "GS_AWAIT_CAPACITY"
+            session.gs_selected_product = body
+            session.save()
+            send_gs_text(number, "📝To provide the best quotation, please share:\n1️⃣ Required Capacity (m³/hr)")
+        elif body in ["0", "back_to_products"]:
+            tpl_gs_product_list(number)
+            session.state = "GS_PRODUCTS"
+            session.save()
+        else:
+            send_gs_product_detail(number, session.gs_selected_product)
+
+    elif state == "GS_AWAIT_CAPACITY":
+        session.gs_capacity = body
+        session.state = "GS_AWAIT_HEAD"
+        session.save()
+        send_gs_text(number, "2️⃣ Head (meters)")
+
+    elif state == "GS_AWAIT_HEAD":
+        session.gs_head = body
+        session.state = "GS_AWAIT_APPLICATION"
+        session.save()
+        send_gs_text(number, "3️⃣ Application")
+
+    elif state == "GS_AWAIT_APPLICATION":
+        session.gs_application = body
+        session.state = "GS_AWAIT_PUMP_TYPE"
+        session.save()
+        send_gs_text(number, "4️⃣ Pump Type")
+
+    elif state == "GS_AWAIT_PUMP_TYPE":
+        session.gs_pump_type = body
+        session.state = "GS_AWAIT_SPECIFIC_GRAVITY"
+        session.save()
+        send_gs_text(number, "5️⃣ Specific Gravity")
+
+    elif state == "GS_AWAIT_SPECIFIC_GRAVITY":
+        session.gs_specific_gravity = body
+        session.state = "GS_DONE"
+        session.save()
+        msg = "🙏 Thank you for contacting Globe Star Engineers.\n📲 You will receive a call shortly."
+        send_gs_text(number, msg)
+        logger.info("[GLOBESTAR] Lead generated: product=%s cap=%s head=%s app=%s type=%s sg=%s num=%s",
+                    session.gs_selected_product, session.gs_capacity, session.gs_head, 
+                    session.gs_application, session.gs_pump_type, session.gs_specific_gravity, number)
+
+    elif state == "GS_DONE":
+        if is_trigger:
+            pass # already handled by trigger check above
+        else:
+            send_gs_text(number, "You have already completed the flow. Type 'hi' to restart.")
+
+    # --- Sync WhatsAppSession to ConversationState for Leads/Prospects View ---
+    org_obj = None
+    if client_account_obj:
+        org_obj = client_account_obj.tech_provider
+    else:
+        from CRM.models import WABAAccount
+        waba = WABAAccount.objects.filter(phone_number_id=gs_phone_id).first()
+        if waba:
+            org_obj = waba.organization
+            
+    if org_obj:
+        conv_state, _ = ConversationState.objects.get_or_create(
+            conversation=conv_obj,
+            organization=org_obj,
+            defaults={"stage": "greeting", "is_complete": False}
+        )
+        
+        # Map session state to meaningful stages for the frontend
+        if session.gs_selected_product == "Talk to Sales":
+            conv_state.stage = "Talk to Sales"
+        elif session.gs_selected_product == "General Request":
+            conv_state.stage = "Request Quotation"
+        elif session.gs_selected_product:
+            conv_state.stage = "Get Price"
+        elif session.state == "GS_INIT":
+            conv_state.stage = "greeting"
+        else:
+            conv_state.stage = "Exploring Menu"
+
+        if session.state == "GS_DONE":
+            conv_state.is_complete = True
+        else:
+            conv_state.is_complete = False
+            
+        conv_state.collected_fields = {
+            "Product": session.gs_selected_product,
+            "Capacity": session.gs_capacity,
+            "Head": session.gs_head,
+            "Application": session.gs_application,
+            "Pump Type": session.gs_pump_type,
+            "Specific Gravity": session.gs_specific_gravity
+        }
+        conv_state.save()
+        
+    # Set status
+    if session.state == "GS_DONE":
+        conv_obj.status = "confirmed"
+    else:
+        conv_obj.status = "prospect"
+    conv_obj.save()

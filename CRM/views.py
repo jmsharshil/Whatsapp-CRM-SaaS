@@ -666,7 +666,7 @@ class MetaDashboardAPIView(APIView):
         # ✅ FIXED: Filter messages correctly for both Tech Providers and direct clients
         if phone_number_id:
             messages = Message.objects.filter(
-                conversation__client__phone_number_id=phone_number_id,
+                Q(conversation__client__phone_number_id=phone_number_id) | Q(conversation__phone_number_id=phone_number_id),
                 direction='outbound'  # ← Only count sent messages
             )
         else:
@@ -717,7 +717,9 @@ class MetaDashboardAPIView(APIView):
         from datetime import date
         
         if phone_number_id:
-            client_customers = Customer.objects.filter(conversations__client__phone_number_id=phone_number_id).distinct()
+            client_customers = Customer.objects.filter(
+                Q(conversations__client__phone_number_id=phone_number_id) | Q(conversations__phone_number_id=phone_number_id)
+            ).distinct()
             active_today = client_customers.filter(conversations__messages__timestamp__date=date.today()).distinct().count()
         else:
             client_customers = Customer.objects.filter(conversations__client__tech_provider=org).distinct()
@@ -738,11 +740,11 @@ class MetaDashboardAPIView(APIView):
         ).values_list("conversation_id", flat=True)
 
         leads_count = client_customers.filter(
-            Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids)
+            Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids) | Q(conversations__status="confirmed")
         ).distinct().count()
 
         prospects_count = client_customers.exclude(
-            Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids)
+            Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids) | Q(conversations__status="confirmed")
         ).distinct().count()
 
         client_summary = {
@@ -1502,9 +1504,10 @@ class LeadsProspectsView(APIView):
 
         # ── Base queryset: Customers with conversations ───────────────────
         if phone_number_id:
-            # Filter by org's WABA
+            # Filter by org's WABA or directly by conversation's phone_number_id
             customers = Customer.objects.filter(
-                conversations__client__phone_number_id=phone_number_id
+                Q(conversations__client__phone_number_id=phone_number_id) |
+                Q(conversations__phone_number_id=phone_number_id)
             ).distinct()
         else:
             # Fallback: filter by org's clients
@@ -1535,7 +1538,7 @@ class LeadsProspectsView(APIView):
             ).values_list("conversation_id", flat=True)
             
             customers = customers.filter(
-                Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids)
+                Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids) | Q(conversations__status="confirmed")
             )
         
         elif tab in ["prospects", "prospect"]:
@@ -1546,7 +1549,7 @@ class LeadsProspectsView(APIView):
             ).values_list("conversation_id", flat=True)
             
             customers = customers.exclude(
-                Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids)
+                Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids) | Q(conversations__status="confirmed")
             )
 
         # ── Search filter ─────────────────────────────────────────────────
@@ -1590,7 +1593,7 @@ class LeadsProspectsView(APIView):
                 "id": customer.id,
                 "name": customer.name,
                 "phone": customer.phone,
-                "status": "lead" if (is_complete or has_ticket) else "prospect",
+                "status": "lead" if (is_complete or has_ticket or (conv and conv.status == "confirmed")) else "prospect",
                 "chatbot_stage": chatbot_stage,
                 "collected_fields": collected_fields,
                 "message_count": state.message_count if state else 0,

@@ -7,6 +7,7 @@ from CRM.META.client_views import *
 from .views import *
 from CRM.views import MetaConversationMessageListView
 from CRM.jmschatagents_views import *
+from CRM.gigatel_views import GigatelDataExportView
 
 urlpatterns = [
 
@@ -73,4 +74,7 @@ urlpatterns = [
     
     path("api/meta-registration/", ClientMetaRegistrationView.as_view()),
     path("api/techprovider/clients/<int:pk>/meta-registration/", TechProviderMetaRegistrationView.as_view()),
+    
+    # ── Gigatel Export ────────────────────────────────────────────────────────
+    path("api/gigatel/", GigatelDataExportView.as_view(), name="gigatel-export"),
 ]

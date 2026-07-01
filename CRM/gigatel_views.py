@@ -1324,4 +1324,77 @@ class WebhookView(View):
             logger.error("[MEDIA] ❌ Download failed url=%s error=%s", media_url, exc)
             return ""
 
+from rest_framework.permissions import AllowAny
+
+class GigatelDataExportView(APIView):
+    """
+    API endpoint for Gigatel (or other clients) to export all their conversations
+    and session metadata using their phone_number_id and token.
+    """
+    permission_classes = [AllowAny]
+    
+    def get(self, request):
+        phone_number_id = request.GET.get('phone_number_id')
+        token = request.GET.get('token')
+        
+        if not phone_number_id or not token:
+            return Response({"error": "phone_number_id and token are required in query params"}, status=400)
+            
+        client = ClientAccount.objects.filter(phone_number_id=phone_number_id).first()
+        if not client:
+            return Response({"error": "Invalid phone_number_id"}, status=401)
+            
+        if token != client.access_token and token != settings.META_PERMANENT_TOKEN:
+            return Response({"error": "Invalid token"}, status=401)
+            
+        conversations = Conversation.objects.filter(client=client).select_related('customer').prefetch_related('messages')
+        
+        export_data = {
+            "client": {
+                "name": client.name,
+                "phone_number_id": client.phone_number_id,
+                "waba_id": client.waba_id,
+            },
+            "conversations": []
+        }
+        
+        for conv in conversations:
+            wa_session = WhatsAppSession.objects.filter(mobile_number=conv.customer.phone).first()
+            session_data = None
+            if wa_session:
+                session_data = {
+                    "state": wa_session.state,
+                    "ticket_id": wa_session.ticket_id,
+                    "ticket_raised_on": wa_session.ticket_raised_on,
+                    "selected_circuit_id": wa_session.selected_circuit_id,
+                    "nature_of_fault_id": wa_session.nature_of_fault_id,
+                    "fault_label": wa_session.fault_label,
+                    "otdr_applicable": wa_session.otdr_applicable,
+                    "updated_at": wa_session.updated_at.isoformat() if wa_session.updated_at else None
+                }
+            
+            conv_data = {
+                "id": conv.id,
+                "customer_name": conv.customer.name,
+                "customer_phone": conv.customer.phone,
+                "status": conv.status,
+                "created_at": conv.created_at.isoformat() if conv.created_at else None,
+                "whatsapp_session": session_data,
+                "messages": []
+            }
+            
+            for msg in conv.messages.all():
+                conv_data["messages"].append({
+                    "id": msg.id,
+                    "direction": msg.direction,
+                    "status": msg.status,
+                    "type": msg.message_type,
+                    "content": msg.content,
+                    "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
+                    "meta_message_id": msg.meta_message_id
+                })
+            
+            export_data["conversations"].append(conv_data)
+            
+        return Response(export_data, status=200)
 

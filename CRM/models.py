@@ -295,6 +295,10 @@ class ConversationState(models.Model):
         ("qualifying",    "Qualifying"),
         ("complete",      "Complete"),
         ("human_handoff", "Human Handoff"),
+        ("Request Quotation", "Request Quotation"),
+        ("Get Price", "Get Price"),
+        ("Talk to Sales", "Talk to Sales"),
+        ("Exploring Menu", "Exploring Menu"),
     ]
 
     conversation = models.OneToOneField(Conversation, on_delete=models.CASCADE, related_name="chatbot_state")
@@ -472,6 +476,17 @@ class WhatsAppSession(models.Model):
         ("AWAIT_FAULT_SIDE_CHECK", "Validating OTDR fault side"),
         ("AWAIT_RAISE_ANYWAY",     "Awaiting Raise Ticket Anyway? Yes/No"),
         ("DONE",                    "Flow Complete"),
+        # Globe Star States
+        ("GS_INIT",                 "GS: Awaiting greeting"),
+        ("GS_MENU",                 "GS: Main Menu"),
+        ("GS_PRODUCTS",             "GS: Product List"),
+        ("GS_PRODUCT_DETAIL",       "GS: Product Detail"),
+        ("GS_AWAIT_CAPACITY",       "GS: Awaiting Capacity"),
+        ("GS_AWAIT_HEAD",           "GS: Awaiting Head"),
+        ("GS_AWAIT_APPLICATION",    "GS: Awaiting Application"),
+        ("GS_AWAIT_PUMP_TYPE",      "GS: Awaiting Pump Type"),
+        ("GS_AWAIT_SPECIFIC_GRAVITY", "GS: Awaiting Specific Gravity"),
+        ("GS_DONE",                 "GS: Flow Complete"),
     ]
 
     mobile_number        = models.CharField(max_length=15, unique=True)
@@ -498,6 +513,14 @@ class WhatsAppSession(models.Model):
 
     fault_side       = models.CharField(max_length=20, blank=True, default="")  # Gigatel / Customer
     circuit_numeric_id = models.IntegerField(null=True, blank=True)
+
+    # Globe Star step-by-step fields
+    gs_selected_product  = models.CharField(max_length=200, blank=True, default="")
+    gs_capacity          = models.CharField(max_length=100, blank=True, default="")
+    gs_head              = models.CharField(max_length=100, blank=True, default="")
+    gs_application       = models.CharField(max_length=200, blank=True, default="")
+    gs_pump_type         = models.CharField(max_length=100, blank=True, default="")
+    gs_specific_gravity  = models.CharField(max_length=100, blank=True, default="")
 
     state      = models.CharField(max_length=50, choices=STATE_CHOICES, default="INIT")
     updated_at = models.DateTimeField(auto_now=True)

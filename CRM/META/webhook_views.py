@@ -25,7 +25,7 @@ import hashlib
 import hmac
 import json
 import logging
-
+import os
 from django.conf import settings
 from django.core.cache import cache
 from django.http import HttpResponse
@@ -67,7 +67,8 @@ from CRM.jmschatagents_views import (
 )
 
 from CRM.gigatel_views import handle_gigatel_message
-import os
+from CRM.globestar_views import handle_globestar_message
+from CRM.globestar_utils import GLOBESTAR_PHONE_NUMBER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -338,9 +339,14 @@ class WhatsAppWebhookView(APIView):
                 for msg in value.get("messages", []):
                     try:
                         gigatel_phone_id = os.environ.get("META_PHONE_NUMBER_ID", "").strip()
+                        globestar_phone_id = GLOBESTAR_PHONE_NUMBER_ID
+                        
                         if gigatel_phone_id and phone_number_id == gigatel_phone_id:
                             logger.info("[Webhook] Routing message to Gigatel Bot")
                             handle_gigatel_message(msg)
+                        elif globestar_phone_id and phone_number_id == globestar_phone_id:
+                            logger.info("[Webhook] Routing message to Globe Star Bot")
+                            handle_globestar_message(msg)
                         elif client:
                             # ── CLIENT BOT FLOW ───────────────────────────
                             # Route to client-specific bot
