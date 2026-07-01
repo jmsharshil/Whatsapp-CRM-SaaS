@@ -1347,7 +1347,10 @@ class GigatelDataExportView(APIView):
         if token != client.access_token and token != settings.META_PERMANENT_TOKEN:
             return Response({"error": "Invalid token"}, status=401)
             
-        conversations = Conversation.objects.filter(client=client).select_related('customer').prefetch_related('messages')
+        from django.db.models import Q
+        conversations = Conversation.objects.filter(
+            Q(client=client) | Q(phone_number_id=client.phone_number_id)
+        ).distinct().select_related('customer').prefetch_related('messages')
         
         export_data = {
             "client": {
