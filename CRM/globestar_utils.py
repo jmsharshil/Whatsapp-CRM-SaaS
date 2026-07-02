@@ -13,7 +13,8 @@ META_SEND_URL = "https://graph.facebook.com/v22.0/{phone_id}/messages"
 GLOBESTAR_PRODUCTS = [
     {
         "id": "1",
-        "name": "AODD Pump",
+        "name": "AODD",
+        "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/AODD.jpeg",
         "features": [
             "✔ Air operated (no electricity needed)",
             "✔ Handles viscous & abrasive fluids",
@@ -35,7 +36,8 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "2",
-        "name": "Chemical Process Pump",
+        "name": "Chemical Process",
+        "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Chemical_Process.jpeg",
         "features": [
             "✔ Handles corrosive chemicals safely",
             "✔ Heavy-duty industrial design",
@@ -60,7 +62,8 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "3",
-        "name": "Centrifugal Process Pump",
+        "name": "Centrifugal Process ",
+        "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Centrifugal_Process.jpeg",
         "features": [
             "✔ High efficiency & smooth operation",
             "✔ Handles chemicals & liquids",
@@ -83,7 +86,8 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "4",
-        "name": "PP Centrifugal Pump",
+        "name": "PP Centrifugal ",
+        "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/PP_Centrifugal.jpeg",
         "features": [
             "✔ 100% corrosion resistant",
             "✔ Leak-proof design",
@@ -105,7 +109,8 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "5",
-        "name": "Portable Sewage Submersible Pump",
+        "name": "Sewage Submersible",
+        "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Portable_Sewage_Submersible.jpeg",
         "features": [
             "✔ Heavy-duty construction for tough conditions",
             "✔ Non-clog impeller for solid handling",
@@ -129,7 +134,8 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "6",
-        "name": "Self priming Mud Pump",
+        "name": "Self priming Mud ",
+        "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Self_priming_Mud.jpeg",
         "features": [
             "✔ Designed for handling thick & muddy fluids",
             "✔ Abrasion-resistant construction",
@@ -153,7 +159,8 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "7",
-        "name": "Dewatering Pump",
+        "name": "Dewatering ",
+        "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Dewatering.jpeg",
         "features": [
             "✔ High efficiency water removal",
             "✔ Suitable for dirty water",
@@ -175,7 +182,8 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "8",
-        "name": "Vertical Multistage Inline Pump",
+        "name": "Multistage Inline",
+        "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Vertical_Multistage_Inline.jpeg",
         "features": [
             "✔ Space-saving design",
             "✔ Easy installation",
@@ -196,7 +204,8 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "9",
-        "name": "Fire Fighting Pump and System",
+        "name": "Fire Fighting",
+        "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Fire_Fighting.jpeg",
         "features": [
             "✔ High pressure output",
             "✔ Reliable emergency operation",
@@ -217,7 +226,8 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "10",
-        "name": "Progressive cavity Screw Pump",
+        "name": "Progressive cavity",
+        "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Progressive_cavity_Screw.jpeg",
         "features": [
             "✔ Ideal for viscous liquids",
             "✔ Smooth flow without pulsation",
@@ -238,7 +248,8 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "11",
-        "name": "Pressure Booster Pump and System",
+        "name": "Pressure Booster",
+        "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Pressure_Booster.jpg",
         "features": [
             "✔ Constant pressure supply",
             "✔ Automatic operation",
@@ -259,7 +270,8 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "12",
-        "name": "Lobe Pump",
+        "name": "Lobe",
+        "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Lobe_Pump.jpg",
         "features": [
             "✔ Ideal for viscous & shear-sensitive liquids",
             "✔ Gentle pumping (product quality maintain)",
@@ -283,7 +295,8 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "13",
-        "name": "Rotary Gear Pump",
+        "name": "Rotary Gear",
+        "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Rotary_Gear.jpeg",
         "features": [
             "✔ Positive displacement for constant flow",
             "✔ Ideal for viscous & lubricating liquids",
@@ -307,7 +320,8 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "14",
-        "name": "Vertical Long Shaft Sump Pump",
+        "name": "Vertical Long Shaft Sump",
+        "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Vertical_Long_Shaft.jpeg",
         "features": [
             "✔ Ideal for deep sump & tank applications",
             "✔ Vertical design – space saving installation",
@@ -331,7 +345,8 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "15",
-        "name": "Monoblock Pump",
+        "name": "Monoblock",
+        "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Monoblock.jpg",
         "features": [
             "✔ Compact and rigid design",
             "✔ High efficiency",
@@ -428,7 +443,7 @@ def _meta_post_gs(payload: dict) -> bool:
 
 def tpl_gs_welcome(to: str) -> bool:
     # Meta APIs often require the URL to explicitly end with .jpg or .png
-    welcome_image_url = "https://picsum.photos/600/400.jpg"
+    welcome_image_url = "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/welocome.jpeg"
     
     return _meta_post_gs({
         "messaging_product": "whatsapp",
