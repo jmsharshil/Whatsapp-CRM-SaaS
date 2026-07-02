@@ -229,11 +229,16 @@ def handle_globestar_message(msg: dict):
             org_obj = waba.organization
             
     if org_obj:
-        conv_state, _ = ConversationState.objects.get_or_create(
+        conv_state, created = ConversationState.objects.get_or_create(
             conversation=conv_obj,
-            organization=org_obj,
-            defaults={"stage": "greeting", "is_complete": False}
+            defaults={
+                "organization": org_obj,
+                "stage": "greeting", 
+                "is_complete": False
+            }
         )
+        if not created and conv_state.organization != org_obj:
+            conv_state.organization = org_obj
         
         # Map session state to meaningful stages for the frontend
         if session.gs_selected_product == "Talk to Sales":
