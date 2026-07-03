@@ -14,7 +14,7 @@ from django.shortcuts import get_object_or_404
 from .models import *
 from .serializers import*
 from django.conf import settings
-from django.db.models import Count
+from django.db.models import Count, Max
 from django.db.models.functions import TruncDate
 from django.core.paginator import Paginator
 from django.db.models import Q, Prefetch
@@ -1351,12 +1351,16 @@ class MetaCustomerListView(APIView):
         if phone_number_id:
             qs = Conversation.objects.select_related("customer").filter(
                 Q(client__phone_number_id=phone_number_id) | Q(phone_number_id=phone_number_id)
-            ).order_by("-created_at")
+            ).annotate(
+                last_msg_time=Max('messages__timestamp')
+            ).order_by("-last_msg_time", "-created_at")
         else:
             # Fallback: if no WABA connected yet, filter by org's clients
             qs = Conversation.objects.select_related("customer").filter(
                 client__tech_provider=org
-            ).order_by("-created_at")
+            ).annotate(
+                last_msg_time=Max('messages__timestamp')
+            ).order_by("-last_msg_time", "-created_at")
  
         # ── Optional query filters ────────────────────────────────────────────
         number    = request.query_params.get("number",    "").strip()
@@ -1391,11 +1395,15 @@ class MetaCustomerListView(APIView):
         results = []
         for conv in page.object_list:
             cust = conv.customer
+            phone = cust.phone
+            if phone and len(phone) == 10 and phone.isdigit():
+                phone = f"91{phone}"
+                
             results.append({
                 "conversation_id": conv.id,
                 "customer_id":     cust.id,
                 "name":            cust.name,
-                "phone":           cust.phone,
+                "phone":           phone,
                 "status":          conv.status,   # or cust.status — check your model
                 "created_at":      conv.created_at.isoformat(),
             })

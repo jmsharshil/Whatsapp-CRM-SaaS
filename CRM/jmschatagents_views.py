@@ -2058,8 +2058,9 @@ def conversation_list(request):
     from_dt, to_dt = _parse_date_range(request)
 
     qs = Conversation.objects.select_related("customer").annotate(
-        message_count=Count("messages")
-    ).order_by("-created_at")
+        message_count=Count("messages"),
+        last_msg_time=Max("messages__timestamp")
+    ).order_by("-last_msg_time", "-created_at")
 
     if status_filter: qs = qs.filter(status=status_filter)
     if phone_filter:  qs = qs.filter(customer__phone__icontains=phone_filter)
@@ -2074,10 +2075,14 @@ def conversation_list(request):
         last_msg   = conv.messages.order_by("-timestamp").first()
         has_reply  = conv.messages.filter(reply_of__isnull=False).exclude(reply_of="").exists()
         auto_status = "lead" if has_reply else "prospect"
+        phone = conv.customer.phone
+        if phone and len(phone) == 10 and phone.isdigit():
+            phone = f"91{phone}"
+            
         results.append({
             "id":                conv.id,
             "customer_name":     conv.customer.name,
-            "customer_phone":    conv.customer.phone,
+            "customer_phone":    phone,
             "status":            auto_status,
             "created_at":        conv.created_at.isoformat(),
             "message_count":     conv.message_count,
@@ -2105,10 +2110,14 @@ def conversation_messages(request, conversation_id):
         }
         for m in conv.messages.order_by("timestamp")
     ]
+    cust_phone = conv.customer.phone
+    if cust_phone and len(cust_phone) == 10 and cust_phone.isdigit():
+        cust_phone = f"91{cust_phone}"
+
     return _json({
         "conversation_id": conv.id,
         "customer_name":   conv.customer.name,
-        "customer_phone":  conv.customer.phone,
+        "customer_phone":  cust_phone,
         "status":          conv.status,
         "messages":        messages,
     })

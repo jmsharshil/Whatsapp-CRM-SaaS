@@ -13,7 +13,13 @@ from .globestar_utils import (
     tpl_gs_product_list,
     tpl_gs_product_list_page2,
     send_gs_product_detail,
-    send_gs_text
+    send_gs_text,
+    tpl_gs_talk_to_sales,
+    tpl_gs_ask_capacity,
+    tpl_gs_ask_head,
+    tpl_gs_ask_application,
+    tpl_gs_ask_pump_type,
+    tpl_gs_ask_gravity
 )
 
 logger = logging.getLogger(__name__)
@@ -138,8 +144,7 @@ def handle_globestar_message(msg: dict):
             session.state = "GS_PRODUCTS"
             session.save()
         elif body in ["2", "talk_to_sales"]:
-            msg = "📞 Connecting you to our Sales Team...\n⏱ Office Hours:\nMon–Sat | 10:00 AM – 6:30 PM\n\n🙏 Thank you for contacting Globe Star Engineers.\n📲 You will receive a call shortly."
-            send_gs_text(number, msg)
+            tpl_gs_talk_to_sales(number)
             session.state = "GS_DONE"
             session.gs_selected_product = "Talk to Sales"
             session.save()
@@ -167,7 +172,7 @@ def handle_globestar_message(msg: dict):
             session.state = "GS_AWAIT_CAPACITY"
             session.gs_selected_product = body
             session.save()
-            send_gs_text(number, "📝To provide the best quotation, please share:\n\n1️⃣ Required Capacity (m³/hr)")
+            tpl_gs_ask_capacity(number)
         elif body in ["0", "back_to_products"]:
             tpl_gs_product_list(number)
             session.state = "GS_PRODUCTS"
@@ -179,25 +184,25 @@ def handle_globestar_message(msg: dict):
         session.gs_capacity = body
         session.state = "GS_AWAIT_HEAD"
         session.save()
-        send_gs_text(number, "2️⃣ Head (meters)")
+        tpl_gs_ask_head(number)
 
     elif state == "GS_AWAIT_HEAD":
         session.gs_head = body
         session.state = "GS_AWAIT_APPLICATION"
         session.save()
-        send_gs_text(number, "3️⃣ Application")
+        tpl_gs_ask_application(number)
 
     elif state == "GS_AWAIT_APPLICATION":
         session.gs_application = body
         session.state = "GS_AWAIT_PUMP_TYPE"
         session.save()
-        send_gs_text(number, "4️⃣ Pump Type")
+        tpl_gs_ask_pump_type(number)
 
     elif state == "GS_AWAIT_PUMP_TYPE":
         session.gs_pump_type = body
         session.state = "GS_AWAIT_SPECIFIC_GRAVITY"
         session.save()
-        send_gs_text(number, "5️⃣ Specific Gravity")
+        tpl_gs_ask_gravity(number)
 
     elif state == "GS_AWAIT_SPECIFIC_GRAVITY":
         session.gs_specific_gravity = body

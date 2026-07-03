@@ -318,6 +318,27 @@ class WhatsAppWebhookView(APIView):
         except json.JSONDecodeError:
             return HttpResponse("OK", status=200)
 
+        # ── Forward webhook to Voicebot URL ───────────────────────────────
+        try:
+            import threading
+            import requests
+
+            def forward_payload(data, sig):
+                try:
+                    headers = {"Content-Type": "application/json"}
+                    if sig:
+                        headers["X-Hub-Signature-256"] = sig
+                    # Forward to the URL required by the voicebot service
+                    res = requests.post("https://gigatel.online/webhook/whatsapp/", json=data, headers=headers, timeout=5)
+                    logger.info(f"[Webhook] Forwarded to voicebot. Status: {res.status_code}")
+                except Exception as e:
+                    logger.error(f"[Webhook] Forwarding error: {e}")
+
+            sig = request.META.get("HTTP_X_HUB_SIGNATURE_256", "")
+            threading.Thread(target=forward_payload, args=(payload, sig), daemon=True).start()
+        except Exception as e:
+            logger.error(f"[Webhook] Failed to start forwarding thread: {e}")
+
         if payload.get("object") != "whatsapp_business_account":
             return HttpResponse("OK", status=200)
 

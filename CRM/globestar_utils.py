@@ -628,3 +628,69 @@ def send_gs_text(to: str, text: str) -> bool:
             "body": text
         }
     })
+
+def tpl_gs_talk_to_sales(to: str) -> bool:
+    return _meta_post_gs({
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "template",
+        "template": {
+            "name": "gs_talk_to_sales",
+            "language": {"code": "en"}
+        }
+    })
+
+def tpl_gs_ask_capacity(to: str) -> bool:
+    return _meta_post_gs({
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "template",
+        "template": {
+            "name": "gs_ask_capacity",
+            "language": {"code": "en"}
+        }
+    })
+
+def tpl_gs_ask_head(to: str) -> bool:
+    return _meta_post_gs({
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "template",
+        "template": {
+            "name": "gs_ask_head",
+            "language": {"code": "en"}
+        }
+    })
+
+def tpl_gs_ask_application(to: str) -> bool:
+    return _meta_post_gs({
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "template",
+        "template": {
+            "name": "gs_ask_application",
+            "language": {"code": "en"}
+        }
+    })
+
+def tpl_gs_ask_pump_type(to: str) -> bool:
+    return _meta_post_gs({
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "template",
+        "template": {
+            "name": "gs_ask_pump_type",
+            "language": {"code": "en"}
+        }
+    })
+
+def tpl_gs_ask_gravity(to: str) -> bool:
+    return _meta_post_gs({
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "template",
+        "template": {
+            "name": "gs_ask_gravity",
+            "language": {"code": "en"}
+        }
+    })
