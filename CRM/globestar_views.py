@@ -58,21 +58,28 @@ def handle_globestar_message(msg: dict):
     msg_type = msg.get("type", "text")
 
     body = ""
+    display_body = ""
     if msg_type == "text":
         body = msg.get("text", {}).get("body", "").strip()
+        display_body = body
     elif msg_type == "interactive":
         idata = msg.get("interactive", {})
         itype = idata.get("type")
         if itype == "button_reply":
             body = idata["button_reply"]["id"]
+            display_body = idata["button_reply"].get("title", body)
         elif itype == "list_reply":
             body = idata["list_reply"]["id"]
+            display_body = idata["list_reply"].get("title", body)
     elif msg_type == "button":
         body = msg.get("button", {}).get("payload", "").strip()
+        display_body = msg.get("button", {}).get("text", body).strip()
     elif msg_type == "image":
         body = "[image]"
+        display_body = "[image]"
 
-    logger.info("[GLOBESTAR] from=%s type=%s body=%r id=%s", number, msg_type, body, msg_id)
+    logger.info("[GLOBESTAR DEBUG] msg payload: %s", json.dumps(msg))
+    logger.info("[GLOBESTAR] from=%s type=%s body=%r display_body=%r id=%s", number, msg_type, body, display_body, msg_id)
 
     customer_obj, _ = Customer.objects.get_or_create(phone=number, defaults={'name': number})
     gs_phone_id = GLOBESTAR_PHONE_NUMBER_ID
@@ -90,7 +97,7 @@ def handle_globestar_message(msg: dict):
         meta_message_id=msg_id,
         direction="inbound",
         message_type=msg_type if msg_type in ['text', 'template', 'image', 'document', 'video'] else 'text',
-        content=body,
+        content=display_body,
         status='delivered'
     )
 
@@ -160,7 +167,7 @@ def handle_globestar_message(msg: dict):
             session.state = "GS_AWAIT_CAPACITY"
             session.gs_selected_product = body
             session.save()
-            send_gs_text(number, "📝To provide the best quotation, please share:\n1️⃣ Required Capacity (m³/hr)")
+            send_gs_text(number, "📝To provide the best quotation, please share:\n\n1️⃣ Required Capacity (m³/hr)")
         elif body in ["0", "back_to_products"]:
             tpl_gs_product_list(number)
             session.state = "GS_PRODUCTS"
