@@ -415,6 +415,54 @@ def _meta_post(body: dict) -> bool:
         return False
 
 
+from django.core.mail import get_connection, EmailMessage
+from django.conf import settings
+
+def send_gigatel_email(to_email: str, subject: str, body: str) -> bool:
+    if not to_email:
+        logger.warning("[EMAIL] No to_email provided for send_gigatel_email")
+        return False
+        
+    try:
+        connection = get_connection(
+            host=getattr(settings, 'GIGATEL_EMAIL_HOST', settings.EMAIL_HOST),
+            port=getattr(settings, 'GIGATEL_EMAIL_PORT', settings.EMAIL_PORT),
+            username=getattr(settings, 'GIGATEL_EMAIL_HOST_USER', settings.EMAIL_HOST_USER),
+            password=getattr(settings, 'GIGATEL_EMAIL_HOST_PASSWORD', settings.EMAIL_HOST_PASSWORD),
+            use_tls=getattr(settings, 'GIGATEL_EMAIL_USE_TLS', settings.EMAIL_USE_TLS),
+        )
+        
+        from_email = getattr(settings, 'GIGATEL_DEFAULT_FROM_EMAIL', settings.DEFAULT_FROM_EMAIL)
+        
+        msg = EmailMessage(
+            subject=subject,
+            body=body,
+            from_email=from_email,
+            to=[to_email],
+            connection=connection
+        )
+        msg.send()
+        logger.info(f"[EMAIL] Successfully sent email to {to_email}")
+        return True
+    except Exception as e:
+        logger.error(f"[EMAIL] Failed to send email to {to_email}: {e}")
+        return False
+
+def email_existing_ticket(to_email: str, circuit_id: str, ticket_id: str, status: str, raised_on: str):
+    subject = f"Gigatel Support: Existing Ticket Info for Circuit {circuit_id}"
+    body = f"Dear Customer,\n\nYou already have an open ticket for circuit {circuit_id}.\nTicket ID: {ticket_id}\nStatus: {status}\nRaised On: {raised_on}\n\nRegards,\nGigatel Support"
+    return send_gigatel_email(to_email, subject, body)
+
+def email_ticket_raised(to_email: str, circuit_id: str, ticket_id: str, fault_label: str, raised_on: str, status: str):
+    subject = f"Gigatel Support: Ticket Raised for Circuit {circuit_id}"
+    body = f"Dear Customer,\n\nA new ticket has been raised for circuit {circuit_id}.\nTicket ID: {ticket_id}\nFault: {fault_label}\nStatus: {status}\nRaised On: {raised_on}\n\nRegards,\nGigatel Support"
+    return send_gigatel_email(to_email, subject, body)
+
+def email_request_closed(to_email: str, circuit_id: str):
+    subject = f"Gigatel Support: Request Closed for Circuit {circuit_id}"
+    body = f"Dear Customer,\n\nYour recent request for circuit {circuit_id} has been closed as the OTDR indicates a fault at the customer end, and you chose not to raise a ticket anyway.\n\nRegards,\nGigatel Support"
+    return send_gigatel_email(to_email, subject, body)
+
 # ---------------------------------------------------------------------------
 # Templates
 # ---------------------------------------------------------------------------

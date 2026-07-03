@@ -130,12 +130,7 @@ def handle_globestar_message(msg: dict):
             tpl_gs_product_list(number)
             session.state = "GS_PRODUCTS"
             session.save()
-        elif body in ["2", "callback"]:
-            session.state = "GS_AWAIT_CAPACITY"
-            session.gs_selected_product = "General Request"
-            session.save()
-            send_gs_text(number, "📝To provide the best quotation, please share:\n1️⃣ Required Capacity (m³/hr)")
-        elif body in ["3", "talk_to_sales"]:
+        elif body in ["2", "talk_to_sales"]:
             msg = "📞 Connecting you to our Sales Team...\n⏱ Office Hours:\nMon–Sat | 10:00 AM – 6:30 PM\n\n🙏 Thank you for contacting Globe Star Engineers.\n📲 You will receive a call shortly."
             send_gs_text(number, msg)
             session.state = "GS_DONE"
@@ -157,11 +152,6 @@ def handle_globestar_message(msg: dict):
             session.state = "GS_PRODUCT_DETAIL"
             session.gs_selected_product = product_id
             session.save()
-        elif body in ["2", "callback"]:
-            session.state = "GS_AWAIT_CAPACITY"
-            session.gs_selected_product = "General Request"
-            session.save()
-            send_gs_text(number, "📝To provide the best quotation, please share:\n1️⃣ Required Capacity (m³/hr)")
         else:
             tpl_gs_product_list(number)
 

@@ -162,6 +162,11 @@ class WebhookView(View):
         state = session.state
         logger.info("[DISPATCH] from=%s current_state=%s", number, state)
 
+        # ── Ignore unexpected images (likely for Voicebot) ───────────────────
+        if msg_type == "image" and state not in ["AWAIT_OTDR_IMAGE", "AWAIT_OTDR_IMAGE2"]:
+            logger.info("[DISPATCH] Ignoring unexpected image for state=%s (likely for Voicebot).", state)
+            return
+
         # ── Trigger / Reset ──────────────────────────────────────────────────
         if re.search(r'\bhi\b', body.lower()):
             logger.info(
@@ -447,6 +452,9 @@ class WebhookView(View):
             raised_on = detail.get("ticketCreatedOn") or session.ticket_raised_on or "N/A"
             ticket_status_display = detail.get("ticketStatus") or "Open"
 
+            if session.customer_email:
+                email_existing_ticket(session.customer_email, circuit_id, str(open_ticket_id), ticket_status_display, raised_on)
+
             ok = tpl_open_ticket_exists(
                 number,
                 circuit_id,
@@ -575,6 +583,10 @@ class WebhookView(View):
         if is_open:
             raised_on = detail.get("ticketCreatedOn") or session.ticket_raised_on or "N/A"
             ticket_status_display = detail.get("ticketStatus") or "Open"
+            
+            if session.customer_email:
+                email_existing_ticket(session.customer_email, circuit_id, str(open_ticket_id), ticket_status_display, raised_on)
+                
             ok = tpl_open_ticket_exists(number, circuit_id, str(open_ticket_id), ticket_status_display, raised_on)
             self._log_out(number, "[tpl] gigatel_open_ticket_exists", ok)
             session.state = "MENU"
@@ -1055,6 +1067,9 @@ class WebhookView(View):
         if text == "raise_anyway__yes":
             self._submit_complaint(number, session, remark=session.otdr_remark, ticket_status="CUSTOMER_DISPUTED_OTDR_RESULT")
         elif text == "raise_anyway__no":
+            if session.customer_email:
+                email_request_closed(session.customer_email, session.selected_circuit_id)
+                
             ok = tpl_request_closed_customer_fault(number)
             self._log_out(number, "[tpl] gigatel_request_closed_customer_fault", ok)
             session.ticket_status_local = "CUSTOMER_FAULT"
@@ -1138,6 +1153,9 @@ class WebhookView(View):
             )
 
             if ticket_status == "CUSTOMER_DISPUTED_OTDR_RESULT":
+                if session.customer_email:
+                    email_ticket_raised(session.customer_email, session.selected_circuit_id, str(ticket_id), session.fault_label or "N/A", now, ticket_status)
+                    
                 ok = tpl_ticket_confirmation_disputed(
                     number,
                     str(ticket_id),
@@ -1147,6 +1165,9 @@ class WebhookView(View):
                 )
                 self._log_out(number, f"[tpl] gigatel_ticket_confirmation_disputed ticket_id={ticket_id}", ok)
             else:
+                if session.customer_email:
+                    email_ticket_raised(session.customer_email, session.selected_circuit_id, str(ticket_id), session.fault_label or "N/A", now, ticket_status)
+                    
                 ok = tpl_ticket_confirmation(
                     number,
                     str(ticket_id),

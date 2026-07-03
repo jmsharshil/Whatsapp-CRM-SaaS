@@ -13,7 +13,7 @@ META_SEND_URL = "https://graph.facebook.com/v22.0/{phone_id}/messages"
 GLOBESTAR_PRODUCTS = [
     {
         "id": "1",
-        "name": "AODD",
+        "name": "AODD Pump",
         "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/AODD.jpeg",
         "features": [
             "✔ Air operated (no electricity needed)",
@@ -36,7 +36,7 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "2",
-        "name": "Chemical Process",
+        "name": "Chemical Process Pump",
         "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Chemical_Process.jpeg",
         "features": [
             "✔ Handles corrosive chemicals safely",
@@ -62,7 +62,7 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "3",
-        "name": "Centrifugal Process ",
+        "name": "Centrifugal Process Pump",
         "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Centrifugal_Process.jpeg",
         "features": [
             "✔ High efficiency & smooth operation",
@@ -86,7 +86,7 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "4",
-        "name": "PP Centrifugal ",
+        "name": "PP Centrifugal Pump",
         "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/PP_Centrifugal.jpeg",
         "features": [
             "✔ 100% corrosion resistant",
@@ -109,7 +109,7 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "5",
-        "name": "Sewage Submersible",
+        "name": "Sewage Submersible Pump",
         "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Portable_Sewage_Submersible.jpeg",
         "features": [
             "✔ Heavy-duty construction for tough conditions",
@@ -134,7 +134,7 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "6",
-        "name": "Self priming Mud ",
+        "name": "Self priming Mud Pump",
         "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Self_priming_Mud.jpeg",
         "features": [
             "✔ Designed for handling thick & muddy fluids",
@@ -159,7 +159,7 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "7",
-        "name": "Dewatering ",
+        "name": "Dewatering Pump",
         "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Dewatering.jpeg",
         "features": [
             "✔ High efficiency water removal",
@@ -182,7 +182,7 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "8",
-        "name": "Multistage Inline",
+        "name": "Vertical Inline Pump",
         "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Vertical_Multistage_Inline.jpeg",
         "features": [
             "✔ Space-saving design",
@@ -204,7 +204,7 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "9",
-        "name": "Fire Fighting",
+        "name": "Fire Fighting Pump",
         "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Fire_Fighting.jpeg",
         "features": [
             "✔ High pressure output",
@@ -226,7 +226,7 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "10",
-        "name": "Progressive cavity",
+        "name": "Screw Pump",
         "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Progressive_cavity_Screw.jpeg",
         "features": [
             "✔ Ideal for viscous liquids",
@@ -248,7 +248,7 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "11",
-        "name": "Pressure Booster",
+        "name": "Pressure Booster Pump",
         "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Pressure_Booster.jpg",
         "features": [
             "✔ Constant pressure supply",
@@ -270,8 +270,8 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "12",
-        "name": "Lobe",
-        "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Lobe_Pump.jpg",
+        "name": "Lobe Pump",
+        "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Lobe_Pump.jpeg",
         "features": [
             "✔ Ideal for viscous & shear-sensitive liquids",
             "✔ Gentle pumping (product quality maintain)",
@@ -295,7 +295,7 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "13",
-        "name": "Rotary Gear",
+        "name": "Rotary Gear Pump",
         "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Rotary_Gear.jpeg",
         "features": [
             "✔ Positive displacement for constant flow",
@@ -320,7 +320,7 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "14",
-        "name": "Vertical Long Shaft Sump",
+        "name": "Long Shaft Sump Pump",
         "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Vertical_Long_Shaft.jpeg",
         "features": [
             "✔ Ideal for deep sump & tank applications",
@@ -345,7 +345,7 @@ GLOBESTAR_PRODUCTS = [
     },
     {
         "id": "15",
-        "name": "Monoblock",
+        "name": "Monoblock Pump",
         "image": "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/Monoblock.jpg",
         "features": [
             "✔ Compact and rigid design",
@@ -484,10 +484,6 @@ def tpl_gs_main_menu(to: str) -> bool:
                 {
                     "type": "button", "sub_type": "quick_reply", "index": "1",
                     "parameters": [{"type": "payload", "payload": "2"}],
-                },
-                {
-                    "type": "button", "sub_type": "quick_reply", "index": "2",
-                    "parameters": [{"type": "payload", "payload": "3"}],
                 }
             ],
         },
@@ -495,16 +491,16 @@ def tpl_gs_main_menu(to: str) -> bool:
 
 def tpl_gs_product_list(to: str) -> bool:
     rows = []
-    for i, p in enumerate(GLOBESTAR_PRODUCTS[:9], start=1):
+    for p in GLOBESTAR_PRODUCTS[:9]:
         rows.append({
             "id": p['id'],
-            "title": f"{i}. {p['name']}"[:24]
+            "title": p['name'][:24]
         })
     
     # 10th row for Pagination
     rows.append({
         "id": "99",
-        "title": "10. More Pumps ➡️"
+        "title": "More Pumps ➡️"
     })
         
     return _meta_post_gs({
@@ -538,10 +534,10 @@ def tpl_gs_product_list(to: str) -> bool:
 
 def tpl_gs_product_list_page2(to: str) -> bool:
     rows = []
-    for i, p in enumerate(GLOBESTAR_PRODUCTS[9:], start=10):
+    for p in GLOBESTAR_PRODUCTS[9:]:
         rows.append({
             "id": p['id'],
-            "title": f"{i}. {p['name']}"[:24]
+            "title": p['name'][:24]
         })
         
     return _meta_post_gs({
