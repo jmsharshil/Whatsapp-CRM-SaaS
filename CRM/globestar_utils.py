@@ -27,10 +27,10 @@ GLOBESTAR_PRODUCTS = [
             "• High viscous liquids"
         ],
         "specifications": [
-            "• Capacity: Up to 45 m³/hr",
-            "• Head: Up to 50 meters",
+            "• Capacity: Up to 1000 LPM",
+            "• Head: Up to 80 meters",
             "• Temperature: Up to 120°C",
-            "• Material: PP / PVDF / SS",
+            "• Material: PP / PVDF / SS / Aluminium",
             "• Type: Diaphragm"
         ]
     },
@@ -55,8 +55,8 @@ GLOBESTAR_PRODUCTS = [
             "• Head: Up to 150 meters",
             "• Pressure: Up to 16 bar",
             "• Temperature: Up to 200°C",
-            "• Material: CI / CS / SS-304 / SS-316 / Alloy",
-            "• Impeller: Closed / Semi-open / Open",
+            "• Material: CI / CS / SS-304 / SS-316 / Alloy 20",
+            "• Impeller: Closed / Semi-open ",
             "• Type: End suction / Back pull-out"
         ]
     },
@@ -80,7 +80,7 @@ GLOBESTAR_PRODUCTS = [
             "• Head: Up to 150 meters",
             "• Pressure: Up to 16 bar",
             "• Temperature: Up to 200°C",
-            "• Material: CI / SS / Alloy",
+            "• Material: : CI / CS / SS-304 / SS-316 / Alloy 20",
             "• Type: End suction / Back pull-out"
         ]
     },
@@ -102,8 +102,8 @@ GLOBESTAR_PRODUCTS = [
         "specifications": [
             "• Capacity: Up to 50 m³/hr",
             "• Head: Up to 50 meters",
-            "• Temperature: Up to 70°C",
-            "• Material: PP / UHMWPE",
+            "• Temperature: Up to 120°C",
+            "• Material: PP / PVDF",
             "• Type: Centrifugal"
         ]
     },
@@ -124,10 +124,10 @@ GLOBESTAR_PRODUCTS = [
             "• Industrial wastewater handling"
         ],
         "specifications": [
-            "• Capacity: 10 – 500 m³/hr",
+            "• Capacity: 10 – 650 m³/hr",
             "• Head: Up to 50 meters",
-            "• Motor: 1 HP – 50 HP",
-            "• Solid Handling: Up to 50 mm",
+            "• Motor: 1 HP – 60 HP",
+            "• Solid Handling: Up to 100 mm",
             "• Material: Cast Iron / SS",
             "• Type: Submersible / Non-clog"
         ]
@@ -149,12 +149,12 @@ GLOBESTAR_PRODUCTS = [
             "• Sludge & slurry handling"
         ],
         "specifications": [
-            "• Capacity: 10 – 300 m³/hr",
-            "• Head: Up to 70 meters",
+            "• Capacity: 10 – 70 m³/hr",
+            "• Head: Up to 35 meters",
             "• Solid Handling: High (mud / slurry)",
-            "• Motor: 3 HP – 50 HP",
-            "• Material: Cast Iron / Alloy Steel",
-            "• Type: Horizontal / Submersible / Reciprocating"
+            "• Motor: 1 HP – 7.5 HP",
+            "• Material: Cast Iron / Alloy Steel / SS",
+            "• Type: Horizontal"
         ]
     },
     {
@@ -173,10 +173,10 @@ GLOBESTAR_PRODUCTS = [
             "• Flood water"
         ],
         "specifications": [
-            "• Capacity: 5 – 300 m³/hr",
-            "• Head: Up to 60 meters",
-            "• Motor: 1 HP – 30 HP",
-            "• Material: CI",
+            "• Capacity: 1 – 120 m³/hr",
+            "• Head: Up to 55 meters",
+            "• Motor: 1 HP – 40 HP",
+            "• Material: CI / SS",
             "• Type: Submersible"
         ]
     },
@@ -196,8 +196,8 @@ GLOBESTAR_PRODUCTS = [
             "• Water circulation"
         ],
         "specifications": [
-            "• Capacity: 5 – 200 m³/hr",
-            "• Head: Up to 100 meters",
+            "• Capacity: 1 – 100 m³/hr",
+            "• Head: Up to 228 meters",
             "• Material: CI / SS",
             "• Type: Inline centrifugal"
         ]
@@ -218,8 +218,8 @@ GLOBESTAR_PRODUCTS = [
             "• Fire safety systems"
         ],
         "specifications": [
-            "• Capacity: As per system",
-            "• Head: High pressure",
+            "• Capacity: Max 4550 LPM",
+            "• Head: 100 meters",
             "• Type: Centrifugal / Multistage",
             "• Standard: Fire safety compliant"
         ]
@@ -240,8 +240,8 @@ GLOBESTAR_PRODUCTS = [
             "• Food industry"
         ],
         "specifications": [
-            "• Capacity: 1 – 150 m³/hr",
-            "• Pressure: High pressure",
+            "• Capacity: 1 – 35 m³/hr",
+            "• Pressure: Max 6 to 12 kg/cm²",
             "• Material: SS / CI",
             "• Type: Positive displacement"
         ]
@@ -262,9 +262,9 @@ GLOBESTAR_PRODUCTS = [
             "• Industrial water supply"
         ],
         "specifications": [
-            "• Capacity: 1 – 50 m³/hr",
-            "• Head: Up to 60 meters",
-            "• Motor: 0.5 – 10 HP",
+            "• Capacity: 1 – 100 m³/hr",
+            "• Head: Up to 228 meters",
+            "• Material: CI / SS",
             "• Type: Multistage"
         ]
     },
@@ -285,11 +285,11 @@ GLOBESTAR_PRODUCTS = [
             "• Syrups, pastes & viscous liquids"
         ],
         "specifications": [
-            "• Capacity: 1 – 100 m³/hr",
-            "• Pressure: Up to 10 bar",
+            "• Capacity: 1 – 48 m³/hr",
+            "• Pressure: Up to 7 bar",
             "• Viscosity: High viscosity handling",
             "• Temperature: Up to 150°C",
-            "• Material: SS-304 / SS-316",
+            "• Material: SS-316",
             "• Type: Positive displacement (Rotary lobe)"
         ]
     },
@@ -310,12 +310,12 @@ GLOBESTAR_PRODUCTS = [
             "• Bitumen & viscous liquids handling"
         ],
         "specifications": [
-            "• Capacity: 1 – 200 m³/hr",
-            "• Pressure: Up to 15 bar",
+            "• Capacity: 1 – 30 m³/hr",
+            "• Pressure: Up to 10 kg/cm²",
             "• Viscosity: High viscosity fluids",
             "• Temperature: Up to 200°C",
-            "• Material: Cast Iron / SS / Alloy Steel",
-            "• Type: Internal Gear / External Gear"
+            "• Material: Cast Iron / SS ",
+            "• Type: External Gear"
         ]
     },
     {
@@ -335,11 +335,11 @@ GLOBESTAR_PRODUCTS = [
             "• Tank transfer applications"
         ],
         "specifications": [
-            "• Capacity: 5 – 200 m³/hr",
-            "• Head: Up to 60 meters",
-            "• Immersion Depth: Up to 10 meters (customizable)",
-            "• Motor: 1 HP – 30 HP",
-            "• Material: Cast Iron / SS / PP",
+            "• Capacity: Up to 400 m³/hr",
+            "• Head: Up to 80 meters",
+            "• Pressure: Up to 16 bar",
+            "• Temperature: Up to 200°C",
+            "• Material: CI / CS / SS-304 / SS-316 / Alloy 20",
             "• Type: Vertical cantilever (long shaft)"
         ]
     },
@@ -358,9 +358,11 @@ GLOBESTAR_PRODUCTS = [
             "• Industrial use"
         ],
         "specifications": [
-            "• Capacity: Up to 100 m³/hr",
-            "• Head: Up to 60 meters",
-            "• Motor: 0.5 - 20 HP"
+            "• Head : up to 60 mtr.",
+            "• Flow : up to 120 m3/hr",
+            "• Material :C.I., C.S., SS-316"
+            "• Speed :2900 rpm"
+            "• Power Rating : Single Phase & Three Phase"
         ]
     }
 ]
