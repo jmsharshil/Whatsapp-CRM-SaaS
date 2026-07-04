@@ -1329,16 +1329,19 @@ class WebhookView(View):
             }
             ext = ext_map.get(content_type.split(";")[0].strip(), ".jpg")
 
+            from django.core.files.base import ContentFile
+            from django.core.files.storage import default_storage
+            
             filename  = f"{prefix}_{uuid.uuid4().hex}{ext}"
-            save_dir  = os.path.join(settings.MEDIA_ROOT, "otdr_images")
-            os.makedirs(save_dir, exist_ok=True)
-            filepath  = os.path.join(save_dir, filename)
-
-            with open(filepath, "wb") as f:
-                f.write(r.content)
-
-            public_url = f"{settings.MEDIA_URL}otdr_images/{filename}"
-            logger.info("[MEDIA] ✅ Image saved: %s", filepath)
+            storage_path = f"otdr_images/{filename}"
+            
+            # Save using Django's storage backend (handles Azure Blob Storage automatically)
+            saved_path = default_storage.save(storage_path, ContentFile(r.content))
+            
+            # Get the public URL for the saved file
+            public_url = default_storage.url(saved_path)
+            
+            logger.info("[MEDIA] ✅ Image saved: %s", public_url)
             return public_url
 
         except Exception as exc:
