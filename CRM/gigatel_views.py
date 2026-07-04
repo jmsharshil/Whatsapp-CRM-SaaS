@@ -1397,6 +1397,12 @@ class GigatelDataExportView(APIView):
                     "nature_of_fault_id": wa_session.nature_of_fault_id,
                     "fault_label": wa_session.fault_label,
                     "otdr_applicable": wa_session.otdr_applicable,
+                    "otdr_image1_url": wa_session.otdr_image1_url,
+                    "otdr_image2_url": wa_session.otdr_image2_url,
+                    "otdr_from": wa_session.otdr_from,
+                    "otdr_to": wa_session.otdr_to,
+                    "otdr_value": wa_session.otdr_value,
+                    "otdr_remark": wa_session.otdr_remark,
                     "updated_at": wa_session.updated_at.isoformat() if wa_session.updated_at else None
                 }
             
