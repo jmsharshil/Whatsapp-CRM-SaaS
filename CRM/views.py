@@ -1271,7 +1271,7 @@ class MetaCustomerListView(APIView):
             qs = qs.filter(status=status)
  
         # ── Pagination ────────────────────────────────────────────────────────
-        page_size = int(request.query_params.get("page_size", 1))
+        page_size = int(request.query_params.get("page_size", 20))
         page_num  = int(request.query_params.get("page", 1))
         paginator = Paginator(qs, page_size)
         page      = paginator.get_page(page_num)
