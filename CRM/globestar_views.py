@@ -19,7 +19,8 @@ from .globestar_utils import (
     tpl_gs_ask_head,
     tpl_gs_ask_application,
     tpl_gs_ask_pump_type,
-    tpl_gs_ask_gravity
+    tpl_gs_ask_gravity,
+    send_gs_document
 )
 
 logger = logging.getLogger(__name__)
@@ -151,6 +152,15 @@ def handle_globestar_message(msg: dict):
             logger.info("[GLOBESTAR] Lead generated: product=%s cap=%s head=%s app=%s type=%s sg=%s num=%s",
                         session.gs_selected_product, session.gs_capacity, session.gs_head, 
                         session.gs_application, session.gs_pump_type, session.gs_specific_gravity, number)
+        elif body in ["3", "general_request"]:
+            doc_url = "https://whatsappcrmsaasstorage.blob.core.windows.net/media/globestar/catalogue.pdf"
+            send_gs_document(number, doc_url, "Globe_Star_Catalogue.pdf")
+            session.state = "GS_DONE"
+            session.gs_selected_product = "Catalogue"
+            session.save()
+            logger.info("[GLOBESTAR] Lead generated: product=%s cap=%s head=%s app=%s type=%s sg=%s num=%s",
+                        session.gs_selected_product, session.gs_capacity, session.gs_head, 
+                        session.gs_application, session.gs_pump_type, session.gs_specific_gravity, number)
         else:
             tpl_gs_main_menu(number)
 
@@ -194,18 +204,6 @@ def handle_globestar_message(msg: dict):
 
     elif state == "GS_AWAIT_APPLICATION":
         session.gs_application = body
-        session.state = "GS_AWAIT_PUMP_TYPE"
-        session.save()
-        tpl_gs_ask_pump_type(number)
-
-    elif state == "GS_AWAIT_PUMP_TYPE":
-        session.gs_pump_type = body
-        session.state = "GS_AWAIT_SPECIFIC_GRAVITY"
-        session.save()
-        tpl_gs_ask_gravity(number)
-
-    elif state == "GS_AWAIT_SPECIFIC_GRAVITY":
-        session.gs_specific_gravity = body
         session.state = "GS_DONE"
         session.save()
         msg = "🙏 Thank you for contacting Globe Star Engineers.\n📲 You will receive a call shortly."

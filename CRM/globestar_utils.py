@@ -486,6 +486,10 @@ def tpl_gs_main_menu(to: str) -> bool:
                 {
                     "type": "button", "sub_type": "quick_reply", "index": "1",
                     "parameters": [{"type": "payload", "payload": "2"}],
+                },
+                {
+                    "type": "button", "sub_type": "quick_reply", "index": "2",
+                    "parameters": [{"type": "payload", "payload": "3"}],
                 }
             ],
         },
@@ -628,6 +632,18 @@ def send_gs_text(to: str, text: str) -> bool:
         "text": {
             "preview_url": False,
             "body": text
+        }
+    })
+
+def send_gs_document(to: str, doc_url: str, filename: str) -> bool:
+    return _meta_post_gs({
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": to,
+        "type": "document",
+        "document": {
+            "link": doc_url,
+            "filename": filename
         }
     })
 
