@@ -1302,10 +1302,11 @@ class MetaCustomerListView(APIView):
             })
  
         return Response({
-            "count":     paginator.count,
-            "next":      make_url(page.next_page_number()     if page.has_next()     else None),
-            "previous":  make_url(page.previous_page_number() if page.has_previous() else None),
-            "results":   results,
+            "count":      paginator.count,
+            "next":       make_url(page.next_page_number()     if page.has_next()     else None),
+            "previous":   make_url(page.previous_page_number() if page.has_previous() else None),
+            "results":    results,
+            "page_size":  page_size,
             "waba_phone": waba_phone,  # shown as badge in sidebar
         })
 
