@@ -1,6 +1,8 @@
 import os
 import random
+import datetime
 from django.core.mail import send_mail, EmailMultiAlternatives
+from django.core.cache import cache
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -8,7 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import status, permissions
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, authenticate
 from django.shortcuts import get_object_or_404
 
 from .models import *
@@ -43,7 +45,7 @@ class SyncTechProviderWabaView(APIView):
         # ONLY TECH PROVIDER
         if (
             email != "pranjalvejani2111@gmail.com"
-            and not email.endswith("@jmsadvisory.in")
+            and not email.endswith("@jmstech.co")
         ):
             return Response({
                 "success": False,
@@ -135,6 +137,7 @@ class SignUpView(APIView):
     def post(self, request):
         full_name = request.data.get("full_name", "").strip()
         email     = request.data.get("email",     "").strip().lower()
+        password  = request.data.get("password",  "")
         name      = request.data.get("name",      "").strip()
         website   = request.data.get("website",   "").strip() or None
 
@@ -143,6 +146,9 @@ class SignUpView(APIView):
 
         if not email:
             return Response({"message": "Email is required"}, status=400)
+            
+        if not password:
+            return Response({"message": "Password/PIN is required"}, status=400)
 
         if not name:
             return Response({"message": "Organisation name is required"}, status=400)
@@ -150,8 +156,8 @@ class SignUpView(APIView):
         if User.objects.filter(email=email).exists():
             return Response({"message": "User already exists"}, status=400)
 
-        # Create user with full_name
-        user = User.objects.create_user(email=email)
+        # Create user with full_name and password
+        user = User.objects.create_user(email=email, password=password)
         user.full_name = full_name
         user.save(update_fields=["full_name"])
 
@@ -168,216 +174,18 @@ class SignUpView(APIView):
 # Auth
 # ─────────────────────────────────────────────────────────────────────────────
 
-class SendCodeView(APIView):
+class LoginView(APIView):
     def post(self, request):
-        serializer = EmailRequestSerializer(data=request.data)
+        serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        email = serializer.validated_data["email"]
+        email = serializer.validated_data['email']
+        password = serializer.validated_data['password']
 
-        code = str(random.randint(100000, 999999))
-        EmailVerificationCode.objects.create(email=email, code=code)
+        user = authenticate(email=email, password=password)
 
-        subject = "Your Verification Code"
-
-        text_content = (
-            f"Your verification code is {code}. "
-            f"It is valid for 5 minutes."
-        )
-
-        html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>Verification Code</title>
-        </head>
-
-        <body style="
-            margin:0;
-            padding:0;
-            background-color:#f4f7fb;
-            font-family:Arial,sans-serif;
-        ">
-
-            <table width="100%" cellpadding="0" cellspacing="0" border="0"
-                   style="background-color:#f4f7fb; padding:40px 0;">
-
-                <tr>
-                    <td align="center">
-
-                        <table width="600" cellpadding="0" cellspacing="0" border="0"
-                               style="
-                                    background:#ffffff;
-                                    border-radius:18px;
-                                    overflow:hidden;
-                                    box-shadow:0 4px 20px rgba(0,0,0,0.08);
-                               ">
-
-                            <!-- Header -->
-                            <tr>
-                                <td align="center"
-                                    style="
-                                        padding:35px 20px 20px;
-                                        background:#ffffff;
-                                        border-bottom:1px solid #eef2f7;
-                                    ">
-
-                                    <img
-                                        src="https://hrmsknowcraftstorage.blob.core.windows.net/media/JMS.png"
-                                        alt="JMS"
-                                        style="
-                                            width:180px;
-                                            max-width:100%;
-                                            display:block;
-                                        "
-                                    />
-
-                                </td>
-                            </tr>
-
-                            <!-- Content -->
-                            <tr>
-                                <td style="padding:40px 35px;">
-
-                                    <h2 style="
-                                        margin:0 0 18px;
-                                        color:#1f2937;
-                                        font-size:26px;
-                                        font-weight:700;
-                                    ">
-                                        Verify Your Email
-                                    </h2>
-
-                                    <p style="
-                                        margin:0 0 15px;
-                                        color:#4b5563;
-                                        font-size:16px;
-                                        line-height:26px;
-                                    ">
-                                        Hello,
-                                    </p>
-
-                                    <p style="
-                                        margin:0 0 30px;
-                                        color:#4b5563;
-                                        font-size:16px;
-                                        line-height:26px;
-                                    ">
-                                        Use the verification code below to securely log in to your account.
-                                    </p>
-
-                                    <!-- OTP Box -->
-                                    <div style="text-align:center; margin:35px 0;">
-
-                                        <span style="
-                                            display:inline-block;
-                                            background:#f3f7ff;
-                                            color:#2563eb;
-                                            font-size:34px;
-                                            font-weight:700;
-                                            letter-spacing:10px;
-                                            padding:18px 35px;
-                                            border-radius:14px;
-                                            border:1px solid #dbeafe;
-                                        ">
-                                            {code}
-                                        </span>
-
-                                    </div>
-
-                                    <p style="
-                                        margin:0;
-                                        color:#6b7280;
-                                        font-size:15px;
-                                        line-height:24px;
-                                    ">
-                                        This verification code will expire in
-                                        <strong>5 minutes</strong>.
-                                    </p>
-
-                                    <p style="
-                                        margin:18px 0 0;
-                                        color:#6b7280;
-                                        font-size:15px;
-                                        line-height:24px;
-                                    ">
-                                        If you did not request this email, you can safely ignore it.
-                                    </p>
-
-                                </td>
-                            </tr>
-
-                            <!-- Footer -->
-                            <tr>
-                                <td align="center"
-                                    style="
-                                        padding:24px;
-                                        background:#f9fafb;
-                                        border-top:1px solid #eef2f7;
-                                    ">
-
-                                    <p style="
-                                        margin:0;
-                                        color:#9ca3af;
-                                        font-size:13px;
-                                        line-height:22px;
-                                    ">
-                                        © 2026 JMS TechNova <br>
-                                        Secure Authentication System
-                                    </p>
-
-                                </td>
-                            </tr>
-
-                        </table>
-
-                    </td>
-                </tr>
-
-            </table>
-
-        </body>
-        </html>
-        """
-
-        msg = EmailMultiAlternatives(
-            subject,
-            text_content,
-            "noreply@example.com",
-            [email]
-        )
-
-        msg.attach_alternative(html_content, "text/html")
-        msg.send()
-
-        return Response(
-            {"message": "Verification code sent"},
-            status=200
-        )
-
-class VerifyCodeView(APIView):
-    def post(self, request):
-        serializer = CodeVerificationSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        email = serializer.validated_data["email"]
-        code = serializer.validated_data["code"]
-
-        try:
-            record = EmailVerificationCode.objects.filter(
-                email=email, code=code, is_used=False
-            ).latest("created_at")
-        except EmailVerificationCode.DoesNotExist:
-            return Response({"error": "Invalid code"}, status=400)
-
-        if record.is_expired():
-            return Response({"error": "Code expired"}, status=400)
-
-        record.is_used = True
-        record.save()
-
-        user, _ = User.objects.get_or_create(email=email)
+        if not user:
+            return Response({'error': 'Invalid email or PIN'}, status=400)
 
         refresh = RefreshToken.for_user(user)
 
@@ -385,15 +193,100 @@ class VerifyCodeView(APIView):
         role, org_name, org_id, has_org, waba_connected = _resolve_user_profile(user)
 
         return Response({
-            "refresh": str(refresh),
-            "access": str(refresh.access_token),
-            "role": role,
-            "organization": org_name,
-            "org_id": org_id,
-            "has_organization": has_org,
-            "waba_connected": waba_connected,
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+            'role': role,
+            'organization': org_name,
+            'org_id': org_id,
+            'has_organization': has_org,
+            'waba_connected': waba_connected,
         })
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Reset PIN
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ResetPinSendCodeView(APIView):
+    def post(self, request):
+        email = request.data.get("email", "").strip()
+        if not email:
+            return Response({"error": "Email is required"}, status=400)
+            
+        user = User.objects.filter(email__iexact=email).first()
+        if not user:
+            return Response({"error": "No account found with this email"}, status=404)
+            
+        code = str(random.randint(100000, 999999))
+        formatted_code = " ".join(list(code))
+        cache.set(f"reset_{email}", code, 300) # Valid for 5 mins
+        current_year = datetime.datetime.now().year
+        
+        html_content = f"""
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7fb; padding: 50px 20px; text-align: center;">
+            <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: left;">
+                
+                <div style="text-align: center; margin-bottom: 30px;">
+                    <img src="https://hrmsknowcraftstorage.blob.core.windows.net/media/JMS.png" alt="JMS Logo" style="max-width: 150px; height: auto;" />
+                </div>
+
+                <h2 style="color: #1a202c; font-size: 22px; font-weight: 700; margin-top: 0; margin-bottom: 20px;">Verify Your Email</h2>
+                <p style="color: #4a5568; font-size: 15px; margin-bottom: 15px;">Hello,</p>
+                <p style="color: #4a5568; font-size: 15px; margin-bottom: 30px; line-height: 1.5;">Use the verification code below to securely reset your PIN.</p>
+
+                <div style="background-color: #f0f7ff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; text-align: center; margin-bottom: 30px;">
+                    <span style="font-size: 30px; font-weight: 700; color: #2b6cb0; letter-spacing: 8px;">{formatted_code}</span>
+                </div>
+
+                <p style="color: #718096; font-size: 13px; margin-bottom: 15px;">This verification code will expire in <strong>5 minutes</strong>.</p>
+                <p style="color: #718096; font-size: 13px; margin-bottom: 0;">If you did not request this email, you can safely ignore it.</p>
+            </div>
+            
+            <div style="margin-top: 30px; text-align: center;">
+                <p style="color: #a0aec0; font-size: 12px; margin: 5px 0;">&copy; {current_year} JMS TechNova</p>
+                <p style="color: #a0aec0; font-size: 12px; margin: 5px 0;">Secure Authentication System</p>
+            </div>
+        </div>
+        """
+        
+        try:
+            send_mail(
+                subject="Reset Your PIN - JMS TechNova",
+                message=f"Your reset code is: {code}. It is valid for 5 minutes.",
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[email],
+                fail_silently=False,
+                html_message=html_content
+            )
+        except Exception as e:
+            print(f"Failed to send email: {e}")
+            
+        return Response({"message": "If an account exists, a reset code has been sent."}, status=200)
+
+
+class ResetPinVerifyView(APIView):
+    def post(self, request):
+        email = request.data.get("email", "").strip()
+        code = str(request.data.get("code", "")).replace(" ", "").strip()
+        new_password = request.data.get("new_password")
+        
+        if not all([email, code, new_password]):
+            return Response({"error": "Email, code, and new PIN are required"}, status=400)
+            
+        cached_code = cache.get(f"reset_{email}")
+        
+        if not cached_code or str(cached_code) != str(code):
+            return Response({"error": "Invalid or expired reset code"}, status=400)
+            
+        user = User.objects.filter(email__iexact=email).first()
+        if not user:
+            return Response({"error": "User not found"}, status=404)
+            
+        user.set_password(new_password)
+        user.save()
+        
+        cache.delete(f"reset_{email}")
+        
+        return Response({"message": "PIN reset successfully"}, status=200)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # NEW: /api/user/me/  — call this on app load to rehydrate Redux state
@@ -1378,7 +1271,7 @@ class MetaCustomerListView(APIView):
             qs = qs.filter(status=status)
  
         # ── Pagination ────────────────────────────────────────────────────────
-        page_size = int(request.query_params.get("page_size", 20))
+        page_size = int(request.query_params.get("page_size", 1))
         page_num  = int(request.query_params.get("page", 1))
         paginator = Paginator(qs, page_size)
         page      = paginator.get_page(page_num)
@@ -1523,48 +1416,45 @@ class LeadsProspectsView(APIView):
                 conversations__client__tech_provider=org
             ).distinct()
 
-        # ── Tab filtering ─────────────────────────────────────────────────
-        from CRM.models import WhatsAppSession
-        # A phone is considered a "ticket lead" if they have a non-empty ticket_id
-        raw_ticket_phones = WhatsAppSession.objects.exclude(ticket_id="").values_list("mobile_number", flat=True)
-        # Store as 10-digit formats to handle country code mismatch
-        ticket_phones_10d = set(p[-10:] for p in raw_ticket_phones if p)
-        
-        # We need a list of customer IDs that match the ticket phones
-        # because Q(phone__in=...) won't work perfectly if phone numbers have '91' prefix.
-        ticket_customer_ids = []
-        for c in customers:
-            c_phone = c.phone[-10:] if c.phone else ""
-            if c_phone in ticket_phones_10d:
-                ticket_customer_ids.append(c.id)
-
-        if tab in ["leads", "lead"]:
-            # Customers with a completed chatbot qualification OR a ticket
-            completed_conv_ids = ConversationState.objects.filter(
-                organization=org,
-                is_complete=True
-            ).values_list("conversation_id", flat=True)
-            
-            customers = customers.filter(
-                Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids) | Q(conversations__status="confirmed")
-            )
-        
-        elif tab in ["prospects", "prospect"]:
-            # Customers with incomplete chatbot qualification AND NO ticket
-            completed_conv_ids = ConversationState.objects.filter(
-                organization=org,
-                is_complete=True
-            ).values_list("conversation_id", flat=True)
-            
-            customers = customers.exclude(
-                Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids) | Q(conversations__status="confirmed")
-            )
-
         # ── Search filter ─────────────────────────────────────────────────
         if search:
             customers = customers.filter(
                 Q(name__icontains=search) | Q(phone__icontains=search)
             )
+
+        # ── Tab filtering & Global Counts ─────────────────────────────────
+        from CRM.models import WhatsAppSession
+        # A phone is considered a "ticket lead" if they have a non-empty ticket_id
+        raw_ticket_phones = WhatsAppSession.objects.exclude(ticket_id="").values_list("mobile_number", flat=True)
+        ticket_phones_10d = set(p[-10:] for p in raw_ticket_phones if p)
+        
+        ticket_customer_ids = []
+        for c_id, c_phone in customers.values_list('id', 'phone'):
+            c_phone_10 = c_phone[-10:] if c_phone else ""
+            if c_phone_10 in ticket_phones_10d:
+                ticket_customer_ids.append(c_id)
+
+        completed_conv_ids = ConversationState.objects.filter(
+            organization=org,
+            is_complete=True
+        ).values_list("conversation_id", flat=True)
+
+        leads_qs = customers.filter(
+            Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids) | Q(conversations__status="confirmed")
+        ).distinct()
+
+        prospects_qs = customers.exclude(
+            Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids) | Q(conversations__status="confirmed")
+        ).distinct()
+
+        total_count = customers.count()
+        lead_count = leads_qs.count()
+        prospect_count = total_count - lead_count
+
+        if tab in ["leads", "lead"]:
+            customers = leads_qs
+        elif tab in ["prospects", "prospect"]:
+            customers = prospects_qs
 
         # ── Order by latest conversation ──────────────────────────────────
         customers = customers.order_by("-conversations__created_at")
@@ -1621,6 +1511,9 @@ class LeadsProspectsView(APIView):
 
         return Response({
             "count": paginator.count,
+            "total_count": total_count,
+            "lead_count": lead_count,
+            "prospect_count": prospect_count,
             "next": make_url(page.next_page_number() if page.has_next() else None),
             "previous": make_url(page.previous_page_number() if page.has_previous() else None),
             "results": results,

@@ -3,13 +3,9 @@ from rest_framework import serializers
 from .models import *
 
 
-class EmailRequestSerializer(serializers.Serializer):
+class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
-
-
-class CodeVerificationSerializer(serializers.Serializer):
-    email = serializers.EmailField()
-    code = serializers.CharField(max_length=6)
+    password = serializers.CharField(write_only=True)
 
 
 class OrganizationSerializer(serializers.ModelSerializer):

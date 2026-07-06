@@ -427,9 +427,10 @@ class CampaignListCreateView(APIView):
         return Response({
             "id":            campaign.id,
             "name":          campaign.name,
+            "template_name": campaign.template_name,
             "status":        campaign.status,
             "total_count":   campaign.total_count,
-            "total_sent":    sent_count,
+            "sent_count":    sent_count,
             "failed_count":  failed_count,
             "invalid_numbers_skipped": len(invalid),
             "created_at":    campaign.created_at.isoformat(),

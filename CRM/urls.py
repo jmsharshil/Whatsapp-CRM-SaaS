@@ -33,8 +33,9 @@ urlpatterns = [
     path("api/signup/", SignUpView.as_view()),
 
     # ── Auth ──────────────────────────────────────────────────────────────────
-    path("api/auth/send-code/",   SendCodeView.as_view()),
-    path("api/auth/verify-code/", VerifyCodeView.as_view()),
+    path("api/auth/login/", LoginView.as_view()),
+    path("api/auth/reset-pin/send-code/", ResetPinSendCodeView.as_view()),
+    path("api/auth/reset-pin/verify-code/", ResetPinVerifyView.as_view()),
 
     # ── Current user profile ──────────────────────────────────────────────────
     path("api/user/me/", UserMeView.as_view()),

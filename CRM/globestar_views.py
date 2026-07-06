@@ -115,10 +115,10 @@ def handle_globestar_message(msg: dict):
 
     session = ConversationSession(conv_obj)
     
-    # Reset flow on "hi", "hello" or if newly created and state is INIT
+    # Reset flow ONLY on "hi", "hello", or "menu"
     is_trigger = bool(re.search(r'\b(hi|hello|menu)\b', body.lower()))
     
-    if conv_created or is_trigger:
+    if is_trigger:
         session.state = "GS_INIT"
         session.gs_selected_product = ""
         session.gs_capacity = ""
