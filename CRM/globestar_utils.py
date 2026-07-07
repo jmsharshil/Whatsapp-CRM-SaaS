@@ -659,37 +659,13 @@ def tpl_gs_talk_to_sales(to: str) -> bool:
     })
 
 def tpl_gs_ask_capacity(to: str) -> bool:
-    return _meta_post_gs({
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "template",
-        "template": {
-            "name": "gs_ask_capacity",
-            "language": {"code": "en"}
-        }
-    })
+    return send_gs_text(to, "To provide the best quotation, please share: \n\n Required Capacity (m³/hr)")
 
 def tpl_gs_ask_head(to: str) -> bool:
-    return _meta_post_gs({
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "template",
-        "template": {
-            "name": "gs_ask_head",
-            "language": {"code": "en"}
-        }
-    })
+    return send_gs_text(to, "Head (meters):")
 
 def tpl_gs_ask_application(to: str) -> bool:
-    return _meta_post_gs({
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "template",
-        "template": {
-            "name": "gs_ask_application",
-            "language": {"code": "en"}
-        }
-    })
+    return send_gs_text(to, " Application:")
 
 def tpl_gs_ask_pump_type(to: str) -> bool:
     return _meta_post_gs({
