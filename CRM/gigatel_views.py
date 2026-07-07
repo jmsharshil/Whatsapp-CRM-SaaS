@@ -171,7 +171,7 @@ class WebhookView(View):
             return
 
         # ── Trigger / Reset ──────────────────────────────────────────────────
-        if re.search(r'\bhi\b', body.lower()):
+        if (state in ("INIT", "DONE") and body) or re.search(r'\bhi\b', body.lower()):
 #            logger.info(
 #                "[DISPATCH] Trigger word found — resetting session for number=%s (was state=%s)",
 #                number, state
@@ -192,14 +192,6 @@ class WebhookView(View):
             session.ticket_raised_on    = ""
             session.save()
             self._step_init(number, session)
-            return
-
-        # ── If state is INIT/DONE but no trigger word found → just ignore ────
-        if state in ("INIT", "DONE"):
-#            logger.info(
-#                "[DISPATCH] Ignoring — trigger word 'hi' not found. "
-#                "from=%s state=%s body=%r", number, state, body
-#            )
             return
 
         # ── State dispatch ───────────────────────────────────────────────────
