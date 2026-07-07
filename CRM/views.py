@@ -1165,6 +1165,7 @@ class TemplateSyncAllView(APIView):
         meta_templates = data.get("data", [])
         updated = 0
         created = 0
+        meta_template_ids = []
 
         for mt in meta_templates:
             meta_id     = mt.get("id")
@@ -1187,6 +1188,8 @@ class TemplateSyncAllView(APIView):
             if not meta_id or not meta_status:
                 continue
 
+            meta_template_ids.append(meta_id)
+
             rows = Template.objects.filter(organization=org, template_id=meta_id)
             if rows.exists():
                 rows.update(status=meta_status, body_text=body_text, variables_count=variables_count)
@@ -1205,10 +1208,14 @@ class TemplateSyncAllView(APIView):
                 )
                 created += 1
 
+        # Delete local templates that are no longer in Meta
+        deleted_count, _ = Template.objects.filter(organization=org).exclude(template_id__in=meta_template_ids).delete()
+
         return Response({
             "synced_from_meta": len(meta_templates),
             "updated_locally":  updated,
             "created_locally":  created,
+            "deleted_locally":  deleted_count,
         })
 
 
