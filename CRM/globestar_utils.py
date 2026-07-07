@@ -648,15 +648,8 @@ def send_gs_document(to: str, doc_url: str, filename: str) -> bool:
     })
 
 def tpl_gs_talk_to_sales(to: str) -> bool:
-    return _meta_post_gs({
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "template",
-        "template": {
-            "name": "gs_talk_to_sales",
-            "language": {"code": "en"}
-        }
-    })
+    text = "Thank you for contacting Globe Star Engineers.\n\n You will receive a call shortly.\n\n Office Hours:\nMon–Sat | 10:00 AM – 6:30 PM"
+    return send_gs_text(to, text)
 
 def tpl_gs_ask_capacity(to: str) -> bool:
     return send_gs_text(to, "To provide the best quotation, please share: \n\n Required Capacity (m³/hr)")
