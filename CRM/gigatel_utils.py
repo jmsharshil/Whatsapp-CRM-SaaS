@@ -4,6 +4,11 @@ import os
 
 import requests
 
+from django.conf import settings
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+from reportlab.lib.styles import getSampleStyleSheet
 logger = logging.getLogger(__name__)
 
 GIGATEL_BASE    = os.environ.get("GIGATEL_API_BASE", "http://mob.gigatel.me:60114/api")
@@ -39,7 +44,7 @@ FAULT_LABELS = {
 # ---------------------------------------------------------------------------
 
 def verify_customer(mobile_no: str) -> dict | None:
-    logger.debug("[CRM] verify_customer: calling API for mobile=%s", mobile_no)
+#    logger.debug("[CRM] verify_customer: calling API for mobile=%s", mobile_no)
     try:
         r = requests.get(
             f"{GIGATEL_BASE}/Customer/GetCustomerVerifyByMobileNo",
@@ -47,29 +52,29 @@ def verify_customer(mobile_no: str) -> dict | None:
             headers=GIGATEL_HEADERS,
             timeout=10,
         )
-        logger.debug("[CRM] verify_customer: status=%s body=%s", r.status_code, r.text[:500])
+#        logger.debug("[CRM] verify_customer: status=%s body=%s", r.status_code, r.text[:500])
         r.raise_for_status()
-        logger.debug("[CRM] verify_customer: raw_response=%s", r.text[:1000])
+#        logger.debug("[CRM] verify_customer: raw_response=%s", r.text[:1000])
 
         data = r.json()
 
         if isinstance(data, dict) and not data.get("success", True):
-            logger.warning("[CRM] verify_customer: success=false for mobile=%s", mobile_no)
+#            logger.warning("[CRM] verify_customer: success=false for mobile=%s", mobile_no)
             return None
         if isinstance(data, list) and data:
-            logger.info("[CRM] verify_customer: found (list) mobile=%s", mobile_no)
+#            logger.info("[CRM] verify_customer: found (list) mobile=%s", mobile_no)
             return data[0]
         if isinstance(data, dict) and data.get("data"):
-            logger.info("[CRM] verify_customer: found (wrapped) mobile=%s", mobile_no)
+#            logger.info("[CRM] verify_customer: found (wrapped) mobile=%s", mobile_no)
             return data["data"]
         if isinstance(data, dict) and data.get("customerId"):
-            logger.info("[CRM] verify_customer: found (direct) mobile=%s", mobile_no)
+#            logger.info("[CRM] verify_customer: found (direct) mobile=%s", mobile_no)
             return data
 
-        logger.warning(
-            "[CRM] verify_customer: unrecognised response shape mobile=%s data=%s",
-            mobile_no, data
-        )
+#        logger.warning(
+#            "[CRM] verify_customer: unrecognised response shape mobile=%s data=%s",
+#            mobile_no, data
+#        )
         return None
 
     except Exception as exc:
@@ -78,9 +83,9 @@ def verify_customer(mobile_no: str) -> dict | None:
 
 
 def get_circuits_by_customer(customer_id: int) -> list:
-    logger.debug(
-        "[CRM] get_circuits_by_customer: calling API for customer_id=%s", customer_id
-    )
+#    logger.debug(
+#        "[CRM] get_circuits_by_customer: calling API for customer_id=%s", customer_id
+#    )
     try:
         r = requests.get(
             f"{GIGATEL_BASE}/Circuit/GetCircuitByCustomerId",
@@ -88,33 +93,33 @@ def get_circuits_by_customer(customer_id: int) -> list:
             headers=GIGATEL_HEADERS,
             timeout=10,
         )
-        logger.debug(
-            "[CRM] get_circuits_by_customer: status=%s body=%s", r.status_code, r.text[:500]
-        )
+#        logger.debug(
+#            "[CRM] get_circuits_by_customer: status=%s body=%s", r.status_code, r.text[:500]
+#        )
         r.raise_for_status()
-        logger.debug(
-            "[CRM] get_circuits_by_customer: raw_response=%s", r.text[:1000]
-        )
+#        logger.debug(
+#            "[CRM] get_circuits_by_customer: raw_response=%s", r.text[:1000]
+#        )
         data = r.json()
 
         if isinstance(data, dict):
-            logger.info(
-                "[CRM] get_circuits_by_customer: found circuits for customer_id=%s",
-                customer_id
-            )
+#            logger.info(
+#                "[CRM] get_circuits_by_customer: found circuits for customer_id=%s",
+#                customer_id
+#            )
             return data.get("data", [])
 
         if isinstance(data, list):
-            logger.info(
-                "[CRM] get_circuits_by_customer: found %d circuits for customer_id=%s",
-                len(data), customer_id
-            )
+#            logger.info(
+#                "[CRM] get_circuits_by_customer: found %d circuits for customer_id=%s",
+#                len(data), customer_id
+#            )
             return data
 
-        logger.warning(
-            "[CRM] get_circuits_by_customer: unexpected shape customer_id=%s data=%s",
-            customer_id, data
-        )
+#        logger.warning(
+#            "[CRM] get_circuits_by_customer: unexpected shape customer_id=%s data=%s",
+#            customer_id, data
+#        )
         return []
 
     except Exception as exc:
@@ -126,7 +131,7 @@ def get_circuits_by_customer(customer_id: int) -> list:
 
 
 def get_circuit_detail(circuit_id: str) -> dict | None:
-    logger.debug("[CRM] get_circuit_detail: calling API for circuit_id=%s", circuit_id)
+#    logger.debug("[CRM] get_circuit_detail: calling API for circuit_id=%s", circuit_id)
     try:
         r = requests.get(
             f"{GIGATEL_BASE}/Circuit/GetCircuitDetailByCircuitId",
@@ -134,11 +139,11 @@ def get_circuit_detail(circuit_id: str) -> dict | None:
             headers=GIGATEL_HEADERS,
             timeout=10,
         )
-        logger.debug(
-            "[CRM] get_circuit_detail: status=%s body=%s", r.status_code, r.text[:500]
-        )
+#        logger.debug(
+#            "[CRM] get_circuit_detail: status=%s body=%s", r.status_code, r.text[:500]
+#        )
         r.raise_for_status()
-        logger.warning("[CRM] get_circuit_detail: FULL raw_response=%s", r.text[:2000])
+#        logger.warning("[CRM] get_circuit_detail: FULL raw_response=%s", r.text[:2000])
 
         data = r.json()
 
@@ -151,13 +156,13 @@ def get_circuit_detail(circuit_id: str) -> dict | None:
             raw = data
 
         if raw:
-            logger.info("[CRM] get_circuit_detail: found circuit_id=%s", circuit_id)
+#            logger.info("[CRM] get_circuit_detail: found circuit_id=%s", circuit_id)
             return _normalise_circuit_detail(raw)
 
-        logger.warning(
-            "[CRM] get_circuit_detail: unrecognised shape circuit_id=%s data=%s",
-            circuit_id, data
-        )
+#        logger.warning(
+#            "[CRM] get_circuit_detail: unrecognised shape circuit_id=%s data=%s",
+#            circuit_id, data
+#        )
         return None
 
     except Exception as exc:
@@ -218,10 +223,10 @@ def check_otdr_fault_side(
     """
     Calls OTDRCheckCustomerOrGigatel to determine fault side and returns the result.
     """
-    logger.debug(
-        "[CRM] check_otdr_fault_side: circuit_id=%s otdr_from_to=%s otdr=%s",
-        circuit_id, otdr_from_to, otdr_value
-    )
+#    logger.debug(
+#        "[CRM] check_otdr_fault_side: circuit_id=%s otdr_from_to=%s otdr=%s",
+#        circuit_id, otdr_from_to, otdr_value
+#    )
     try:
         r = requests.post(
             f"{GIGATEL_BASE}/Circuit/OTDRCheckCustomerOrGigatel",
@@ -235,7 +240,7 @@ def check_otdr_fault_side(
         )
         r.raise_for_status()
         data = r.json()
-        logger.info("[CRM] check_otdr_fault_side: raw API result=%s", data)
+#        logger.info("[CRM] check_otdr_fault_side: raw API result=%s", data)
     except Exception as exc:
         logger.error("[CRM] check_otdr_fault_side: EXCEPTION circuit_id=%s error=%s", circuit_id, exc)
         return None
@@ -280,10 +285,10 @@ def _normalise_circuit_detail(raw: dict) -> dict:
 
 
 def raise_complaint(payload: dict) -> dict | None:
-    logger.warning(
-        "[CRM] raise_complaint: EXACT PAYLOAD → %s",
-        json.dumps(payload, default=str)
-    )
+#    logger.warning(
+#        "[CRM] raise_complaint: EXACT PAYLOAD → %s",
+#        json.dumps(payload, default=str)
+#    )
     try:
         r = requests.post(
             f"{GIGATEL_BASE}/Customer/InsertUpdateCustomerComplaintFormData",
@@ -292,8 +297,8 @@ def raise_complaint(payload: dict) -> dict | None:
             timeout=15,
         )
         r.raise_for_status()
-        logger.warning("[CRM] raise_complaint: FULL response status=%s body=%s",
-                      r.status_code, r.text[:2000])
+#        logger.warning("[CRM] raise_complaint: FULL response status=%s body=%s",
+#                      r.status_code, r.text[:2000])
 
         result = r.json()
         data = result.get("data") if isinstance(result, dict) else None
@@ -301,7 +306,7 @@ def raise_complaint(payload: dict) -> dict | None:
             data["ticketId"]    = data.get("transactionNo") or data.get("id")
             data["isDuplicate"] = not result.get("success", True)
             data["crmMessage"]  = result.get("message", "")
-            logger.info("[CRM] raise_complaint: ✅ SUCCESS ticketId=%s", data["ticketId"])
+#            logger.info("[CRM] raise_complaint: ✅ SUCCESS ticketId=%s", data["ticketId"])
             return data
 
         logger.error("[CRM] raise_complaint: ❌ data.result not true — result=%s", result)
@@ -315,6 +320,24 @@ def raise_complaint(payload: dict) -> dict | None:
 # ---------------------------------------------------------------------------
 # Meta helpers
 # ---------------------------------------------------------------------------
+
+def _upload_media_to_meta_from_path(file_path: str, phone_id: str, token: str) -> str:
+    url = f"https://graph.facebook.com/v22.0/{phone_id}/media"
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        with open(file_path, 'rb') as f:
+            files = {
+                'file': (os.path.basename(file_path), f, 'application/pdf'),
+                'type': (None, 'document'),
+                'messaging_product': (None, 'whatsapp')
+            }
+            resp = requests.post(url, headers=headers, files=files, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("id")
+    except Exception as e:
+        logger.error("[META] Failed to upload media: %s", e)
+        return None
 
 def _meta_post(body: dict) -> bool:
     phone_id = os.environ.get("META_PHONE_NUMBER_ID", "")
@@ -350,10 +373,10 @@ def _meta_post(body: dict) -> bool:
     )
     param_values = [p.get("text") or p.get("payload") for p in body_params]
 
-    logger.debug(
-        "[META] ▶ SEND template=%s to=%s | body_params=%s | full_payload=%s",
-        template_name, to, param_values, body
-    )
+#    logger.debug(
+#        "[META] ▶ SEND template=%s to=%s | body_params=%s | full_payload=%s",
+#        template_name, to, param_values, body
+#    )
 
     try:
         r = requests.post(
@@ -366,10 +389,10 @@ def _meta_post(body: dict) -> bool:
             timeout=10,
         )
 
-        logger.debug(
-            "[META] Response ← template=%s to=%s | HTTP %s | body=%s",
-            template_name, to, r.status_code, r.text
-        )
+#        logger.debug(
+#            "[META] Response ← template=%s to=%s | HTTP %s | body=%s",
+#            template_name, to, r.status_code, r.text
+#        )
 
         if r.status_code == 200:
             try:
@@ -379,15 +402,16 @@ def _meta_post(body: dict) -> bool:
                     if resp_json.get("messages")
                     else "N/A"
                 )
-                logger.info(
-                    "[META] ✅ SENT template=%s to=%s | wamid=%s",
-                    template_name, to, msg_id
-                )
+#                logger.info(
+#                    "[META] ✅ SENT template=%s to=%s | wamid=%s",
+#                    template_name, to, msg_id
+#                )
             except Exception:
-                logger.info(
-                    "[META] ✅ SENT template=%s to=%s | (could not parse msg_id)",
-                    template_name, to
-                )
+                pass
+#                logger.info(
+#                    "[META] ✅ SENT template=%s to=%s | (could not parse msg_id)",
+#                    template_name, to
+#                )
             return True
 
         else:
@@ -420,7 +444,7 @@ from django.conf import settings
 
 def send_gigatel_email(to_email: str, subject: str, body: str) -> bool:
     if not to_email:
-        logger.warning("[EMAIL] No to_email provided for send_gigatel_email")
+#        logger.warning("[EMAIL] No to_email provided for send_gigatel_email")
         return False
         
     try:
@@ -442,7 +466,7 @@ def send_gigatel_email(to_email: str, subject: str, body: str) -> bool:
             connection=connection
         )
         msg.send()
-        logger.info(f"[EMAIL] Successfully sent email to {to_email}")
+#        logger.info(f"[EMAIL] Successfully sent email to {to_email}")
         return True
     except Exception as e:
         logger.error(f"[EMAIL] Failed to send email to {to_email}: {e}")
@@ -473,7 +497,7 @@ def tpl_auth_failed(to: str) -> bool:
         "to": to,
         "type": "template",
         "template": {
-            "name": "gigatel_auth_failed",
+            "name": "gigatel_auth_failed_",
             "language": {"code": "en"},
         },
     })
@@ -483,29 +507,27 @@ def tpl_main_menu(to: str, customer_name: str) -> bool:
     return _meta_post({
         "messaging_product": "whatsapp",
         "to": to,
-        "type": "template",
-        "template": {
-            "name": "gigatel_menu",
-            "language": {"code": "en"},
-            "components": [
-                {
-                    "type": "body",
-                    "parameters": [{"type": "text", "text": customer_name}],
-                },
-                {
-                    "type": "button", "sub_type": "quick_reply", "index": "0",
-                    "parameters": [{"type": "payload", "payload": "complaints"}],
-                },
-                {
-                    "type": "button", "sub_type": "quick_reply", "index": "1",
-                    "parameters": [{"type": "payload", "payload": "current_ticket"}],
-                },
-                {
-                    "type": "button", "sub_type": "quick_reply", "index": "2",
-                    "parameters": [{"type": "payload", "payload": "sales"}],
-                },
-            ],
-        },
+        "type": "interactive",
+        "interactive": {
+            "type": "list",
+            "header": {"type": "text", "text": "Welcome to Gigatel"},
+            "body": {"text": f"Dear {customer_name},\n\nHow can we help you today?\nPlease select an option below:"},
+            "footer": {"text": "Select from the options below"},
+            "action": {
+                "button": "Main Menu",
+                "sections": [
+                    {
+                        "title": "Options",
+                        "rows": [
+                            {"id": "complaints", "title": "Register Complaint"},
+                            {"id": "current_ticket", "title": "Current Tickets Status"},
+                            {"id": "sales", "title": "Sales"},
+                            {"id": "feasibility", "title": "Check Feasibility", "description": "( Coming Soon )"}
+                        ]
+                    }
+                ]
+            }
+        }
     })
 
 
@@ -521,11 +543,23 @@ def tpl_sales_coming_soon(to: str) -> bool:
     })
 
 
+def tpl_feasibility_coming_soon(to: str) -> bool:
+    return _meta_post({
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "template",
+        "template": {
+            "name": "check_feasibility_coming_soon",
+            "language": {"code": "en"},
+        },
+    })
+
+
 def _tpl_circuit_text_message(to: str, circuits: list) -> bool:
     """Plain text circuit list for when count > 10."""
-    logger.debug(
-        "[TPL] Sending plain-text circuit list (count=%d) to=%s", len(circuits), to
-    )
+#    logger.debug(
+#        "[TPL] Sending plain-text circuit list (count=%d) to=%s", len(circuits), to
+#    )
 
     seen_ids = set()
     lines = ["Your circuits — please reply with the Circuit ID:\n"]
@@ -561,7 +595,90 @@ def _tpl_circuit_text_message(to: str, circuits: list) -> bool:
         logger.error("[TPL] _tpl_circuit_text_message: no valid circuits to list")
         return False
 
-    # Fit within WhatsApp 4096 char limit
+    phone_id = os.environ.get("META_PHONE_NUMBER_ID", "")
+    token    = os.environ.get("WHATSAPP_TOKEN", "")
+
+    if not phone_id or not token:
+        logger.error("[TPL] _tpl_circuit_text_message: missing META_PHONE_NUMBER_ID or TOKEN")
+        return False
+
+    # Generate PDF
+    try:
+        reports_dir = os.path.join(settings.MEDIA_ROOT, "reports")
+        os.makedirs(reports_dir, exist_ok=True)
+        pdf_path = os.path.join(reports_dir, f"Circuit_IDs_{to}.pdf")
+        
+        doc = SimpleDocTemplate(pdf_path, pagesize=letter)
+        elements = []
+        styles = getSampleStyleSheet()
+        elements.append(Paragraph("Your Circuit IDs", styles['Title']))
+        
+        style_cell = styles['Normal']
+        style_cell.alignment = 1 # Center align for Paragraphs
+        
+        data = [["S.No", "Circuit ID", "From", "To"]]
+        for i, circuit in enumerate(circuits, start=1):
+            cid_raw = circuit.get("circuitIdStr") or circuit.get("circuitId")
+            if not cid_raw: continue
+            cid = str(cid_raw).strip()
+            if cid.lower() in ("none", "null", ""): continue
+            from_st = (circuit.get("fromStation") or circuit.get("startAddress") or circuit.get("fromAddress") or "").strip()
+            to_st = (circuit.get("toStation") or circuit.get("endAddress") or circuit.get("toAddress") or "").strip()
+            
+            data.append([
+                str(i),
+                Paragraph(cid, style_cell),
+                Paragraph(from_st, style_cell),
+                Paragraph(to_st, style_cell)
+            ])
+            
+        t = Table(data, colWidths=[40, 150, 150, 150])
+        t.setStyle(TableStyle([
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        elements.append(t)
+        doc.build(elements)
+        
+        # Upload to Azure Blob Storage
+        try:
+            from django.core.files.storage import default_storage
+            from django.core.files.base import ContentFile
+            import time
+            
+            with open(pdf_path, 'rb') as f:
+                azure_filename = f"reports/Circuit_IDs_{to}_{int(time.time())}.pdf"
+                default_storage.save(azure_filename, ContentFile(f.read()))
+            logger.info(f"[TPL] Successfully uploaded {azure_filename} to Azure Blob Storage")
+        except Exception as azure_exc:
+            logger.error(f"[TPL] Failed to upload to Azure Blob Storage: {azure_exc}")
+
+        # Upload to Meta
+        media_id = _upload_media_to_meta_from_path(pdf_path, phone_id, token)
+        if not media_id:
+            raise Exception("Failed to upload generated PDF to Meta.")
+            
+        # Send Document message
+        return _meta_post({
+            "messaging_product": "whatsapp",
+            "to": to,
+            "type": "document",
+            "document": {
+                "id": media_id,
+                "filename": "Circuit_IDs.pdf"
+            },
+        })
+        
+    except Exception as exc:
+        logger.error("[TPL] ❌ PDF generation/upload exception to=%s | %s", to, exc)
+        # Fallback to the text message if PDF fails
+        pass
+
+    # Fit within WhatsApp 4096 char limit (Fallback)
     MAX_CHARS = 4096
     fitted_lines = [lines[0]]  # always keep the header
     for line in lines[1:]:
@@ -572,11 +689,8 @@ def _tpl_circuit_text_message(to: str, circuits: list) -> bool:
         fitted_lines.append(line)
 
     message_body = "\n".join(fitted_lines)
-    logger.debug("[TPL] plain-text circuit list: %d chars, %d circuits shown",
-                 len(message_body), len(fitted_lines) - 1)
-
-    phone_id = os.environ.get("META_PHONE_NUMBER_ID", "")
-    token    = os.environ.get("WHATSAPP_TOKEN", "")
+#    logger.debug("[TPL] plain-text circuit list: %d chars, %d circuits shown",
+#                 len(message_body), len(fitted_lines) - 1)
 
     if not phone_id or not token:
         logger.error("[TPL] _tpl_circuit_text_message: missing META_PHONE_NUMBER_ID or TOKEN")
@@ -598,7 +712,7 @@ def _tpl_circuit_text_message(to: str, circuits: list) -> bool:
             timeout=10,
         )
         if r.status_code == 200:
-            logger.info("[TPL] ✅ plain-text circuit list sent to=%s", to)
+#            logger.info("[TPL] ✅ plain-text circuit list sent to=%s", to)
             return True
         else:
             logger.error(
@@ -612,27 +726,27 @@ def _tpl_circuit_text_message(to: str, circuits: list) -> bool:
 
 
 def _tpl_circuit_list_message(to: str, circuits: list, action_type: str) -> bool:
-    logger.debug(
-        "[TPL] Sending circuit selection list (count=%d) to=%s", len(circuits), to
-    )
+#    logger.debug(
+#        "[TPL] Sending circuit selection list (count=%d) to=%s", len(circuits), to
+#    )
 
     seen_ids = set()
     rows = []
     for circuit in circuits[:10]:
         cid_raw = circuit.get("circuitIdStr") or circuit.get("circuitId")
         if not cid_raw:
-            logger.warning("[TPL] Skipping circuit with no ID: %s", circuit)
+#            logger.warning("[TPL] Skipping circuit with no ID: %s", circuit)
             continue
         cid = str(cid_raw).strip()
         if cid.lower() in ("none", "null", ""):
-            logger.warning("[TPL] Skipping circuit with invalid cid=%r", cid)
+#            logger.warning("[TPL] Skipping circuit with invalid cid=%r", cid)
             continue
         if cid in seen_ids:
-            logger.warning("[TPL] Skipping duplicate cid=%r", cid)
+#            logger.warning("[TPL] Skipping duplicate cid=%r", cid)
             continue
         seen_ids.add(cid)
 
-        logger.warning("[TPL] circuit raw data: %s", circuit)
+#        logger.warning("[TPL] circuit raw data: %s", circuit)
 
         from_st = (
             circuit.get("fromStation")
@@ -684,7 +798,7 @@ def tpl_circuit_list_interactive(
     to: str, circuits: list, is_for_ticket: bool = False
 ) -> bool:
     if not circuits:
-        logger.warning("[TPL] tpl_circuit_list_interactive: no circuits provided")
+#        logger.warning("[TPL] tpl_circuit_list_interactive: no circuits provided")
         return False
 
     action_type = "current_ticket" if is_for_ticket else "complaints"
@@ -757,13 +871,12 @@ def tpl_otdr_question(to: str, fault_label: str, circuit_id: str) -> bool:
         "to": to,
         "type": "template",
         "template": {
-            "name": "gigatel_otdr_question",
+            "name": "gigatel_otdr_question_",
             "language": {"code": "en"},
             "components": [
                 {
                     "type": "body",
                     "parameters": [
-                        {"type": "text", "text": fault_label},
                         {"type": "text", "text": circuit_id},
                     ],
                 },
@@ -989,6 +1102,18 @@ def tpl_otdr_customer_fault_notice(to: str) -> bool:
         "type": "template",
         "template": {
             "name": "gigatel_otdr_customer_fault_notice",
+            "language": {"code": "en"},
+        },
+    })
+
+
+def tpl_image_uploaded_successfully(to: str) -> bool:
+    return _meta_post({
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "template",
+        "template": {
+            "name": "image_uploaded_successfully",
             "language": {"code": "en"},
         },
     })

@@ -4,6 +4,7 @@ import os
 import tempfile
 import uuid
 import re
+import time
 from datetime import datetime
 
 import requests
@@ -74,18 +75,18 @@ class WebhookView(View):
         mode      = request.GET.get("hub.mode")
         token     = request.GET.get("hub.verify_token")
         challenge = request.GET.get("hub.challenge")
-        logger.debug(
-            "[WEBHOOK] GET verify: mode=%s token_match=%s",
-            mode, token == os.environ.get("VERIFY_TOKEN", "")
-        )
+#        logger.debug(
+#            "[WEBHOOK] GET verify: mode=%s token_match=%s",
+#            mode, token == os.environ.get("VERIFY_TOKEN", "")
+#        )
         if mode == "subscribe" and token == os.environ.get("VERIFY_TOKEN", ""):
-            logger.info("[WEBHOOK] ✅ Hub verification passed")
+#            logger.info("[WEBHOOK] ✅ Hub verification passed")
             return HttpResponse(challenge, status=200)
-        logger.warning("[WEBHOOK] ❌ Hub verification failed: mode=%s", mode)
+#        logger.warning("[WEBHOOK] ❌ Hub verification failed: mode=%s", mode)
         return HttpResponse("Forbidden", status=403)
 
     def post(self, request):
-        logger.debug("[WEBHOOK] POST raw body=%s", request.body[:1000])
+#        logger.debug("[WEBHOOK] POST raw body=%s", request.body[:1000])
         try:
             payload = json.loads(request.body)
         except json.JSONDecodeError:
@@ -97,16 +98,17 @@ class WebhookView(View):
                 value = change.get("value", {})
 
                 for status_update in value.get("statuses", []):
-                    logger.debug(
-                        "[WEBHOOK] Status update: msg_id=%s status=%s",
-                        status_update.get("id"), status_update.get("status")
-                    )
+                    pass
+#                    logger.debug(
+#                        "[WEBHOOK] Status update: msg_id=%s status=%s",
+#                        status_update.get("id"), status_update.get("status")
+#                    )
 
                 for msg in value.get("messages", []):
-                    logger.info(
-                        "[WEBHOOK] Inbound message: from=%s type=%s id=%s",
-                        msg.get("from"), msg.get("type"), msg.get("id")
-                    )
+#                    logger.info(
+#                        "[WEBHOOK] Inbound message: from=%s type=%s id=%s",
+#                        msg.get("from"), msg.get("type"), msg.get("id")
+#                    )
                     self._handle_message(msg)
 
         return JsonResponse({"status": "ok"})
@@ -135,10 +137,10 @@ class WebhookView(View):
         elif msg_type == "image":
             body = "[image]"
 
-        logger.info(
-            "[DISPATCH] from=%s type=%s body=%r id=%s",
-            number, msg_type, body, msg_id
-        )
+#        logger.info(
+#            "[DISPATCH] from=%s type=%s body=%r id=%s",
+#            number, msg_type, body, msg_id
+#        )
 
         customer_obj, _ = Customer.objects.get_or_create(phone=number, defaults={'name': number})
         gigatel_phone_id = os.environ.get("META_PHONE_NUMBER_ID")
@@ -157,22 +159,23 @@ class WebhookView(View):
 
         session, created = WhatsAppSession.objects.get_or_create(mobile_number=number)
         if created:
-            logger.info("[DISPATCH] New session created for number=%s", number)
+            pass
+#            logger.info("[DISPATCH] New session created for number=%s", number)
 
         state = session.state
-        logger.info("[DISPATCH] from=%s current_state=%s", number, state)
+#        logger.info("[DISPATCH] from=%s current_state=%s", number, state)
 
         # ── Ignore unexpected images (likely for Voicebot) ───────────────────
         if msg_type == "image" and state not in ["AWAIT_OTDR_IMAGE", "AWAIT_OTDR_IMAGE2"]:
-            logger.info("[DISPATCH] Ignoring unexpected image for state=%s (likely for Voicebot).", state)
+#            logger.info("[DISPATCH] Ignoring unexpected image for state=%s (likely for Voicebot).", state)
             return
 
         # ── Trigger / Reset ──────────────────────────────────────────────────
         if re.search(r'\bhi\b', body.lower()):
-            logger.info(
-                "[DISPATCH] Trigger word found — resetting session for number=%s (was state=%s)",
-                number, state
-            )
+#            logger.info(
+#                "[DISPATCH] Trigger word found — resetting session for number=%s (was state=%s)",
+#                number, state
+#            )
             session.state               = "INIT"
             session.selected_circuit_id = ""
             session.nature_of_fault_id  = None
@@ -193,10 +196,10 @@ class WebhookView(View):
 
         # ── If state is INIT/DONE but no trigger word found → just ignore ────
         if state in ("INIT", "DONE"):
-            logger.info(
-                "[DISPATCH] Ignoring — trigger word 'hi' not found. "
-                "from=%s state=%s body=%r", number, state, body
-            )
+#            logger.info(
+#                "[DISPATCH] Ignoring — trigger word 'hi' not found. "
+#                "from=%s state=%s body=%r", number, state, body
+#            )
             return
 
         # ── State dispatch ───────────────────────────────────────────────────
@@ -262,9 +265,9 @@ class WebhookView(View):
             self._step_await_raise_anyway(number, session, body)
 
         else:
-            logger.warning(
-                "[DISPATCH] Unknown state=%s for number=%s — resetting", state, number
-            )
+#            logger.warning(
+#                "[DISPATCH] Unknown state=%s for number=%s — resetting", state, number
+#            )
             session.state = "INIT"
             session.save()
 
@@ -273,13 +276,13 @@ class WebhookView(View):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _step_init(self, number: str, session: "WhatsAppSession"):
-        logger.info("[STEP] INIT → verifying mobile=%s", number)
+#        logger.info("[STEP] INIT → verifying mobile=%s", number)
 
         mobile   = self._clean_number(number)
         customer = verify_customer(mobile)
 
         if not customer:
-            logger.warning("[STEP] INIT: mobile=%s not found in CRM", mobile)
+#            logger.warning("[STEP] INIT: mobile=%s not found in CRM", mobile)
             ok = tpl_auth_failed(number)
             self._log_out(number, "[tpl] gigatel_auth_failed (mobile not in CRM)", ok)
             session.state = "DONE"
@@ -306,13 +309,13 @@ class WebhookView(View):
 
         session.state = "MENU"
         session.save()
-        logger.info("[STEP] INIT: ✅ verified → state=MENU for number=%s", number)
+#        logger.info("[STEP] INIT: ✅ verified → state=MENU for number=%s", number)
 
         ok = tpl_main_menu(number, session.contact_person_name)
         self._log_out(number, "[tpl] gigatel_main_menu", ok)
 
     def _step_menu(self, number: str, session: "WhatsAppSession", text: str):
-        logger.info("[STEP] MENU: number=%s choice=%r", number, text)
+#        logger.info("[STEP] MENU: number=%s choice=%r", number, text)
 
         if text == "complaints":
             circuits = get_circuits_by_customer(session.customer_id)
@@ -337,6 +340,12 @@ class WebhookView(View):
                 session.save()
                 ok1 = tpl_circuit_list_interactive(number, valid_circuits[:10])
                 self._log_out(number, "[tpl] gigatel_circuit_list_interactive (combined, first 10)", ok1)
+                
+                ok0 = tpl_circuit_list_interactive(number, valid_circuits)
+                self._log_out(number, "[tpl] gigatel_circuit_list_pdf_and_text", ok0)
+                
+                time.sleep(2)
+                
                 ok2 = tpl_circuit_last4_prompt(number, len(session_circuits))
                 self._log_out(number, "[tpl] gigatel_circuit_last4_prompt (combined)", ok2)
             else:
@@ -370,6 +379,12 @@ class WebhookView(View):
                 session.save()
                 ok1 = tpl_circuit_list_interactive(number, valid_circuits[:10], is_for_ticket=True)
                 self._log_out(number, "[tpl] gigatel_circuit_list_interactive (combined, ticket, first 10)", ok1)
+                
+                ok0 = tpl_circuit_list_interactive(number, valid_circuits, is_for_ticket=True)
+                self._log_out(number, "[tpl] gigatel_circuit_list_pdf_and_text (for ticket)", ok0)
+                
+                time.sleep(2)
+                
                 ok2 = tpl_circuit_last4_prompt(number, len(session_circuits))
                 self._log_out(number, "[tpl] gigatel_circuit_last4_prompt (combined, ticket)", ok2)
             else:
@@ -379,16 +394,21 @@ class WebhookView(View):
                 self._log_out(number, "[tpl] gigatel_circuit_list_interactive (for ticket)", ok)
 
         elif text == "sales":
-            logger.info("[STEP] MENU: sales selected (coming soon) — number=%s", number)
+#            logger.info("[STEP] MENU: sales selected (coming soon) — number=%s", number)
             ok = tpl_sales_coming_soon(number)
             self._log_out(number, "[tpl] gigatel_sales_coming_soon", ok)
+
+        elif text == "feasibility":
+#            logger.info("[STEP] MENU: feasibility selected (coming soon) — number=%s", number)
+            ok = tpl_feasibility_coming_soon(number)
+            self._log_out(number, "[tpl] check_feasibility_coming_soon", ok)
 
         elif text == "main_menu":
             ok = tpl_main_menu(number, session.contact_person_name)
             self._log_out(number, "[tpl] gigatel_main_menu (re-sent)", ok)
 
         else:
-            logger.warning("[STEP] MENU: unrecognised choice=%r — re-sending menu", text)
+#            logger.warning("[STEP] MENU: unrecognised choice=%r — re-sending menu", text)
             ok = tpl_main_menu(number, session.contact_person_name)
             self._log_out(number, "[tpl] gigatel_main_menu (unrecognised choice)", ok)
 
@@ -401,7 +421,7 @@ class WebhookView(View):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _step_circuit_list(self, number: str, session: "WhatsAppSession", text: str):
-        logger.info("[STEP] CIRCUIT_LIST: number=%s input=%r", number, text)
+#        logger.info("[STEP] CIRCUIT_LIST: number=%s input=%r", number, text)
 
         try:
             circuit_list = json.loads(session.selected_circuit_id)
@@ -411,7 +431,7 @@ class WebhookView(View):
         circuit_id = text.strip() if text else None
 
         if not circuit_id or circuit_id not in circuit_list:
-            logger.warning("[STEP] CIRCUIT_LIST: invalid circuit_id=%r", circuit_id)
+#            logger.warning("[STEP] CIRCUIT_LIST: invalid circuit_id=%r", circuit_id)
             circuits = get_circuits_by_customer(session.customer_id)
             if circuits:
                 ok = tpl_circuit_list_interactive(number, circuits[:10])
@@ -438,16 +458,16 @@ class WebhookView(View):
         CLOSED_STATUSES = {"task complete", "closed"}
         is_open = bool(open_ticket_id) and (ticket_status not in CLOSED_STATUSES)
 
-        logger.info(
-            "[STEP] CIRCUIT_LIST: circuit_id=%s open_ticket_id=%s is_open=%s",
-            circuit_id, open_ticket_id, is_open
-        )
+#        logger.info(
+#            "[STEP] CIRCUIT_LIST: circuit_id=%s open_ticket_id=%s is_open=%s",
+#            circuit_id, open_ticket_id, is_open
+#        )
 
         if is_open:
-            logger.info(
-                "[STEP] CIRCUIT_LIST: ❌ Open ticket=%s exists — blocking new complaint",
-                open_ticket_id
-            )
+#            logger.info(
+#                "[STEP] CIRCUIT_LIST: ❌ Open ticket=%s exists — blocking new complaint",
+#                open_ticket_id
+#            )
 
             raised_on = detail.get("ticketCreatedOn") or session.ticket_raised_on or "N/A"
             ticket_status_display = detail.get("ticketStatus") or "Open"
@@ -483,7 +503,7 @@ class WebhookView(View):
 
         session.save()
 
-        logger.info("[STEP] CIRCUIT_LIST: ✅ Proceeding to complaint type for circuit=%s", circuit_id)
+#        logger.info("[STEP] CIRCUIT_LIST: ✅ Proceeding to complaint type for circuit=%s", circuit_id)
         ok = tpl_complaint_type(number, circuit_id)
         self._log_out(number, "[tpl] gigatel_complaint_type", ok)
 
@@ -493,10 +513,10 @@ class WebhookView(View):
           - tap a row from the interactive list (circuit_id arrives as body), OR
           - type the last 4 digits of their circuit id directly.
         """
-        logger.info(
-            "[STEP] CIRCUIT_SELECT_OR_DIGITS%s: number=%s input=%r",
-            " (ticket)" if for_ticket else "", number, text
-        )
+#        logger.info(
+#            "[STEP] CIRCUIT_SELECT_OR_DIGITS%s: number=%s input=%r",
+#            " (ticket)" if for_ticket else "", number, text
+#        )
 
         try:
             circuit_list = json.loads(session.selected_circuit_id)
@@ -550,10 +570,10 @@ class WebhookView(View):
             return
 
         # Case 3: garbage input — re-send both prompts
-        logger.warning(
-            "[STEP] CIRCUIT_SELECT_OR_DIGITS%s: invalid input=%r — retry",
-            " (ticket)" if for_ticket else "", text
-        )
+#        logger.warning(
+#            "[STEP] CIRCUIT_SELECT_OR_DIGITS%s: invalid input=%r — retry",
+#            " (ticket)" if for_ticket else "", text
+#        )
         circuits = get_circuits_by_customer(session.customer_id)
         valid_circuits = [
             c for c in circuits
@@ -680,7 +700,7 @@ class WebhookView(View):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _step_circuit_list_for_ticket(self, number: str, session: "WhatsAppSession", text: str):
-        logger.info("[STEP] CIRCUIT_LIST_FOR_TICKET: number=%s input=%r", number, text)
+#        logger.info("[STEP] CIRCUIT_LIST_FOR_TICKET: number=%s input=%r", number, text)
 
         try:
             circuit_list = json.loads(session.selected_circuit_id)
@@ -708,7 +728,7 @@ class WebhookView(View):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _step_complaint_type(self, number: str, session: "WhatsAppSession", text: str):
-        logger.info("[STEP] COMPLAINT_TYPE: number=%s input=%r", number, text)
+#        logger.info("[STEP] COMPLAINT_TYPE: number=%s input=%r", number, text)
 
         fault_key = None
 
@@ -726,7 +746,7 @@ class WebhookView(View):
             fault_key = num_map.get(text)
 
         if not fault_key or fault_key not in FAULT_MAP:
-            logger.warning("[STEP] COMPLAINT_TYPE: unrecognised input=%r — retry", text)
+#            logger.warning("[STEP] COMPLAINT_TYPE: unrecognised input=%r — retry", text)
             ok = tpl_complaint_type(number, session.selected_circuit_id)
             self._log_out(number, "[tpl] gigatel_complaint_type (retry)", ok)
             return
@@ -735,7 +755,7 @@ class WebhookView(View):
         session.fault_label = FAULT_LABELS[fault_key]
         session.save()
 
-        logger.info("[STEP] COMPLAINT_TYPE: fault=%s → asking OTDR yes/no", fault_key)
+#        logger.info("[STEP] COMPLAINT_TYPE: fault=%s → asking OTDR yes/no", fault_key)
 
         # Always ask user about OTDR
         session.state = "AWAIT_OTDR"
@@ -749,7 +769,7 @@ class WebhookView(View):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _step_await_otdr(self, number: str, session: "WhatsAppSession", text: str):
-        logger.info("[STEP] AWAIT_OTDR (manual fallback): number=%s input=%r", number, text)
+#        logger.info("[STEP] AWAIT_OTDR (manual fallback): number=%s input=%r", number, text)
 
         if text == "otdr__yes":
             session.otdr_applicable  = True
@@ -764,10 +784,10 @@ class WebhookView(View):
             to_station   = (detail.get("endAddress") or "").strip()
 
             if not from_station and not to_station:
-                logger.warning(
-                    "[STEP] AWAIT_OTDR: no startAddress/endAddress for circuit=%s — manual fallback",
-                    session.selected_circuit_id
-                )
+#                logger.warning(
+#                    "[STEP] AWAIT_OTDR: no startAddress/endAddress for circuit=%s — manual fallback",
+#                    session.selected_circuit_id
+#                )
                 session.state = "AWAIT_OTDR_FROM"
                 session.save()
                 ok = tpl_otdr_from_prompt(number)
@@ -798,7 +818,7 @@ class WebhookView(View):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _step_await_otdr_field_select(self, number: str, session: "WhatsAppSession", text: str):
-        logger.info("[STEP] AWAIT_OTDR_FIELD_SELECT: number=%s input=%r", number, text)
+#        logger.info("[STEP] AWAIT_OTDR_FIELD_SELECT: number=%s input=%r", number, text)
 
         if text == "otdr_field__from":
             session.otdr_to = ""              # to clear — from is the real station name
@@ -819,7 +839,7 @@ class WebhookView(View):
             self._log_out(number, "[tpl] gigatel_otdr_field_select (retry)", ok)
 
     def _step_await_otdr_from(self, number: str, session: "WhatsAppSession", text: str):
-        logger.info("[STEP] AWAIT_OTDR_FROM: number=%s input=%r", number, text)
+#        logger.info("[STEP] AWAIT_OTDR_FROM: number=%s input=%r", number, text)
 
         if not text or text == "[image]":
             ok = tpl_otdr_from_prompt(number)
@@ -834,7 +854,7 @@ class WebhookView(View):
         self._log_out(number, "[tpl] gigatel_otdr_value_prompt", ok)
 
     def _step_await_otdr_to(self, number: str, session: "WhatsAppSession", text: str):
-        logger.info("[STEP] AWAIT_OTDR_TO: number=%s input=%r", number, text)
+#        logger.info("[STEP] AWAIT_OTDR_TO: number=%s input=%r", number, text)
 
         if not text or text == "[image]":
             ok = tpl_otdr_to_prompt(number)
@@ -849,7 +869,7 @@ class WebhookView(View):
         self._log_out(number, "[tpl] gigatel_otdr_value_prompt", ok)
 
     def _step_await_otdr_value(self, number: str, session: "WhatsAppSession", text: str):
-        logger.info("[STEP] AWAIT_OTDR_VALUE: number=%s input=%r", number, text)
+#        logger.info("[STEP] AWAIT_OTDR_VALUE: number=%s input=%r", number, text)
 
         if not text or text == "[image]":
             ok = tpl_otdr_value_prompt(number)
@@ -867,7 +887,7 @@ class WebhookView(View):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _step_await_remark(self, number: str, session: "WhatsAppSession", text: str):
-        logger.info("[STEP] AWAIT_REMARK: number=%s remark=%r", number, text)
+#        logger.info("[STEP] AWAIT_REMARK: number=%s remark=%r", number, text)
 
         if not text or text == "[image]":
             ok = tpl_remark_prompt(number)
@@ -892,7 +912,7 @@ class WebhookView(View):
             )
 
     def _step_await_otdr_image(self, number: str, session: "WhatsAppSession", msg: dict):
-        logger.info("[STEP] AWAIT_OTDR_IMAGE: number=%s msg_type=%s", number, msg.get("type"))
+#        logger.info("[STEP] AWAIT_OTDR_IMAGE: number=%s msg_type=%s", number, msg.get("type"))
 
         if msg.get("type") != "image":
             ok = tpl_otdr_image_prompt(number)
@@ -906,35 +926,37 @@ class WebhookView(View):
             saved_url = self._download_and_save_image(media_url, prefix="otdr1")
             if saved_url:
                 session.otdr_image1_url = saved_url
-                logger.info(
-                    "[STEP] AWAIT_OTDR_IMAGE: ✅ image1 saved locally for number=%s url=%s",
-                    number, saved_url
-                )
+#                logger.info(
+#                    "[STEP] AWAIT_OTDR_IMAGE: ✅ image1 saved locally for number=%s url=%s",
+#                    number, saved_url
+#                )
+                
+                # Send confirmation message is omitted because tpl_otdr_second_image_prompt already confirms it
             else:
                 session.otdr_image1_url = media_url
-                logger.warning(
-                    "[STEP] AWAIT_OTDR_IMAGE: ⚠️ local save failed — storing Meta URL for number=%s",
-                    number
-                )
+#                logger.warning(
+#                    "[STEP] AWAIT_OTDR_IMAGE: ⚠️ local save failed — storing Meta URL for number=%s",
+#                    number
+#                )
         else:
             session.otdr_image1_url = ""
-            logger.warning(
-                "[STEP] AWAIT_OTDR_IMAGE: ❌ could not get URL — continuing without image1"
-            )
+#            logger.warning(
+#                "[STEP] AWAIT_OTDR_IMAGE: ❌ could not get URL — continuing without image1"
+#            )
 
         session.otdr_image1_path = ""
         session.otdr_image2_url  = ""
         session.state            = "AWAIT_OTDR_IMAGE2"
         session.save()
-        logger.info(
-            "[STEP] AWAIT_OTDR_IMAGE: image1_url=%r saved, state=AWAIT_OTDR_IMAGE2 for number=%s",
-            session.otdr_image1_url, number
-        )
+#        logger.info(
+#            "[STEP] AWAIT_OTDR_IMAGE: image1_url=%r saved, state=AWAIT_OTDR_IMAGE2 for number=%s",
+#            session.otdr_image1_url, number
+#        )
         ok = tpl_otdr_second_image_prompt(number)
         self._log_out(number, "[tpl] gigatel_otdr_second_image_prompt", ok)
 
     def _step_await_otdr_image2(self, number: str, session: "WhatsAppSession", msg: dict):
-        logger.info("[STEP] AWAIT_OTDR_IMAGE2: number=%s type=%s", number, msg.get("type"))
+#        logger.info("[STEP] AWAIT_OTDR_IMAGE2: number=%s type=%s", number, msg.get("type"))
 
         if msg.get("type") == "image":
             media_id  = msg.get("image", {}).get("id", "")
@@ -944,29 +966,34 @@ class WebhookView(View):
                 saved_url = self._download_and_save_image(media_url, prefix="otdr2")
                 if saved_url:
                     session.otdr_image2_url = saved_url
-                    logger.info(
-                        "[STEP] AWAIT_OTDR_IMAGE2: ✅ image2 saved locally for number=%s url=%s",
-                        number, saved_url
-                    )
+#                    logger.info(
+#                        "[STEP] AWAIT_OTDR_IMAGE2: ✅ image2 saved locally for number=%s url=%s",
+#                        number, saved_url
+#                    )
+                    
+                    # Send confirmation message
+                    ok_conf = tpl_image_uploaded_successfully(number)
+                    self._log_out(number, "[tpl] image_uploaded_successfully", ok_conf)
                 else:
                     session.otdr_image2_url = media_url
-                    logger.warning(
-                        "[STEP] AWAIT_OTDR_IMAGE2: ⚠️ local save failed — storing Meta URL for number=%s",
-                        number
-                    )
+#                    logger.warning(
+#                        "[STEP] AWAIT_OTDR_IMAGE2: ⚠️ local save failed — storing Meta URL for number=%s",
+#                        number
+#                    )
             else:
                 session.otdr_image2_url = ""
-                logger.warning(
-                    "[STEP] AWAIT_OTDR_IMAGE2: ❌ could not get image2 URL for number=%s",
-                    number
-                )
+#                logger.warning(
+#                    "[STEP] AWAIT_OTDR_IMAGE2: ❌ could not get image2 URL for number=%s",
+#                    number
+#                )
             session.save()
 
         else:
-            logger.info(
-                "[STEP] AWAIT_OTDR_IMAGE2: no image received — submitting with image1 only for number=%s",
-                number
-            )
+            pass
+#            logger.info(
+#                "[STEP] AWAIT_OTDR_IMAGE2: no image received — submitting with image1 only for number=%s",
+#                number
+#            )
 
         self._run_otdr_validation(number, session)
 
@@ -1042,7 +1069,7 @@ class WebhookView(View):
         else:
             fault_side = str(raw_data).strip().lower()   # "Customer" or "Gigatel"
 
-        logger.info("[VALIDATE] fault_side=%r for number=%s", fault_side, number)
+#        logger.info("[VALIDATE] fault_side=%r for number=%s", fault_side, number)
         session.fault_side = fault_side
         session.save()
 
@@ -1056,7 +1083,7 @@ class WebhookView(View):
             session.state = "AWAIT_RAISE_ANYWAY"
             session.save()
         else:
-            logger.warning("[VALIDATE] unknown fault_side=%r — submitting directly", fault_side)
+#            logger.warning("[VALIDATE] unknown fault_side=%r — submitting directly", fault_side)
             self._submit_complaint(
                 number, session,
                 remark=session.otdr_remark,
@@ -1107,11 +1134,11 @@ class WebhookView(View):
         ticket_status: str = "COMPLAINT_REGISTERED",
     ):
         mobile = self._clean_number(number)
-        logger.info(
-            "[SUBMIT] number=%s circuit=%s fault_id=%s otdr=%s",
-            number, session.selected_circuit_id,
-            session.nature_of_fault_id, session.otdr_applicable
-        )
+#        logger.info(
+#            "[SUBMIT] number=%s circuit=%s fault_id=%s otdr=%s",
+#            number, session.selected_circuit_id,
+#            session.nature_of_fault_id, session.otdr_applicable
+#        )
 
         # Ensure all values are strings for form-data encoding
         payload = {
@@ -1139,7 +1166,7 @@ class WebhookView(View):
             if session.otdr_image2_url:
                 payload["OTDRImage2Url"] = str(session.otdr_image2_url)
 
-        logger.warning("[SUBMIT] FINAL PAYLOAD → %s", payload)
+#        logger.warning("[SUBMIT] FINAL PAYLOAD → %s", payload)
 
         result = raise_complaint(payload)
         now = datetime.now().strftime("%d/%m/%Y %H:%M")
@@ -1147,10 +1174,10 @@ class WebhookView(View):
         if result:
             ticket_id = result.get("ticketId") or "N/A"
             is_duplicate = result.get("isDuplicate", False)
-            logger.info(
-                "[SUBMIT] ✅ ticket_id=%s duplicate=%s circuit=%s",
-                ticket_id, is_duplicate, session.selected_circuit_id
-            )
+#            logger.info(
+#                "[SUBMIT] ✅ ticket_id=%s duplicate=%s circuit=%s",
+#                ticket_id, is_duplicate, session.selected_circuit_id
+#            )
 
             if ticket_status == "CUSTOMER_DISPUTED_OTDR_RESULT":
                 if session.customer_email:
@@ -1187,7 +1214,7 @@ class WebhookView(View):
 
         session.state = "DONE"
         session.save()
-        logger.info("[SUBMIT] Session state=DONE for number=%s", number)
+#        logger.info("[SUBMIT] Session state=DONE for number=%s", number)
 
     # ─────────────────────────────────────────────────────────────────────────
     # CURRENT TICKET
@@ -1195,7 +1222,7 @@ class WebhookView(View):
 
     def _show_current_ticket(self, number: str, session: "WhatsAppSession"):
         circuit_id = session.selected_circuit_id
-        logger.info("[CURRENT_TICKET] number=%s circuit_id=%r", number, circuit_id)
+#        logger.info("[CURRENT_TICKET] number=%s circuit_id=%r", number, circuit_id)
 
         if not circuit_id or circuit_id.startswith("["):
             ok = tpl_main_menu(number, session.contact_person_name)
@@ -1206,15 +1233,15 @@ class WebhookView(View):
 
         detail = get_circuit_detail(circuit_id)
 
-        logger.warning(
-            "[CURRENT_TICKET_DEBUG] circuit_id=%s ticketId=%r ticketType=%r "
-            "status=%r created=%r",
-            circuit_id,
-            detail.get("ticketId")        if detail else None,
-            detail.get("ticketType")      if detail else None,
-            detail.get("ticketStatus")    if detail else None,
-            detail.get("ticketCreatedOn") if detail else None,
-        )
+#        logger.warning(
+#            "[CURRENT_TICKET_DEBUG] circuit_id=%s ticketId=%r ticketType=%r "
+#            "status=%r created=%r",
+#            circuit_id,
+#            detail.get("ticketId")        if detail else None,
+#            detail.get("ticketType")      if detail else None,
+#            detail.get("ticketStatus")    if detail else None,
+#            detail.get("ticketCreatedOn") if detail else None,
+#        )
 
         ticket_id = detail.get("ticketNo")
         ticket_status = detail.get("status") or "Open"
@@ -1242,11 +1269,11 @@ class WebhookView(View):
 
     def _log_out(self, number: str, text: str, success: bool = None):
         symbol = "✅" if success is True else ("❌" if success is False else "?")
-        logger.info(
-            "[OUT] %s number=%s template_call=%s result=%s",
-            symbol, number, text,
-            "accepted" if success else ("rejected" if success is False else "unknown")
-        )
+#        logger.info(
+#            "[OUT] %s number=%s template_call=%s result=%s",
+#            symbol, number, text,
+#            "accepted" if success else ("rejected" if success is False else "unknown")
+#        )
         WhatsAppMessage.objects.create(
             mobile_number=number,
             direction="OUT",
@@ -1299,7 +1326,7 @@ class WebhookView(View):
             )
             r.raise_for_status()
             url = r.json().get("url", "")
-            logger.info("[MEDIA] Got URL for media_id=%s", media_id)
+#            logger.info("[MEDIA] Got URL for media_id=%s", media_id)
             return url
         except Exception as exc:
             logger.error("[MEDIA] ❌ Could not get URL for media_id=%s error=%s", media_id, exc)
@@ -1341,7 +1368,7 @@ class WebhookView(View):
             # Get the public URL for the saved file
             public_url = default_storage.url(saved_path)
             
-            logger.info("[MEDIA] ✅ Image saved: %s", public_url)
+#            logger.info("[MEDIA] ✅ Image saved: %s", public_url)
             return public_url
 
         except Exception as exc:
