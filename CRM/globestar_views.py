@@ -206,7 +206,7 @@ def handle_globestar_message(msg: dict):
         session.gs_application = body
         session.state = "GS_DONE"
         session.save()
-        msg = "🙏 Thank you for contacting Globe Star Engineers.\n📲 You will receive a call shortly."
+        msg = "Thank you for contacting Globe Star Engineers.\n You will receive a call shortly."
         send_gs_text(number, msg)
         logger.info("[GLOBESTAR] Lead generated: product=%s cap=%s head=%s app=%s type=%s sg=%s num=%s",
                     session.gs_selected_product, session.gs_capacity, session.gs_head, 
