@@ -492,6 +492,7 @@ class WebhookView(View):
             except (TypeError, ValueError):
                 session.circuit_numeric_id = None
 
+        session.nature_of_fault_id = 7
         session.save()
 
 #        logger.info("[STEP] CIRCUIT_LIST: ✅ Proceeding to OTDR for circuit=%s", circuit_id)
@@ -614,6 +615,7 @@ class WebhookView(View):
             except (TypeError, ValueError):
                 session.circuit_numeric_id = None
         
+        session.nature_of_fault_id = 7
         session.save()
 
         ok = tpl_otdr_question(number, circuit_id)
@@ -1136,7 +1138,7 @@ class WebhookView(View):
 
         # Ensure all values are strings for form-data encoding
         payload = {
-            "Remark": str(remark or ""),
+            "Remark": str(remark or "Link Down"),
             "ContactPersonName": str(session.contact_person_name or mobile),
             "ContactPersonMobile": mobile,
             "ContactPersonEmail": str(session.customer_email or ""),
