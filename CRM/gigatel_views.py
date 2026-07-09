@@ -1239,7 +1239,7 @@ class WebhookView(View):
 
         ticket_id = detail.get("ticketNo")
         ticket_status = detail.get("status") or "Open"
-        ticket_created_on = detail.get("ticketAllottedOn") or detail.get("ticketStartTime") or "N/A"
+        ticket_created_on = detail.get("ticketCreatedOn") or detail.get("ticketAllottedOn") or detail.get("ticketStartTime") or "N/A"
 
         if ticket_id:
             ok = tpl_current_ticket(

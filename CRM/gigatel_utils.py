@@ -269,11 +269,22 @@ def _normalise_circuit_detail(raw: dict) -> dict:
         )
 
     if not out.get("ticketCreatedOn"):
-        out["ticketCreatedOn"] = (
-            out.get("ticketAllottedOn") or out.get("TicketAllottedOn")
+        raw_date = (
+            out.get("complientCreatedOn") or out.get("ComplientCreatedOn")
+            or out.get("complaintCreatedOn") or out.get("ComplaintCreatedOn")
+            or out.get("ticketAllottedOn") or out.get("TicketAllottedOn")
             or out.get("ticketStartTime") or out.get("CreatedOn")
             or out.get("createdOn") or ""
-        ) or None
+        )
+        if raw_date and isinstance(raw_date, str) and "T" in raw_date:
+            try:
+                from datetime import datetime
+                parsed = datetime.fromisoformat(raw_date.split(".")[0])
+                out["ticketCreatedOn"] = parsed.strftime("%d %b %Y, %I:%M %p")
+            except Exception:
+                out["ticketCreatedOn"] = raw_date
+        else:
+            out["ticketCreatedOn"] = raw_date or None
 
     if not out.get("ticketType"):
         out["ticketType"] = (
