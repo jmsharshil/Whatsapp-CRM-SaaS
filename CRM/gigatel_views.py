@@ -530,9 +530,13 @@ class WebhookView(View):
                 self._proceed_with_valid_circuit(number, session, candidate)
             return
 
-        # Case 2: typed last-4-digits directly
-        if candidate.isdigit() and len(candidate) == 4:
-            matches = [cid for cid in circuit_list if str(cid).strip()[-4:] == candidate]
+        # Case 2: typed last characters directly
+        is_valid_format = (
+            (len(candidate) == 4 and candidate.isdigit()) or
+            (len(candidate) == 5 and candidate[:4].isdigit() and candidate[4].isalnum())
+        )
+        if is_valid_format:
+            matches = [cid for cid in circuit_list if str(cid).strip().upper().endswith(candidate.upper())]
 
             if not matches:
                 ok = tpl_circuit_not_found(number)
@@ -624,7 +628,12 @@ class WebhookView(View):
     def _step_await_circuit_digits(self, number: str, session: "WhatsAppSession", text: str, for_ticket: bool):
         digits = (text or "").strip()
 
-        if not digits.isdigit() or len(digits) != 4:
+        is_valid_format = (
+            (len(digits) == 4 and digits.isdigit()) or
+            (len(digits) == 5 and digits[:4].isdigit() and digits[4].isalnum())
+        )
+
+        if not is_valid_format:
             try:
                 circuit_count = len(json.loads(session.selected_circuit_id))
             except Exception:
@@ -638,7 +647,7 @@ class WebhookView(View):
         except Exception:
             circuit_list = []
 
-        matches = [cid for cid in circuit_list if str(cid).strip()[-4:] == digits]
+        matches = [cid for cid in circuit_list if str(cid).strip().upper().endswith(digits.upper())]
 
         if not matches:
             ok = tpl_circuit_not_found(number)
