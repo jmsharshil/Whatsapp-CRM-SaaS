@@ -179,7 +179,6 @@ class WebhookView(View):
             session.state               = "INIT"
             session.selected_circuit_id = ""
             session.nature_of_fault_id  = None
-            session.fault_label         = ""
             session.otdr_applicable     = None
             session.otdr_from           = ""
             session.otdr_to             = ""
@@ -482,7 +481,7 @@ class WebhookView(View):
 
         # No open ticket → proceed to complaint type
         session.selected_circuit_id = circuit_id
-        session.state = "COMPLAINT_TYPE"
+        session.state = "AWAIT_OTDR"
 
         # Store numeric circuit ID for OTDR validation
         numeric_id = detail.get("id")
@@ -495,9 +494,9 @@ class WebhookView(View):
 
         session.save()
 
-#        logger.info("[STEP] CIRCUIT_LIST: ✅ Proceeding to complaint type for circuit=%s", circuit_id)
-        ok = tpl_complaint_type(number, circuit_id)
-        self._log_out(number, "[tpl] gigatel_complaint_type", ok)
+#        logger.info("[STEP] CIRCUIT_LIST: ✅ Proceeding to OTDR for circuit=%s", circuit_id)
+        ok = tpl_otdr_question(number, circuit_id)
+        self._log_out(number, "[tpl] gigatel_otdr_question", ok)
 
     def _step_circuit_select_or_digits(self, number: str, session: "WhatsAppSession", text: str, for_ticket: bool):
         """
@@ -607,17 +606,18 @@ class WebhookView(View):
             return
 
         session.selected_circuit_id = circuit_id
-        session.state = "COMPLAINT_TYPE"
+        session.state = "AWAIT_OTDR"
         numeric_id = detail.get("id")
         if numeric_id is not None:
             try:
                 session.circuit_numeric_id = int(numeric_id)
             except (TypeError, ValueError):
                 session.circuit_numeric_id = None
+        
         session.save()
 
-        ok = tpl_complaint_type(number, circuit_id)
-        self._log_out(number, "[tpl] gigatel_complaint_type", ok)
+        ok = tpl_otdr_question(number, circuit_id)
+        self._log_out(number, "[tpl] gigatel_otdr_question", ok)
 
     def _step_await_circuit_digits(self, number: str, session: "WhatsAppSession", text: str, for_ticket: bool):
         digits = (text or "").strip()
@@ -796,10 +796,12 @@ class WebhookView(View):
 
         elif text == "otdr__no":
             session.otdr_applicable = False
-            session.state           = "AWAIT_REMARK"
             session.save()
-            ok = tpl_remark_prompt(number)
-            self._log_out(number, "[tpl] gigatel_remark_prompt", ok)
+            self._submit_complaint(
+                number=number,
+                session=session,
+                remark="",
+            )
 
         else:
             ok = tpl_otdr_question(number, session.fault_label, session.selected_circuit_id)
@@ -869,10 +871,10 @@ class WebhookView(View):
             return
 
         session.otdr_value = text.strip()
-        session.state      = "AWAIT_REMARK"
+        session.state      = "AWAIT_OTDR_IMAGE"
         session.save()
-        ok = tpl_remark_prompt(number)
-        self._log_out(number, "[tpl] gigatel_remark_prompt", ok)
+        ok = tpl_otdr_image_prompt(number)
+        self._log_out(number, "[tpl] gigatel_otdr_image_prompt", ok)
 
     # ─────────────────────────────────────────────────────────────────────────
     # STEP: REMARK
@@ -1173,25 +1175,23 @@ class WebhookView(View):
 
             if ticket_status == "CUSTOMER_DISPUTED_OTDR_RESULT":
                 if session.customer_email:
-                    email_ticket_raised(session.customer_email, session.selected_circuit_id, str(ticket_id), session.fault_label or "N/A", now, ticket_status)
+                    email_ticket_raised(session.customer_email, session.selected_circuit_id, str(ticket_id), now, ticket_status)
                     
                 ok = tpl_ticket_confirmation_disputed(
                     number,
                     str(ticket_id),
                     session.selected_circuit_id,
-                    session.fault_label or "N/A",
                     now,
                 )
                 self._log_out(number, f"[tpl] gigatel_ticket_confirmation_disputed ticket_id={ticket_id}", ok)
             else:
                 if session.customer_email:
-                    email_ticket_raised(session.customer_email, session.selected_circuit_id, str(ticket_id), session.fault_label or "N/A", now, ticket_status)
+                    email_ticket_raised(session.customer_email, session.selected_circuit_id, str(ticket_id), now, ticket_status)
                     
                 ok = tpl_ticket_confirmation(
                     number,
                     str(ticket_id),
                     session.selected_circuit_id,
-                    session.fault_label or "N/A",
                     now,
                 )
                 suffix = " (duplicate)" if is_duplicate else ""
@@ -1414,7 +1414,6 @@ class GigatelDataExportView(APIView):
                     "ticket_raised_on": wa_session.ticket_raised_on,
                     "selected_circuit_id": wa_session.selected_circuit_id,
                     "nature_of_fault_id": wa_session.nature_of_fault_id,
-                    "fault_label": wa_session.fault_label,
                     "otdr_applicable": wa_session.otdr_applicable,
                     "otdr_image1_url": wa_session.otdr_image1_url,
                     "otdr_image2_url": wa_session.otdr_image2_url,

@@ -477,9 +477,9 @@ def email_existing_ticket(to_email: str, circuit_id: str, ticket_id: str, status
     body = f"Dear Customer,\n\nYou already have an open ticket for circuit {circuit_id}.\nTicket ID: {ticket_id}\nStatus: {status}\nRaised On: {raised_on}\n\nRegards,\nGigatel Support"
     return send_gigatel_email(to_email, subject, body)
 
-def email_ticket_raised(to_email: str, circuit_id: str, ticket_id: str, fault_label: str, raised_on: str, status: str):
+def email_ticket_raised(to_email: str, circuit_id: str, ticket_id: str, raised_on: str, status: str):
     subject = f"Gigatel Support: Ticket Raised for Circuit {circuit_id}"
-    body = f"Dear Customer,\n\nA new ticket has been raised for circuit {circuit_id}.\nTicket ID: {ticket_id}\nFault: {fault_label}\nStatus: {status}\nRaised On: {raised_on}\n\nRegards,\nGigatel Support"
+    body = f"Dear Customer,\n\nA new ticket has been raised for circuit {circuit_id}.\nTicket ID: {ticket_id}\nStatus: {status}\nRaised On: {raised_on}\n\nRegards,\nGigatel Support"
     return send_gigatel_email(to_email, subject, body)
 
 def email_request_closed(to_email: str, circuit_id: str):
@@ -865,7 +865,7 @@ def tpl_complaint_type(to: str, circuit_id: str) -> bool:
     })
 
 
-def tpl_otdr_question(to: str, fault_label: str, circuit_id: str) -> bool:
+def tpl_otdr_question(to: str, circuit_id: str) -> bool:
     return _meta_post({
         "messaging_product": "whatsapp",
         "to": to,
@@ -942,7 +942,7 @@ def tpl_otdr_field_select(to: str, from_name: str = "", to_name: str = "") -> bo
 
 
 def tpl_ticket_confirmation(
-    to: str, ticket_id: str, circuit_id: str, fault_label: str, raised_on: str
+    to: str, ticket_id: str, circuit_id: str, raised_on: str
 ) -> bool:
     return _meta_post({
         "messaging_product": "whatsapp",
@@ -957,7 +957,6 @@ def tpl_ticket_confirmation(
                     "parameters": [
                         {"type": "text", "text": ticket_id},
                         {"type": "text", "text": circuit_id},
-                        {"type": "text", "text": fault_label},
                         {"type": "text", "text": raised_on},
                     ],
                 }
@@ -1156,7 +1155,7 @@ def tpl_request_closed_customer_fault(to: str) -> bool:
 
 
 def tpl_ticket_confirmation_disputed(
-    to: str, ticket_id: str, circuit_id: str, fault_label: str, raised_on: str
+    to: str, ticket_id: str, circuit_id: str, raised_on: str
 ) -> bool:
     """Ticket confirmation when raised despite OTDR indicating customer-side fault."""
     return _meta_post({
@@ -1172,7 +1171,6 @@ def tpl_ticket_confirmation_disputed(
                     "parameters": [
                         {"type": "text", "text": ticket_id},
                         {"type": "text", "text": circuit_id},
-                        {"type": "text", "text": fault_label},
                         {"type": "text", "text": raised_on},
                     ],
                 }
