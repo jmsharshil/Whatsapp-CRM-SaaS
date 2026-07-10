@@ -10,6 +10,7 @@ from django.core.files.base import ContentFile
 from django.conf import settings
 import requests
 import uuid
+import mimetypes
 from .globestar_utils import (
     GLOBESTAR_PHONE_NUMBER_ID,
     GLOBESTAR_PRODUCTS,
@@ -81,9 +82,14 @@ def download_media_from_whatsapp(media_id: str, access_token: str) -> str:
             logger.error("[GLOBESTAR] Failed to download media %s", media_id)
             return ""
             
-        ext = file_res.headers.get("Content-Type", "").split("/")[-1]
-        if not ext or len(ext) > 5:
-            ext = "jpeg"
+        content_type = file_res.headers.get("Content-Type", "")
+        ext = mimetypes.guess_extension(content_type)
+        if ext:
+            ext = ext.lstrip('.')
+        else:
+            ext = content_type.split("/")[-1] if "/" in content_type else "bin"
+            if len(ext) > 5:
+                ext = "bin"
             
         file_name = f"globestar_images/{uuid.uuid4().hex}.{ext}"
         saved_path = default_storage.save(file_name, ContentFile(file_res.content))
@@ -114,8 +120,8 @@ def handle_globestar_message(msg: dict):
     elif msg_type == "button":
         body = msg.get("button", {}).get("payload", "").strip()
         display_body = msg.get("button", {}).get("text", body).strip()
-    elif msg_type == "image":
-        media_id = msg.get("image", {}).get("id")
+    elif msg_type in ["image", "video", "document", "audio", "sticker"]:
+        media_id = msg.get(msg_type, {}).get("id")
         if media_id:
             token = getattr(settings, "META_PERMANENT_TOKEN", "")
             dl_url = download_media_from_whatsapp(media_id, token)
@@ -123,11 +129,11 @@ def handle_globestar_message(msg: dict):
                 body = dl_url
                 display_body = dl_url
             else:
-                body = "[image]"
-                display_body = "[image]"
+                body = f"[{msg_type}]"
+                display_body = f"[{msg_type}]"
         else:
-            body = "[image]"
-            display_body = "[image]"
+            body = f"[{msg_type}]"
+            display_body = f"[{msg_type}]"
 
     logger.info("[GLOBESTAR DEBUG] msg payload: %s", json.dumps(msg))
     logger.info("[GLOBESTAR] from=%s type=%s body=%r display_body=%r id=%s", number, msg_type, body, display_body, msg_id)
