@@ -8,6 +8,7 @@ from .views import *
 from CRM.views import MetaConversationMessageListView
 from CRM.jmschatagents_views import *
 from CRM.gigatel_views import GigatelDataExportView
+from CRM.globestar_views import GlobestarDataAPIView
 
 urlpatterns = [
 
@@ -78,4 +79,7 @@ urlpatterns = [
     
     # ── Gigatel Export ────────────────────────────────────────────────────────
     path("api/gigatel/", GigatelDataExportView.as_view(), name="gigatel-export"),
+    
+    # ── Globestar ─────────────────────────────────────────────────────────────
+    path("api/globestar/data/", GlobestarDataAPIView.as_view(), name="globestar-data"),
 ]
