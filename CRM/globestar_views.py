@@ -326,6 +326,7 @@ class GlobestarDataAPIView(APIView):
     """
     API to fetch all Globestar data, formatted similarly to Gigatel data export.
     """
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def get(self, request, *args, **kwargs):
