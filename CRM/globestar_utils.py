@@ -408,11 +408,7 @@ def _meta_post_gs(payload: dict) -> bool:
             elif msg_type == "interactive":
                 content = "[Interactive Message]"
             elif msg_type == "image":
-                content = payload.get("image", {}).get("link", "[Image]")
-            elif msg_type == "document":
-                content = payload.get("document", {}).get("link", "[Document]")
-            elif msg_type == "video":
-                content = payload.get("video", {}).get("link", "[Video]")
+                content = "[Image]"
             else:
                 content = f"[{msg_type.capitalize()}]"
                 
