@@ -5,6 +5,11 @@ import re
 from datetime import datetime
 
 from CRM.models import Customer, Conversation, Message, ClientAccount, ConversationState
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
+from django.conf import settings
+import requests
+import uuid
 from .globestar_utils import (
     GLOBESTAR_PHONE_NUMBER_ID,
     GLOBESTAR_PRODUCTS,
@@ -59,6 +64,34 @@ class ConversationSession:
                 self._conv.bot_metadata = {}
             self._conv.bot_metadata[key] = value
 
+def download_media_from_whatsapp(media_id: str, access_token: str) -> str:
+    try:
+        url = f"https://graph.facebook.com/v20.0/{media_id}"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        res = requests.get(url, headers=headers, timeout=10)
+        if res.status_code != 200:
+            logger.error("[GLOBESTAR] Failed to get media URL for %s: %s", media_id, res.text)
+            return ""
+        media_url = res.json().get("url")
+        if not media_url:
+            return ""
+        
+        file_res = requests.get(media_url, headers=headers, timeout=15)
+        if file_res.status_code != 200:
+            logger.error("[GLOBESTAR] Failed to download media %s", media_id)
+            return ""
+            
+        ext = file_res.headers.get("Content-Type", "").split("/")[-1]
+        if not ext or len(ext) > 5:
+            ext = "jpeg"
+            
+        file_name = f"globestar_images/{uuid.uuid4().hex}.{ext}"
+        saved_path = default_storage.save(file_name, ContentFile(file_res.content))
+        return default_storage.url(saved_path)
+    except Exception as e:
+        logger.error("[GLOBESTAR] Error downloading media: %s", e)
+        return ""
+
 def handle_globestar_message(msg: dict):
     number   = msg.get("from", "")
     msg_id   = msg.get("id", "")
@@ -82,8 +115,19 @@ def handle_globestar_message(msg: dict):
         body = msg.get("button", {}).get("payload", "").strip()
         display_body = msg.get("button", {}).get("text", body).strip()
     elif msg_type == "image":
-        body = "[image]"
-        display_body = "[image]"
+        media_id = msg.get("image", {}).get("id")
+        if media_id:
+            token = getattr(settings, "META_PERMANENT_TOKEN", "")
+            dl_url = download_media_from_whatsapp(media_id, token)
+            if dl_url:
+                body = dl_url
+                display_body = dl_url
+            else:
+                body = "[image]"
+                display_body = "[image]"
+        else:
+            body = "[image]"
+            display_body = "[image]"
 
     logger.info("[GLOBESTAR DEBUG] msg payload: %s", json.dumps(msg))
     logger.info("[GLOBESTAR] from=%s type=%s body=%r display_body=%r id=%s", number, msg_type, body, display_body, msg_id)
