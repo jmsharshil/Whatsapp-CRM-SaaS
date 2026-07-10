@@ -345,7 +345,7 @@ class GlobestarDataAPIView(APIView):
 
         conversations = Conversation.objects.filter(
             phone_number_id=phone_number_id
-        ).distinct().select_related('customer', 'chatbot_state').prefetch_related('messages').order_by('-created_at')
+        ).select_related('customer', 'chatbot_state').prefetch_related('messages').order_by('-created_at')
 
         export_data = {
             "client": {
