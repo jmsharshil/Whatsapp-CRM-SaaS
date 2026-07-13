@@ -130,6 +130,28 @@ def get_circuits_by_customer(customer_id: int) -> list:
         return []
 
 
+def get_running_tickets(customer_company_id: int) -> list:
+    try:
+        r = requests.get(
+            f"{GIGATEL_BASE}/Customer/GetRunningTicketByCustomerCompanyId",
+            params={"CustomerCompanyId": customer_company_id},
+            headers=GIGATEL_HEADERS,
+            timeout=10,
+        )
+        r.raise_for_status()
+        data = r.json()
+        if isinstance(data, dict):
+            return data.get("data", [])
+        return []
+    except Exception as exc:
+        logger.error(
+            "[CRM] get_running_tickets: EXCEPTION company_id=%s error=%s",
+            customer_company_id, exc
+        )
+        return []
+
+
+
 def get_circuit_detail(circuit_id: str) -> dict | None:
 #    logger.debug("[CRM] get_circuit_detail: calling API for circuit_id=%s", circuit_id)
     try:
@@ -571,6 +593,15 @@ def _tpl_circuit_text_message(to: str, circuits: list) -> bool:
 #    logger.debug(
 #        "[TPL] Sending plain-text circuit list (count=%d) to=%s", len(circuits), to
 #    )
+
+    # Send a loading message first
+    _meta_post({
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "text",
+        "text": {"body": "Please wait while the Circuit PDF is loading..."}
+    })
+
 
     seen_ids = set()
     lines = ["Your circuits — please reply with the Circuit ID:\n"]

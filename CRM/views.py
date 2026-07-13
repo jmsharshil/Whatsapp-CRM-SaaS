@@ -1474,8 +1474,16 @@ class LeadsProspectsView(APIView):
         # ── Build response ────────────────────────────────────────────────
         results = []
         for customer in page.object_list:
-            # Get latest conversation
-            conv = customer.conversations.order_by("-created_at").first()
+            # Get latest conversation for this specific org/WABA
+            conv_qs = customer.conversations.all()
+            if phone_number_id:
+                conv_qs = conv_qs.filter(
+                    Q(client__phone_number_id=phone_number_id) | Q(phone_number_id=phone_number_id)
+                )
+            else:
+                conv_qs = conv_qs.filter(client__tech_provider=org)
+                
+            conv = conv_qs.order_by("-created_at").first()
             
             # Get chatbot state if exists
             state = None
@@ -1532,7 +1540,7 @@ META_GRAPH_BASE = "https://graph.facebook.com/v19.0"
 # ─── Tech-provider guard ──────────────────────────────────────────────────────
 
 TECH_PROVIDER_EMAILS = {"pranjalvejani2111@gmail.com"}
-TECH_PROVIDER_DOMAIN = "@jmsadvisory.in"
+TECH_PROVIDER_DOMAIN = "@jmstech.co"
 
 
 def _is_tech_provider(user) -> bool:

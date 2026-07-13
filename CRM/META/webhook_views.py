@@ -69,6 +69,8 @@ from CRM.jmschatagents_views import (
 from CRM.gigatel_views import handle_gigatel_message
 from CRM.globestar_views import handle_globestar_message
 from CRM.globestar_utils import GLOBESTAR_PHONE_NUMBER_ID
+from CRM.gkd_views import handle_gkd_message
+from CRM.gkd_utils import GKD_PHONE_NUMBER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -341,6 +343,7 @@ class WhatsAppWebhookView(APIView):
                     try:
                         gigatel_phone_id = os.environ.get("META_PHONE_NUMBER_ID", "").strip()
                         globestar_phone_id = GLOBESTAR_PHONE_NUMBER_ID
+                        gkd_phone_id = GKD_PHONE_NUMBER_ID
                         
                         if gigatel_phone_id and phone_number_id == gigatel_phone_id:
                             logger.info("[Webhook] Routing message to Gigatel Bot")
@@ -371,6 +374,9 @@ class WhatsAppWebhookView(APIView):
                         elif globestar_phone_id and phone_number_id == globestar_phone_id:
                             logger.info("[Webhook] Routing message to Globe Star Bot")
                             handle_globestar_message(msg)
+                        elif gkd_phone_id and phone_number_id == gkd_phone_id:
+                            logger.info("[Webhook] Routing message to GKD Bot")
+                            handle_gkd_message(msg)
                         elif client:
                             # ── CLIENT BOT FLOW ───────────────────────────
                             # Route to client-specific bot

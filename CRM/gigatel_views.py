@@ -335,8 +335,6 @@ class WebhookView(View):
                 ok0 = tpl_circuit_list_interactive(number, valid_circuits)
                 self._log_out(number, "[tpl] gigatel_circuit_list_pdf_and_text", ok0)
                 
-                time.sleep(2)
-                
                 ok2 = tpl_circuit_last4_prompt(number, len(session_circuits))
                 self._log_out(number, "[tpl] gigatel_circuit_last4_prompt (combined)", ok2)
             else:
@@ -346,43 +344,22 @@ class WebhookView(View):
                 self._log_out(number, "[tpl] gigatel_circuit_list_interactive", ok)
 
         elif text == "current_ticket":
-            circuits = get_circuits_by_customer(session.customer_id)
+            # API integration: fetch running tickets directly
+            tickets = get_running_tickets(session.customer_company_id)
 
-            valid_circuits = [
-                c for c in circuits
-                if str(c.get("circuitIdStr") or c.get("circuitId", "")).strip()
-                not in ("", "None", "null")
-            ]
-
-            if not valid_circuits:
-                ok = tpl_main_menu(number, session.contact_person_name)
-                self._log_out(number, "[tpl] gigatel_main_menu (no valid circuits for ticket)", ok)
-                return
-
-            session_circuits = [
-                str(c.get("circuitIdStr") or c.get("circuitId", "")).strip()
-                for c in valid_circuits
-            ]
-            session.selected_circuit_id = json.dumps(session_circuits)
-
-            if len(session_circuits) > 10:
-                session.state = "CIRCUIT_SELECT_OR_DIGITS_FOR_TICKET"
-                session.save()
-                ok1 = tpl_circuit_list_interactive(number, valid_circuits[:10], is_for_ticket=True)
-                self._log_out(number, "[tpl] gigatel_circuit_list_interactive (combined, ticket, first 10)", ok1)
-                
-                ok0 = tpl_circuit_list_interactive(number, valid_circuits, is_for_ticket=True)
-                self._log_out(number, "[tpl] gigatel_circuit_list_pdf_and_text (for ticket)", ok0)
-                
-                time.sleep(2)
-                
-                ok2 = tpl_circuit_last4_prompt(number, len(session_circuits))
-                self._log_out(number, "[tpl] gigatel_circuit_last4_prompt (combined, ticket)", ok2)
+            if not tickets:
+                ok = tpl_no_ticket_found(number, "N/A")
+                self._log_out(number, "[tpl] gigatel_no_ticket_found", ok)
             else:
-                session.state = "CIRCUIT_LIST_FOR_TICKET"
-                session.save()
-                ok = tpl_circuit_list_interactive(number, valid_circuits, is_for_ticket=True)
-                self._log_out(number, "[tpl] gigatel_circuit_list_interactive (for ticket)", ok)
+                for t in tickets[:5]:  # limit to max 5 to avoid spam
+                    t_id = str(t.get("transactionNo") or t.get("id", "N/A"))
+                    status = str(t.get("ticketStatus", "Open"))
+                    ok = tpl_current_ticket(number, "N/A", t_id, status, "N/A")
+                    self._log_out(number, "[tpl] gigatel_current_ticket", ok)
+                    time.sleep(1)
+
+            session.state = "MENU"
+            session.save()
 
         elif text == "sales":
 #            logger.info("[STEP] MENU: sales selected (coming soon) — number=%s", number)
@@ -444,7 +421,7 @@ class WebhookView(View):
 
         # Check if open ticket exists
         open_ticket_id = detail.get("ticketNo")
-        ticket_status  = (detail.get("status") or "").strip().lower()
+        ticket_status  = (detail.get("ticketStatus") or "").strip().lower()
 
         CLOSED_STATUSES = {"task complete", "closed"}
         is_open = bool(open_ticket_id) and (ticket_status not in CLOSED_STATUSES)
@@ -531,10 +508,7 @@ class WebhookView(View):
             return
 
         # Case 2: typed last characters directly
-        is_valid_format = (
-            (len(candidate) == 4 and candidate.isdigit()) or
-            (len(candidate) == 5 and candidate[:4].isdigit() and candidate[4].isalnum())
-        )
+        is_valid_format = len(candidate) in (4, 5, 6) and candidate.isalnum()
         if is_valid_format:
             matches = [cid for cid in circuit_list if str(cid).strip().upper().endswith(candidate.upper())]
 
@@ -628,10 +602,7 @@ class WebhookView(View):
     def _step_await_circuit_digits(self, number: str, session: "WhatsAppSession", text: str, for_ticket: bool):
         digits = (text or "").strip()
 
-        is_valid_format = (
-            (len(digits) == 4 and digits.isdigit()) or
-            (len(digits) == 5 and digits[:4].isdigit() and digits[4].isalnum())
-        )
+        is_valid_format = len(digits) in (4, 5, 6) and digits.isalnum()
 
         if not is_valid_format:
             try:
@@ -1247,7 +1218,7 @@ class WebhookView(View):
 #        )
 
         ticket_id = detail.get("ticketNo")
-        ticket_status = detail.get("status") or "Open"
+        ticket_status = detail.get("ticketStatus") or "Open"
         ticket_created_on = detail.get("ticketCreatedOn") or detail.get("ticketAllottedOn") or detail.get("ticketStartTime") or "N/A"
 
         if ticket_id:

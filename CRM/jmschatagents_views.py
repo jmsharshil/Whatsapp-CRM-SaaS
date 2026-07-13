@@ -1928,8 +1928,30 @@ def dashboard_summary(request):
 
 @csrf_exempt
 def customer_list(request):
-    if not _auth(request):
+    # Parse JWT Token manually since this isn't a DRF APIView
+    from rest_framework_simplejwt.authentication import JWTAuthentication
+    from rest_framework.exceptions import AuthenticationFailed
+    
+    auth = JWTAuthentication()
+    try:
+        user_auth_tuple = auth.authenticate(request)
+        if not user_auth_tuple:
+            return _forbidden()
+        user, token = user_auth_tuple
+    except AuthenticationFailed:
         return _forbidden()
+
+    # Get TechProvider's phone_number_id
+    phone_number_id = None
+    org = getattr(user, "organization", None)
+    if not org and hasattr(user, "membership"):
+        org = user.membership.organization
+    
+    if org:
+        try:
+            phone_number_id = org.waba_account.phone_number_id
+        except Exception:
+            pass
 
     search    = request.GET.get("search", "").strip()
     status    = request.GET.get("status", "").strip()
@@ -1939,8 +1961,19 @@ def customer_list(request):
     first_msg_subq = Message.objects.filter(
         customer=OuterRef("pk")
     ).order_by("timestamp").values("content")[:1]
+    
+    from django.db.models import Q
+    base_qs = Customer.objects.all()
+    if phone_number_id:
+        base_qs = base_qs.filter(
+            Q(conversations__client__phone_number_id=phone_number_id) |
+            Q(conversations__phone_number_id=phone_number_id)
+        ).distinct()
+    else:
+        # If no phone_number_id is found for TechProvider, do not leak clients
+        base_qs = Customer.objects.none()
 
-    qs = Customer.objects.annotate(
+    qs = base_qs.annotate(
         total_conversations=Count("conversations", distinct=True),
         total_messages=Count("messages", distinct=True),
         last_seen=Max("messages__timestamp"),
