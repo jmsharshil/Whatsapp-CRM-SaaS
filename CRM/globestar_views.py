@@ -85,11 +85,39 @@ def download_media_from_whatsapp(media_id: str, access_token: str) -> str:
             logger.error("[GLOBESTAR] Failed to download media %s", media_id)
             return ""
             
-        ext = file_res.headers.get("Content-Type", "").split("/")[-1]
-        if not ext or len(ext) > 5:
-            ext = "jpeg"
+        content_type = file_res.headers.get("Content-Type", "").split(";")[0].strip()
+        ext_map = {
+            "image/jpeg": "jpg",
+            "image/jpg": "jpg",
+            "image/png": "png",
+            "image/webp": "webp",
+            "image/gif": "gif",
+            "video/mp4": "mp4",
+            "video/3gpp": "3gp",
+            "video/quicktime": "mov",
+            "audio/mp4": "m4a",
+            "audio/aac": "aac",
+            "audio/amr": "amr",
+            "audio/ogg": "ogg",
+            "audio/opus": "opus",
+            "audio/mpeg": "mp3",
+            "application/pdf": "pdf",
+            "application/msword": "doc",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+            "application/vnd.ms-excel": "xls",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+            "application/vnd.ms-powerpoint": "ppt",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+            "text/plain": "txt",
+        }
+        
+        ext = ext_map.get(content_type)
+        if not ext:
+            ext = content_type.split("/")[-1]
+            if not ext or len(ext) > 6 or not ext.isalnum():
+                ext = "bin"
             
-        file_name = f"globestar_images/{uuid.uuid4().hex}.{ext}"
+        file_name = f"globestar_media/{uuid.uuid4().hex}.{ext}"
         saved_path = default_storage.save(file_name, ContentFile(file_res.content))
         return default_storage.url(saved_path)
     except Exception as e:
@@ -118,20 +146,54 @@ def handle_globestar_message(msg: dict):
     elif msg_type == "button":
         body = msg.get("button", {}).get("payload", "").strip()
         display_body = msg.get("button", {}).get("text", body).strip()
-    elif msg_type == "image":
-        media_id = msg.get("image", {}).get("id")
+    elif msg_type in ["image", "video", "audio", "document", "sticker"]:
+        media_id = msg.get(msg_type, {}).get("id")
         if media_id:
-            token = getattr(settings, "META_PERMANENT_TOKEN", "")
+            gs_phone_id = getattr(settings, 'GLOBESTAR_PHONE_NUMBER_ID', GLOBESTAR_PHONE_NUMBER_ID)
+            client_account_obj = ClientAccount.objects.filter(phone_number_id=gs_phone_id).first()
+            token = client_account_obj.access_token if client_account_obj and client_account_obj.access_token else getattr(settings, "META_PERMANENT_TOKEN", "")
             dl_url = download_media_from_whatsapp(media_id, token)
             if dl_url:
-                body = dl_url
-                display_body = dl_url
+                prefix = f"[{msg_type.upper()}]"
+                body = f"{prefix} {dl_url}"
+                display_body = body
             else:
-                body = "[image]"
-                display_body = "[image]"
+                body = f"[{msg_type}]"
+                display_body = f"[{msg_type}]"
         else:
-            body = "[image]"
-            display_body = "[image]"
+            body = f"[{msg_type}]"
+            display_body = f"[{msg_type}]"
+            
+    elif msg_type == "location":
+        lat = msg.get("location", {}).get("latitude")
+        lng = msg.get("location", {}).get("longitude")
+        name = msg.get("location", {}).get("name", "")
+        address = msg.get("location", {}).get("address", "")
+        loc_str = []
+        if name: loc_str.append(name)
+        if address: loc_str.append(address)
+        loc_str.append(f"https://maps.google.com/?q={lat},{lng}")
+        
+        body = f"📍 Location: " + " - ".join(loc_str)
+        display_body = body
+
+    elif msg_type == "contacts":
+        contacts = msg.get("contacts", [])
+        c_list = []
+        for c in contacts:
+            c_name = c.get("name", {}).get("formatted_name", "Unknown")
+            phones = c.get("phones", [])
+            c_phone = phones[0].get("phone", "") if phones else ""
+            c_list.append(f"{c_name} ({c_phone})" if c_phone else c_name)
+        
+        body = "👤 Contact: " + ", ".join(c_list)
+        display_body = body
+
+    if not display_body:
+        # Fallback for unhandled types (like template, unknown, system) or empty payloads (like OTP autofill missing text)
+        body = f"[{msg_type}] " + json.dumps(msg.get(msg_type, msg))
+        display_body = body
+
 
     logger.info("[GLOBESTAR DEBUG] msg payload: %s", json.dumps(msg))
     logger.info("[GLOBESTAR] from=%s type=%s body=%r display_body=%r id=%s", number, msg_type, body, display_body, msg_id)
