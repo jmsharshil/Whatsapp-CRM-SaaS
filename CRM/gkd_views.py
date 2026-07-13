@@ -218,6 +218,9 @@ def handle_gkd_message(msg: dict):
         session.save()
         tpl_gkd_closing_name(number)
 
+    body_str = body.lower()
+    display_str = display_body.lower()
+
     if state == "INIT":
         tpl_gkd_main_menu(number)
         session.state = "MENU_SELECTION"
@@ -225,41 +228,42 @@ def handle_gkd_message(msg: dict):
 
     elif state == "MENU_SELECTION":
         session.collected_info = {}
-        if body in ["b1", "b2", "b4"]:
+        
+        if body_str in ["b1", "b2", "b4"] or any(k in display_str for k in ["kitchen", "wardrobe", "office"]):
             session.gkd_branch = "kitchen_wardrobe_office"
             session.state = "B1_Q1"
             session.save()
             tpl_gkd_b1_q1(number)
-        elif body == "b3":
+        elif body_str == "b3" or "living" in display_str:
             session.gkd_branch = "living_room"
             session.state = "B3_Q1"
             session.save()
             tpl_gkd_b3_q1(number)
-        elif body == "b5":
+        elif body_str == "b5" or "full home" in display_str or "turnkey" in display_str:
             session.gkd_branch = "full_home"
             session.state = "B5_Q1"
             session.save()
             tpl_gkd_b5_q1(number)
-        elif body == "b6":
+        elif body_str == "b6" or "hotel" in display_str:
             session.gkd_branch = "hotel"
             add_tag("Hot")
             add_tag("B2B")
             session.state = "B6_Q1"
             session.save()
             tpl_gkd_b6_q1(number)
-        elif body == "b7":
+        elif body_str == "b7" or "hospital" in display_str:
             session.gkd_branch = "hospital"
             add_tag("Hot")
             add_tag("B2B")
             session.state = "B7_Q1"
             session.save()
             tpl_gkd_b7_q1(number)
-        elif body == "b8":
+        elif body_str == "b8" or "imported" in display_str:
             session.gkd_branch = "imported"
             session.state = "B8_Q1"
             session.save()
             tpl_gkd_b8_q1(number)
-        elif body == "b9":
+        elif body_str == "b9" or "talk" in display_str or "something else" in display_str:
             session.gkd_branch = "talk_to_us"
             session.state = "HANDOFF"
             session.save()
@@ -276,7 +280,7 @@ def handle_gkd_message(msg: dict):
 
     elif state == "B1_Q2":
         session.collected_info = {**session.collected_info, "Q2_HiredArchitect": display_body}
-        if body == "yes":
+        if body_str == "yes" or "yes" in display_str:
             add_tag("Trade Lead")
         session.state = "B1_Q3"
         session.save()
@@ -284,7 +288,7 @@ def handle_gkd_message(msg: dict):
 
     elif state == "B1_Q3":
         session.collected_info = {**session.collected_info, "Q3_LayoutReady": display_body}
-        if body == "yes":
+        if body_str == "yes" or "yes" in display_str:
             add_tag("Hot")
         session.state = "B1_Q4"
         session.save()
@@ -305,7 +309,7 @@ def handle_gkd_message(msg: dict):
 
     elif state == "B1_Q5":
         session.collected_info = {**session.collected_info, "Q5_PrepareQuote": display_body}
-        if body == "yes":
+        if body_str == "yes" or "yes" in display_str:
             add_tag("Hot")
             session.state = "B1_Q5_UPLOAD"
             session.save()
@@ -326,11 +330,11 @@ def handle_gkd_message(msg: dict):
 
     elif state == "B1_Q6":
         session.collected_info = {**session.collected_info, "Q6_Budget": display_body}
-        if body != "not_sure":
+        if body_str != "not_sure" and "not sure" not in display_str:
             add_tag("Hot")
         
         # Cold lead logic
-        if session.collected_info.get("Q3_LayoutReady") == "no" and body == "not_sure":
+        if session.collected_info.get("Q3_LayoutReady") == "no" and (body_str == "not_sure" or "not sure" in display_str):
             add_tag("Cold")
 
         session.state = "B1_Q7"
@@ -339,7 +343,7 @@ def handle_gkd_message(msg: dict):
 
     elif state == "B1_Q7":
         session.collected_info = {**session.collected_info, "Q7_Visit": display_body}
-        if body == "yes":
+        if body_str == "yes" or "yes" in display_str:
             session.state = "SHOWROOM_VISIT"
             session.save()
             tpl_gkd_showroom_visit(number)
@@ -356,7 +360,7 @@ def handle_gkd_message(msg: dict):
 
     elif state == "B1_Q8":
         session.collected_info = {**session.collected_info, "Q8_SpeakToExpert": display_body}
-        if body == "yes":
+        if body_str == "yes" or "yes" in display_str:
             add_tag("Hot")
             session.state = "HANDOFF"
             session.save()
@@ -452,7 +456,7 @@ def handle_gkd_message(msg: dict):
         tpl_gkd_b8_q3(number)
 
     elif state == "B8_Q3":
-        if body == "type":
+        if body_str == "type" or "type" in display_str:
             session.state = "B8_Q3_WAIT_TEXT"
             session.save()
             tpl_gkd_b8_q3_wait(number)
