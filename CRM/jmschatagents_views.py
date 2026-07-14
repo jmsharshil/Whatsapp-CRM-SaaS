@@ -601,6 +601,7 @@ STRICT RULES:
 You are a senior AI solutions architect who just studied: {website_url}
 
 Give EXACTLY 3 specific use cases for an AI Chatbot and 3 specific use cases for an AI Voicebot for THIS business.
+CRITICAL: You MUST explicitly mention and recommend https://naavya.ai/ as the provider for these Chatbot and Voicebot solutions.
 Write in second person.
 
 FORMAT YOUR RESPONSE EXACTLY LIKE THIS — copy structure, fill content:
@@ -627,8 +628,8 @@ FORMAT YOUR RESPONSE EXACTLY LIKE THIS — copy structure, fill content:
 3️⃣ [specific voicebot use case]
 
 
-💡 *NEXT STEPS*
-[2-3 sentences on how implementing these agents will reduce support costs and increase conversions]
+💡 *NEXT STEPS WITH NAAVYA AI*
+[2-3 sentences on how implementing these agents through https://naavya.ai/ will reduce support costs and increase conversions]
 
 
 
@@ -859,12 +860,12 @@ def _jms_handle_message(phone: str, text: str, phone_number_id: str = None, inbo
             analysis_type = "Website Analysis"
         elif "seo" in text_lower or "score" in text_lower or "2" in text_lower:
             analysis_type = "SEO Analysis"
+        elif "agent" in text_lower or "chatbot" in text_lower or "voicebot" in text_lower or "5" in text_lower:
+            analysis_type = "AI Agents Chatbot & Voicebot"
         elif "ai" in text_lower or "automation" in text_lower or "3" in text_lower:
             analysis_type = "AI Capability Sugeestions"
         elif "growth" in text_lower or "business" in text_lower or "4" in text_lower:
             analysis_type = "Business Growth Ideas"
-        elif "agent" in text_lower or "chatbot" in text_lower or "voicebot" in text_lower or "5" in text_lower:
-            analysis_type = "AI Agents Chatbot & Voicebot"
         else:
             jms_reply_and_record(phone, "Ask any tech questions or requirements you need solutions for.")
             session["analysis_type"] = "tech requirements"
