@@ -986,7 +986,8 @@ def _jms_handle_message(phone: str, text: str, phone_number_id: str = None, inbo
                 "content": (
                     "You are a senior software, AI, and web expert. "
                     "Give answers to user questions and provide solutions to tech requirements. "
-                    "If non-tech questions: 'Sorry, I can't answer that. Please ask any tech related questions.'"
+                    "If the user says 'thank you', 'okay', or basic greetings, reply politely and ask if they need more tech help. "
+                    "If they ask completely unrelated non-tech questions (like cooking, sports, etc.), ONLY then say: 'Sorry, I can't answer that. Please ask any tech-related questions.'"
                 ),
             }
         ] + history + [{"role": "user", "content": text_lower}]
