@@ -470,6 +470,9 @@ def handle_gkd_message(msg: dict):
 
     elif state == "CLOSING_NAME":
         session.collected_info = {**session.collected_info, "Name": display_body}
+        
+        customer_obj.name = display_body
+        customer_obj.save()
             
         session.state = "CLOSING_AREA"
         session.save()
