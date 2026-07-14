@@ -41,7 +41,9 @@ from reportlab.pdfgen import canvas
 # ── Shared send utilities (single import point for all bots) ──────────────────
 from .jmschatagents_utils import (
     send_text,
+    send_template,
     send_buttons,
+    send_url_button,
     send_list,
     send_interactive_list,
     send_image,
@@ -368,6 +370,52 @@ def jms_reply_and_record(phone: str, text: str, msg_id: int | None = None) -> No
     jms_save_session(sess)
 
 
+def jms_button_reply_and_record(phone: str, text: str, buttons: list, msg_id: int | None = None) -> None:
+    print(f"[JMS BUTTON REPLY] phone={phone!r} text={text[:50]!r}")
+    send_buttons(phone, text, buttons)
+    if not msg_id:
+        sess   = jms_get_session(phone)
+        msg_id = sess.get("last_msg_id")
+    if not msg_id:
+        logger.warning("jms_button_reply_and_record: no msg_id for phone=%s", phone)
+        return
+    _save_reply(msg_id, text)
+    sess = jms_get_session(phone)
+    sess["previous_reply"] = text
+    jms_save_session(sess)
+
+
+def jms_url_button_reply_and_record(phone: str, text: str, button_text: str, url: str, msg_id: int | None = None) -> None:
+    print(f"[JMS URL BUTTON REPLY] phone={phone!r} text={text[:50]!r}")
+    send_url_button(phone, text, button_text, url)
+    if not msg_id:
+        sess   = jms_get_session(phone)
+        msg_id = sess.get("last_msg_id")
+    if not msg_id:
+        logger.warning("jms_url_button_reply_and_record: no msg_id for phone=%s", phone)
+        return
+    _save_reply(msg_id, text)
+    sess = jms_get_session(phone)
+    sess["previous_reply"] = text
+    jms_save_session(sess)
+
+
+def jms_template_reply_and_record(phone: str, template_name: str, msg_id: int | None = None) -> None:
+    print(f"[JMS TEMPLATE REPLY] phone={phone!r} template={template_name!r}")
+    send_template(phone, template_name)
+    text_log = f"[Template Sent: {template_name}]"
+    if not msg_id:
+        sess   = jms_get_session(phone)
+        msg_id = sess.get("last_msg_id")
+    if not msg_id:
+        logger.warning("jms_template_reply_and_record: no msg_id for phone=%s", phone)
+        return
+    _save_reply(msg_id, text_log)
+    sess = jms_get_session(phone)
+    sess["previous_reply"] = text_log
+    jms_save_session(sess)
+
+
 # ── Website / SEO / AI analysis ───────────────────────────────────────────────
 
 def analyze_website_and_send_report(phone: str, website_url: str, analysis_choice: str, msg_id: int | None = None):
@@ -548,6 +596,49 @@ STRICT RULES:
 - Be specific to their actual industry
 """
 
+        elif analysis_choice == "AI Agents Chatbot & Voicebot":
+            prompt = f"""
+You are a senior AI solutions architect who just studied: {website_url}
+
+Give EXACTLY 3 specific use cases for an AI Chatbot and 3 specific use cases for an AI Voicebot for THIS business.
+Write in second person.
+
+FORMAT YOUR RESPONSE EXACTLY LIKE THIS — copy structure, fill content:
+
+🎙️ *AI Agents & Voicebot Report*
+
+🔗 *Website:* {website_url}
+
+💬 *AI CHATBOT OPPORTUNITIES*
+
+1️⃣ [specific chatbot use case — e.g. automating lead qualification for their specific service]
+
+2️⃣ [specific chatbot use case]
+
+3️⃣ [specific chatbot use case]
+
+
+📞 *AI VOICEBOT OPPORTUNITIES*
+
+1️⃣ [specific voicebot use case — e.g. 24/7 inbound call answering for their specific industry]
+
+2️⃣ [specific voicebot use case]
+
+3️⃣ [specific voicebot use case]
+
+
+💡 *NEXT STEPS*
+[2-3 sentences on how implementing these agents will reduce support costs and increase conversions]
+
+
+
+STRICT RULES:
+- Use EXACTLY this structure — no deviations
+- No generic advice
+- No **, no ##, no markdown, no HTML
+- Be specific to their actual business operations
+"""
+
         else:
             prompt = f"""
 You are a senior tech consultant reviewing: {website_url}
@@ -592,12 +683,18 @@ STRICT RULES: No **, no ##, no markdown, no HTML.
 
         session = jms_get_session(phone)
         if is_first_response:
-            jms_reply_and_record(phone, "Would you like to do more research on this topic?", msg_id=msg_id)
+            jms_button_reply_and_record(
+                phone, 
+                "Would you like to do more research on this topic?", 
+                [{"id": "Yes", "title": "Yes"}, {"id": "No", "title": "No"}],
+                msg_id=msg_id
+            )
             session["stage"] = "post_report"
         else:
-            jms_reply_and_record(
+            jms_button_reply_and_record(
                 phone,
                 "Would you like to schedule a 15 minute call with our tech consultant?",
+                [{"id": "Yes", "title": "Yes"}, {"id": "No", "title": "No"}],
                 msg_id=msg_id,
             )
             session["stage"] = "schedule_call"
@@ -672,7 +769,7 @@ def get_tech_qna_history(phone, limit=10):
         return []
 
 
-def _jms_handle_message(phone: str, text: str, phone_number_id: str = None):
+def _jms_handle_message(phone: str, text: str, phone_number_id: str = None, inbound_msg_id: int = None):
     """
     Core JMS-Tech conversation state machine.
     Called once per inbound message after routing decides this is a JMS session.
@@ -680,6 +777,11 @@ def _jms_handle_message(phone: str, text: str, phone_number_id: str = None):
     global is_first_response
 
     existing_session = jms_sessions.get(_jms_sess_key(phone))
+    
+    if inbound_msg_id and existing_session:
+        existing_session["last_msg_id"] = inbound_msg_id
+        existing_session["last_user_text"] = text
+        jms_sessions.set(_jms_sess_key(phone), existing_session, timeout=JMS_SESSION_TTL)
 
     if not existing_session:
         if not is_trigger_message(text):
@@ -712,28 +814,12 @@ def _jms_handle_message(phone: str, text: str, phone_number_id: str = None):
         is_first_response = True
 
         session  = jms_get_session(phone)
-        user_msg = save_message(phone=phone, content=text, reply_of=None, phone_number_id=phone_number_id)
-        if user_msg:
-            session["last_msg_id"] = user_msg.id
+        if inbound_msg_id:
+            session["last_msg_id"] = inbound_msg_id
         session["last_user_text"] = text
         jms_save_session(session)
 
-        welcome_text = (
-            "Welcome to JMS Tech. I am your personal tech consultant.\n\n"
-            "At JMS Tech, we help small and medium businesses grow with smart tech, "
-            "AI automation, modern websites, and actionable SEO insights tailored to your goals.\n\n"
-        )
-        jms_reply_and_record(phone, welcome_text)
-        time.sleep(2)
-        jms_reply_and_record(
-            phone,
-            "Our JMS AI Assistant can help you with following:\n\n"
-            "— Generate your website analysis report (type \"Website\" for this)\n"
-            "— Check your SEO score or give suggestions (type \"SEO\" for this)\n"
-            "— Give AI Capability/Automation suggestions (type \"AI\" for this)\n"
-            "— Generate great business growth idea (type \"Growth\" for this)\n"
-            "— Solution to your tech requirements (ask your question / state your requirement)",
-        )
+        jms_template_reply_and_record(phone, "jms_ai_assistant_menu")
         session["stage"] = "select_analysis"
         jms_save_session(session)
         return HttpResponse("Session reset", status=200)
@@ -742,9 +828,8 @@ def _jms_handle_message(phone: str, text: str, phone_number_id: str = None):
     session  = jms_get_session(phone)
     raw_text = text.strip()
 
-    user_msg = save_message(phone=phone, content=raw_text, reply_of=None, phone_number_id=phone_number_id)
-    if user_msg:
-        session["last_msg_id"] = user_msg.id
+    if inbound_msg_id:
+        session["last_msg_id"] = inbound_msg_id
     session["last_user_text"] = raw_text
     jms_save_session(session)
 
@@ -756,22 +841,7 @@ def _jms_handle_message(phone: str, text: str, phone_number_id: str = None):
         if text_lower not in SESSION_RESET_KEYWORDS:
             return HttpResponse("Bot not triggered", status=200)
 
-        welcome_text = (
-            "Welcome to JMS Tech. I am your personal tech consultant.\n\n"
-            "At JMS Tech, we help small and medium businesses grow with smart tech, "
-            "AI automation, modern websites, and actionable SEO insights tailored to your goals.\n\n"
-        )
-        jms_reply_and_record(phone, welcome_text)
-        time.sleep(2)
-        jms_reply_and_record(
-            phone,
-            "Our JMS AI Assistant can help you with following:\n\n"
-            "— Generate your website analysis report (type \"Website\" for this)\n"
-            "— Check your SEO score or give suggestions (type \"SEO\" for this)\n"
-            "— Give AI Capability/Automation suggestions (type \"AI\" for this)\n"
-            "— Generate great business growth idea (type \"Growth\" for this)\n"
-            "— Solution to your tech requirements (ask your question / state your requirement)",
-        )
+        jms_template_reply_and_record(phone, "jms_ai_assistant_menu")
         session["stage"] = "select_analysis"
         jms_save_session(session)
         return HttpResponse("Sent welcome + options", status=200)
@@ -793,6 +863,8 @@ def _jms_handle_message(phone: str, text: str, phone_number_id: str = None):
             analysis_type = "AI Capability Sugeestions"
         elif "growth" in text_lower or "business" in text_lower or "4" in text_lower:
             analysis_type = "Business Growth Ideas"
+        elif "agent" in text_lower or "chatbot" in text_lower or "voicebot" in text_lower or "5" in text_lower:
+            analysis_type = "AI Agents Chatbot & Voicebot"
         else:
             jms_reply_and_record(phone, "Ask any tech questions or requirements you need solutions for.")
             session["analysis_type"] = "tech requirements"
@@ -805,7 +877,10 @@ def _jms_handle_message(phone: str, text: str, phone_number_id: str = None):
                 phone,
                 "❌ Invalid selection.\n\nPlease reply with exactly one of the options:\n"
                 "— Generate your website analysis report\n"
-                "— Check your SEO score or give suggestions",
+                "— Check your SEO score or give suggestions\n"
+                "— Give AI Capability/Automation suggestions\n"
+                "— Generate great business growth idea\n"
+                "— AI Agents chatbot and voicebot",
             )
             return HttpResponse("Invalid analysis selection", status=200)
 
@@ -855,15 +930,17 @@ def _jms_handle_message(phone: str, text: str, phone_number_id: str = None):
                 daemon=True,
             ).start()
             time.sleep(10)
-            jms_reply_and_record(
+            jms_button_reply_and_record(
                 phone,
                 "Would you like to schedule a 15 minute call with our tech consultant?",
+                [{"id": "Yes", "title": "Yes"}, {"id": "No", "title": "No"}],
                 msg_id=yes_msg_id,
             )
         elif text_lower in ["no", "nahi", "nathi", "na"]:
-            jms_reply_and_record(
+            jms_button_reply_and_record(
                 phone,
                 "No problem! Would you like to schedule a 15 minute call with our tech consultant?",
+                [{"id": "Yes", "title": "Yes"}, {"id": "No", "title": "No"}],
             )
         else:
             jms_reply_and_record(phone, "Please provide more details about what you exactly want to know.")
@@ -878,10 +955,11 @@ def _jms_handle_message(phone: str, text: str, phone_number_id: str = None):
     # ── Stage: schedule_call ──────────────────────────────────────────────────
     if stage == "schedule_call":
         if "yes" in text_lower:
-            jms_reply_and_record(
+            jms_url_button_reply_and_record(
                 phone,
-                "✅ Wonderful! You can schedule a call according to your convenient time through this link:\n"
-                "https://bit.ly/45d8gnR",
+                "✅ Wonderful! You can schedule a call according to your convenient time through the link below:",
+                "Schedule Call 📅",
+                "https://bit.ly/45d8gnR"
             )
             time.sleep(2)
             send_document(
@@ -969,6 +1047,7 @@ PRICING RULES:
    You can also visit: https://jmstechnova.com"
 - Never guess or mention any JMS TechNova plan/cost/amount
 Rules:
+- Always provide answers and guidance strictly according to Meta's latest updated official documentation, pricing, and policies.
 - Never mention competitor BSPs or tools negatively.
 - Always encourage users to visit https://jmstechnova.com or our team will contact them soon for further assistance.
 - If a question is completely unrelated to WhatsApp/Meta/messaging, politely redirect back.
@@ -1048,18 +1127,20 @@ def _wa_clean_text(text: str) -> str:
     return text.strip()
 
 
-def _handle_wa_bot(phone: str, text: str, phone_number_id: str = None) -> bool:
+def _handle_wa_bot(phone: str, text: str, phone_number_id: str = None, inbound_msg_id: int = None) -> bool:
     """Handle WhatsApp-API assistant bot. Returns True if message was handled."""
     text_lower = text.strip().lower()
 
     # ── Trigger / reset ───────────────────────────────────────────────────────
     if text_lower == WA_BOT_TRIGGER:
         sess = {"phone": phone, "stage": "active", "history": []}
+        if inbound_msg_id:
+            sess["last_msg_id"] = inbound_msg_id
         wa_save_session(sess)
 
         intro = (
             "👋 Welcome to *JMS TechNova's* WhatsApp Business API Assistant!\n\n"
-            "JMS TechNova is an *Official Meta Tech Provider* 🔵 — giving you direct, "
+            "JMS TechNova is an *Official Meta Tech Provider* — giving you direct, "
             "compliant access to the WhatsApp Cloud API.\n\n"
             "👇 Tap *View Topics* below to choose what you'd like to know:"
         )
@@ -1081,6 +1162,7 @@ def _handle_wa_bot(phone: str, text: str, phone_number_id: str = None) -> bool:
             button_label="View Topics",
             sections=sections,
         )
+        _save_reply(inbound_msg_id, "[List Sent: View Topics] " + intro)
         return True
 
     # ── Only proceed if session already exists and is active ──────────────────
@@ -1091,6 +1173,7 @@ def _handle_wa_bot(phone: str, text: str, phone_number_id: str = None) -> bool:
     # ── Farewell ──────────────────────────────────────────────────────────────
     if text_lower in WA_BOT_FAREWELL_WORDS:
         send_text(phone, _WA_FAREWELL_MSG)
+        _save_reply(sess.get("last_msg_id"), _WA_FAREWELL_MSG)
         sess["stage"]   = "idle"
         sess["history"] = []
         wa_save_session(sess)
@@ -1108,6 +1191,7 @@ def _handle_wa_bot(phone: str, text: str, phone_number_id: str = None) -> bool:
     wa_save_session(sess)
 
     send_text(phone, reply)
+    _save_reply(sess.get("last_msg_id"), reply)
     return True
 
 
@@ -1428,6 +1512,83 @@ BOT_REGISTRY = {
     "12": ("startup",      "🌱  Startup Mentor",     _startup_ask),
 }
 
+SUB_MENU_REGISTRY = {
+    "travel":       [{"id": "sub_1", "title": "Flight & Hotel"}, {"id": "sub_2", "title": "Visa & Passport"}, {"id": "sub_3", "title": "Holiday Packages"}],
+    "insurance":    [{"id": "sub_1", "title": "Auto Insurance"}, {"id": "sub_2", "title": "Health Insurance"}, {"id": "sub_3", "title": "Life Insurance"}],
+    "healthcare":   [{"id": "sub_1", "title": "Book Appointment"}, {"id": "sub_2", "title": "Pharmacy Delivery"}, {"id": "sub_3", "title": "Lab Reports"}],
+    "education":    [{"id": "sub_1", "title": "Admissions"}, {"id": "sub_2", "title": "Courses & Fees"}, {"id": "sub_3", "title": "Exam Results"}],
+    "realestate":   [{"id": "sub_1", "title": "Buy/Rent Property"}, {"id": "sub_2", "title": "Commercial Prop."}, {"id": "sub_3", "title": "Property Value"}],
+    "hospitality":  [{"id": "sub_1", "title": "Room Booking"}, {"id": "sub_2", "title": "Restaurant Resv."}, {"id": "sub_3", "title": "Room Service"}],
+    "business":     [{"id": "sub_1", "title": "Business Planning"}, {"id": "sub_2", "title": "Legal & Compl."}, {"id": "sub_3", "title": "Finance & Acct."}],
+    "recruitment":  [{"id": "sub_1", "title": "Job Openings"}, {"id": "sub_2", "title": "Submit Resume"}, {"id": "sub_3", "title": "Interview Prep"}],
+    "customer":     [{"id": "sub_1", "title": "Order & Delivery"}, {"id": "sub_2", "title": "Returns & Refunds"}, {"id": "sub_3", "title": "Account & Billing"}],
+    "marketing":    [{"id": "sub_1", "title": "Social Media"}, {"id": "sub_2", "title": "Email Campaign"}, {"id": "sub_3", "title": "SEO Services"}],
+    "entrepreneur": [{"id": "sub_1", "title": "Idea Validation"}, {"id": "sub_2", "title": "Find Co-founder"}, {"id": "sub_3", "title": "Funding & Pitch"}],
+    "startup":      [{"id": "sub_1", "title": "Incubator Info"}, {"id": "sub_2", "title": "Business Plan"}, {"id": "sub_3", "title": "Mentor Connect"}],
+}
+
+SUB_SUB_MENU_REGISTRY = {
+    "travel": {
+        "sub_1": [{"id": "ss_1", "title": "Domestic Flights"}, {"id": "ss_2", "title": "Intl. Flights"}, {"id": "ss_3", "title": "Resorts & Hotels"}],
+        "sub_2": [{"id": "ss_4", "title": "US/UK Visas"}, {"id": "ss_5", "title": "Schengen Visa"}, {"id": "ss_6", "title": "E-Visa Assist"}],
+        "sub_3": [{"id": "ss_7", "title": "Honeymoon Pkgs"}, {"id": "ss_8", "title": "Family Trip"}, {"id": "ss_9", "title": "Solo Backpacking"}],
+    },
+    "insurance": {
+        "sub_1": [{"id": "ss_10", "title": "Car Insurance"}, {"id": "ss_11", "title": "Bike Insurance"}, {"id": "ss_12", "title": "Comm. Vehicles"}],
+        "sub_2": [{"id": "ss_13", "title": "Individual Plan"}, {"id": "ss_14", "title": "Family Floater"}, {"id": "ss_15", "title": "Senior Citizen"}],
+        "sub_3": [{"id": "ss_16", "title": "Term Life"}, {"id": "ss_17", "title": "Whole Life"}, {"id": "ss_18", "title": "Pension Plans"}],
+    },
+    "healthcare": {
+        "sub_1": [{"id": "ss_19", "title": "Gen. Physician"}, {"id": "ss_20", "title": "Specialist Doc"}, {"id": "ss_21", "title": "Dental Checkup"}],
+        "sub_2": [{"id": "ss_22", "title": "Rx Refill"}, {"id": "ss_23", "title": "OTC Meds"}, {"id": "ss_24", "title": "Ayurveda/Homeo"}],
+        "sub_3": [{"id": "ss_25", "title": "Blood Tests"}, {"id": "ss_26", "title": "Full Body Check"}, {"id": "ss_27", "title": "X-Ray & Scans"}],
+    },
+    "education": {
+        "sub_1": [{"id": "ss_28", "title": "School Admission"}, {"id": "ss_29", "title": "College Admission"}, {"id": "ss_30", "title": "Overseas Edu."}],
+        "sub_2": [{"id": "ss_31", "title": "Science/Tech"}, {"id": "ss_32", "title": "Arts & Commerce"}, {"id": "ss_33", "title": "Vocational Tr."}],
+        "sub_3": [{"id": "ss_34", "title": "Board Exams"}, {"id": "ss_35", "title": "University Sem"}, {"id": "ss_36", "title": "Comp. Exams"}],
+    },
+    "realestate": {
+        "sub_1": [{"id": "ss_37", "title": "Flats/Apartments"}, {"id": "ss_38", "title": "Villas & Houses"}, {"id": "ss_39", "title": "Plots & Land"}],
+        "sub_2": [{"id": "ss_40", "title": "Office Space"}, {"id": "ss_41", "title": "Retail Shops"}, {"id": "ss_42", "title": "Warehouses"}],
+        "sub_3": [{"id": "ss_43", "title": "Prop. Appraisal"}, {"id": "ss_44", "title": "Title Check"}, {"id": "ss_45", "title": "Market Trends"}],
+    },
+    "hospitality": {
+        "sub_1": [{"id": "ss_46", "title": "Standard Rooms"}, {"id": "ss_47", "title": "Luxury Suites"}, {"id": "ss_48", "title": "Hostels & B&B"}],
+        "sub_2": [{"id": "ss_49", "title": "Fine Dining"}, {"id": "ss_50", "title": "Casual Dining"}, {"id": "ss_51", "title": "Buffet Options"}],
+        "sub_3": [{"id": "ss_52", "title": "Food Order"}, {"id": "ss_53", "title": "Laundry/Cleaning"}, {"id": "ss_54", "title": "Spa & Wellness"}],
+    },
+    "business": {
+        "sub_1": [{"id": "ss_55", "title": "Startup Strategy"}, {"id": "ss_56", "title": "Growth Planning"}, {"id": "ss_57", "title": "Exit Strategy"}],
+        "sub_2": [{"id": "ss_58", "title": "Co. Registration"}, {"id": "ss_59", "title": "Tax Compliance"}, {"id": "ss_60", "title": "Contracts"}],
+        "sub_3": [{"id": "ss_61", "title": "Bookkeeping"}, {"id": "ss_62", "title": "Audits"}, {"id": "ss_63", "title": "Fundraising"}],
+    },
+    "recruitment": {
+        "sub_1": [{"id": "ss_64", "title": "IT & Software"}, {"id": "ss_65", "title": "Sales & Mktg."}, {"id": "ss_66", "title": "HR & Admin"}],
+        "sub_2": [{"id": "ss_67", "title": "Upload CV"}, {"id": "ss_68", "title": "Video Profile"}, {"id": "ss_69", "title": "Cover Letter"}],
+        "sub_3": [{"id": "ss_70", "title": "Mock Interviews"}, {"id": "ss_71", "title": "Aptitude Tests"}, {"id": "ss_72", "title": "Salary Negot."}],
+    },
+    "customer": {
+        "sub_1": [{"id": "ss_73", "title": "Track Order"}, {"id": "ss_74", "title": "Delayed Delivery"}, {"id": "ss_75", "title": "Wrong Item"}],
+        "sub_2": [{"id": "ss_76", "title": "Return Policy"}, {"id": "ss_77", "title": "Refund Status"}, {"id": "ss_78", "title": "Exchange Item"}],
+        "sub_3": [{"id": "ss_79", "title": "Login Issues"}, {"id": "ss_80", "title": "Update Billing"}, {"id": "ss_81", "title": "Delete Account"}],
+    },
+    "marketing": {
+        "sub_1": [{"id": "ss_82", "title": "Insta & FB"}, {"id": "ss_83", "title": "LinkedIn Ads"}, {"id": "ss_84", "title": "Content Creation"}],
+        "sub_2": [{"id": "ss_85", "title": "Newsletters"}, {"id": "ss_86", "title": "Drip Campaigns"}, {"id": "ss_87", "title": "Lead Nurturing"}],
+        "sub_3": [{"id": "ss_88", "title": "On-page SEO"}, {"id": "ss_89", "title": "Backlink Bldg."}, {"id": "ss_90", "title": "Local SEO"}],
+    },
+    "entrepreneur": {
+        "sub_1": [{"id": "ss_91", "title": "Market Research"}, {"id": "ss_92", "title": "Competitor Anal."}, {"id": "ss_93", "title": "MVP Testing"}],
+        "sub_2": [{"id": "ss_94", "title": "Tech Co-founder"}, {"id": "ss_95", "title": "Sales Co-founder"}, {"id": "ss_96", "title": "Networking"}],
+        "sub_3": [{"id": "ss_97", "title": "Seed Funding"}, {"id": "ss_98", "title": "Angel Investors"}, {"id": "ss_99", "title": "Pitch Deck Prep"}],
+    },
+    "startup": {
+        "sub_1": [{"id": "ss_100", "title": "Y-Combinator"}, {"id": "ss_101", "title": "Govt. Grants"}, {"id": "ss_102", "title": "Local Hubs"}],
+        "sub_2": [{"id": "ss_103", "title": "Financial Model"}, {"id": "ss_104", "title": "Go-to-Market"}, {"id": "ss_105", "title": "Revenue Streams"}],
+        "sub_3": [{"id": "ss_106", "title": "Industry Experts"}, {"id": "ss_107", "title": "Alumni Network"}, {"id": "ss_108", "title": "1-on-1 Sessions"}],
+    },
+}
 
 def _build_menu(lang: str = "en") -> str:
     lines = ["🤖 *Welcome to Technova AI!*\n", "Please select a domain:\n"]
@@ -1521,26 +1682,148 @@ def _route_message(phone: str, user_text: str, sess: dict, msg_id: int | None):
             return
 
         entry = BOT_REGISTRY.get(text_lower)
+        if not entry:
+            # Fallback if text_lower is the human-readable title or bot_key
+            entry = next((v for k, v in BOT_REGISTRY.items() if text_lower in {k, v[0].lower(), v[1].lower()}), None)
+            
         if entry:
             bot_key, label, _ = entry
             sess["active_bot"]   = bot_key
             sess["active_label"] = label
-            sess["stage"]        = "chat"
+            
+            # Transition to sub_menu
+            sess["stage"] = "sub_menu"
+            ind_save_session(sess)
+            
+            sub_options = SUB_MENU_REGISTRY.get(bot_key, [])
+            if sub_options:
+                text_msg = t(
+                    sess,
+                    f"Great! You've selected *{label}*. Please choose a specific topic:",
+                    f"बढ़िया! आपने *{label}* चुना है। कृपया एक विशिष्ट विषय चुनें:",
+                    f"સરસ! તમે *{label}* પસંદ કર્યો. કૃપા કરીને ચોક્કસ વિષય પસંદ કરો:",
+                )
+                send_buttons(phone, text_msg, sub_options)
+                _save_reply(msg_id, f"[Sub-menu Sent: {label}]")
+            else:
+                # Fallback
+                sess["stage"] = "chat"
+                sess["chat_history"] = []
+                ind_save_session(sess)
+                greeting = t(
+                    sess,
+                    f"Great! You've selected *{label}*. How can I help you today?",
+                    f"बढ़िया! आपने *{label}* चुना है। मैं आपकी कैसे मदद कर सकता हूँ?",
+                    f"સરસ! તમે *{label}* પસંદ કર્યો. હું તમને કેવી રીતે મદદ કરી શકું?",
+                )
+                ind_reply_and_record(phone, greeting, msg_id)
+        else:
+            ind_reply_and_record(phone, _build_menu(sess.get("lang", "en")), msg_id)
+        return
+
+    # ── 3.5 Sub-Menu ──────────────────────────────────────────────────────────
+    if stage == "sub_menu":
+        bot_key = sess.get("active_bot")
+        sub_options = SUB_MENU_REGISTRY.get(bot_key, [])
+        
+        # Check if user typed one of the sub-option ids or titles
+        selected_sub = next((opt for opt in sub_options if text_lower in {opt["id"].lower(), opt["title"].lower()}), None)
+        
+        if selected_sub:
+            sub_id = selected_sub["id"]
+            sess["active_sub_bot"] = selected_sub["title"]
+            sess["active_sub_id"] = sub_id
+            
+            ss_options = SUB_SUB_MENU_REGISTRY.get(bot_key, {}).get(sub_id, [])
+            
+            if ss_options:
+                sess["stage"] = "sub_sub_menu"
+                ind_save_session(sess)
+                
+                label = sess.get("active_label", "")
+                sub_title = selected_sub["title"]
+                text_msg = t(
+                    sess,
+                    f"You chose *{sub_title}*. Please select a specific area:",
+                    f"आपने *{sub_title}* चुना है। कृपया एक विशिष्ट क्षेत्र चुनें:",
+                    f"તમે *{sub_title}* પસંદ કર્યું. કૃપા કરીને ચોક્કસ વિસ્તાર પસંદ કરો:",
+                )
+                send_buttons(phone, text_msg, ss_options)
+                _save_reply(msg_id, f"[Sub-Sub-Menu Sent: {sub_title}]")
+            else:
+                # Fallback directly to chat
+                sess["stage"] = "chat"
+                sess["chat_history"] = []
+                
+                if bot_key == "startup":
+                    sess["startup_stage"]      = "questionnaire"
+                    sess["startup_last_asked"] = None
+                    sess["startup_profile"]    = {}
+                    
+                ind_save_session(sess)
+                
+                label = sess.get("active_label", "")
+                sub_title = selected_sub["title"]
+                greeting = t(
+                    sess,
+                    f"You chose *{sub_title}* under *{label}*. How can I help you with this today?",
+                    f"आपने *{label}* के तहत *{sub_title}* चुना है। मैं इसमें आपकी कैसे मदद कर सकता हूँ?",
+                    f"તમે *{label}* હેઠળ *{sub_title}* પસંદ કર્યું. હું તમને આમાં કેવી રીતે મદદ કરી શકું?",
+                )
+                ind_reply_and_record(phone, greeting, msg_id)
+        else:
+            if sub_options:
+                text_msg = t(
+                    sess,
+                    "Please select one of the specific topics using the buttons below:",
+                    "कृपया नीचे दिए गए बटन का उपयोग करके किसी विशिष्ट विषय का चयन करें:",
+                    "કૃપા કરીને નીચેના બટનોનો ઉપયોગ કરીને ચોક્કસ વિષય પસંદ કરો:",
+                )
+                send_buttons(phone, text_msg, sub_options)
+                _save_reply(msg_id, "[Sub-menu Re-sent]")
+        return
+
+    # ── 3.7 Sub-Sub-Menu ──────────────────────────────────────────────────────
+    if stage == "sub_sub_menu":
+        bot_key = sess.get("active_bot")
+        sub_id = sess.get("active_sub_id")
+        
+        ss_options = SUB_SUB_MENU_REGISTRY.get(bot_key, {}).get(sub_id, [])
+        
+        selected_ss = next((opt for opt in ss_options if text_lower in {opt["id"].lower(), opt["title"].lower()}), None)
+        
+        if selected_ss:
+            sess["active_ss_bot"] = selected_ss["title"]
+            sess["stage"] = "chat"
             sess["chat_history"] = []
+            
             if bot_key == "startup":
                 sess["startup_stage"]      = "questionnaire"
                 sess["startup_last_asked"] = None
                 sess["startup_profile"]    = {}
+                
             ind_save_session(sess)
+            
+            label = sess.get("active_label", "")
+            sub_title = sess.get("active_sub_bot", "")
+            ss_title = selected_ss["title"]
             greeting = t(
                 sess,
-                f"Great! You've selected *{label}*. How can I help you today?",
-                f"बढ़िया! आपने *{label}* चुना है। मैं आपकी कैसे मदद कर सकता हूँ?",
-                f"સરસ! તમે *{label}* પસંદ કર્યો. હું તમને કેવી રીતે મદદ કરી શકું?",
+                f"You selected *{ss_title}* in *{sub_title}*. How can I assist you with this?",
+                f"आपने *{sub_title}* में *{ss_title}* चुना है। मैं इसमें आपकी कैसे मदद कर सकता हूँ?",
+                f"તમે *{sub_title}* માં *{ss_title}* પસંદ કર્યું. હું આમાં તમારી કેવી રીતે મદદ કરી શકું?",
             )
             ind_reply_and_record(phone, greeting, msg_id)
         else:
-            ind_reply_and_record(phone, _build_menu(sess.get("lang", "en")), msg_id)
+            if ss_options:
+                text_msg = t(
+                    sess,
+                    "Please select one of the specific areas using the buttons below:",
+                    "कृपया नीचे दिए गए बटन का उपयोग करके किसी विशिष्ट क्षेत्र का चयन करें:",
+                    "કૃપા કરીને નીચેના બટનોનો ઉપયોગ કરીને ચોક્કસ વિસ્તાર પસંદ કરો:",
+                )
+                send_buttons(phone, text_msg, ss_options)
+                _save_reply(msg_id, "[Sub-Sub-Menu Re-sent]")
         return
 
     # ── 4. Active chat ────────────────────────────────────────────────────────
@@ -1601,7 +1884,14 @@ def _route_message(phone: str, user_text: str, sess: dict, msg_id: int | None):
                 raw_reply = _startup_ask(user_text, history=history, phone=phone)
                 sess      = ind_get_session(phone)   # re-fetch; _startup_ask may mutate it
             else:
-                raw_reply = ask_fn(_inject_lang(user_text, lang), history=history)
+                sub_bot = sess.get("active_sub_bot")
+                ss_bot = sess.get("active_ss_bot")
+                ctx_text = user_text
+                if sub_bot and ss_bot:
+                    ctx_text = f"[FOCUS: {sub_bot} -> {ss_bot}]\nUser message: {user_text}"
+                elif sub_bot:
+                    ctx_text = f"[FOCUS ON SPECIFIC SUB-TOPIC: {sub_bot}]\nUser message: {user_text}"
+                raw_reply = ask_fn(_inject_lang(ctx_text, lang), history=history)
         except Exception as e:
             logger.exception("LLM error bot=%s phone=%s: %s", bot_key, phone, e)
             raw_reply = "Sorry, something went wrong. Please try again."
@@ -1983,20 +2273,17 @@ def customer_list(request):
             distinct=True,
         ),
         first_message_content=Subquery(first_msg_subq),
-        has_hi_trigger=Count(
-            "messages",
+        last_hi_id=Max(
+            "messages__id",
             filter=Q(messages__content__in=["hi", "Hi", "HI", "hello", "Hello", "hey", "Hey"]),
-            distinct=True,
         ),
-        has_jms_trigger=Count(
-            "messages",
+        last_jms_id=Max(
+            "messages__id",
             filter=Q(messages__content__iexact="jms"),
-            distinct=True,
         ),
-        has_wa_trigger=Count(
-            "messages",
+        last_wa_id=Max(
+            "messages__id",
             filter=Q(messages__content__iexact="whatsapp"),
-            distinct=True,
         ),
     ).order_by("-id")
 
@@ -2014,13 +2301,17 @@ def customer_list(request):
         if status and customer_status != status:
             continue
 
-        first_content = (c.first_message_content or "").lower().strip()
-        if first_content in {"hi", "hello", "hey"} or c.has_hi_trigger > 0:
-            bot_source = "industry"
-        elif first_content == "jms" or c.has_jms_trigger > 0:
-            bot_source = "jms"
-        elif first_content == "whatsapp" or c.has_wa_trigger > 0:
-            bot_source = "whatsapp"
+        # Determine latest bot based on max message ID of triggers
+        bots = []
+        if c.last_hi_id:
+            bots.append((c.last_hi_id, "industry"))
+        if c.last_jms_id:
+            bots.append((c.last_jms_id, "jms"))
+        if c.last_wa_id:
+            bots.append((c.last_wa_id, "whatsapp"))
+        
+        if bots:
+            bot_source = max(bots, key=lambda x: x[0])[1]
         else:
             bot_source = "unknown"
 

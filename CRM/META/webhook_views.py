@@ -145,11 +145,14 @@ def _extract_text_for_routing(msg: dict) -> str | None:
         interactive = msg.get("interactive", {})
         itype = interactive.get("type", "")
         if itype == "button_reply":
-            return interactive.get("button_reply", {}).get("id", "").strip()
+            return (
+                interactive.get("button_reply", {}).get("title", "").strip()
+                or interactive.get("button_reply", {}).get("id", "").strip()
+            )
         if itype == "list_reply":
             return (
-                interactive.get("list_reply", {}).get("id", "").strip()
-                or interactive.get("list_reply", {}).get("title", "").strip()
+                interactive.get("list_reply", {}).get("title", "").strip()
+                or interactive.get("list_reply", {}).get("id", "").strip()
             )
     if msg_type == "image":
         return msg.get("image", {}).get("caption", "").strip() or None
@@ -233,27 +236,28 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
     if skip_all:
         return
 
+    # ── ALWAYS Save Inbound Message ───────────────────────────────────────────
+    contacts = value.get("contacts", [])
+    client_name = (
+        contacts[0].get("profile", {}).get("name", "")
+        if contacts
+        else ""
+    )
+    db_msg = save_message(
+        phone=raw_phone,
+        content=text,
+        reply_of=None,
+        client_name=client_name,
+        phone_number_id=phone_number_id,
+    )
+    inbound_msg_id = db_msg.id if db_msg else None
+
     # ── Dispatch ──────────────────────────────────────────────────────────
     if go_industry:
         logger.info("[Webhook/JMS] → INDUSTRY BOT for %s", raw_phone)
         try:
-            contacts = value.get("contacts", [])
-            client_name = (
-                contacts[0].get("profile", {}).get("name", "")
-                if contacts
-                else ""
-            )
-            db_msg = save_message(
-                phone=raw_phone,
-                content=text,
-                reply_of=None,
-                client_name=client_name,
-                phone_number_id=phone_number_id,
-            )
-            ind_msg_id = db_msg.id if db_msg else None
-
             ind_sess = ind_get_session(raw_phone)
-            ind_sess["last_msg_id"] = ind_msg_id
+            ind_sess["last_msg_id"] = inbound_msg_id
             ind_sess["last_user_text"] = text
             ind_save_session(ind_sess)
 
@@ -269,13 +273,13 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
         ):
             logger.info("[Webhook/JMS] → WHATSAPP BOT for %s", raw_phone)
             try:
-                _handle_wa_bot(raw_phone, text, phone_number_id)
+                _handle_wa_bot(raw_phone, text, phone_number_id, inbound_msg_id=inbound_msg_id)
             except Exception as e:
                 logger.exception("WhatsApp bot error: %s", e)
         else:
             logger.info("[Webhook/JMS] → JMS-TECH BOT for %s", raw_phone)
             try:
-                _jms_handle_message(raw_phone, text, phone_number_id)
+                _jms_handle_message(raw_phone, text, phone_number_id, inbound_msg_id=inbound_msg_id)
             except Exception as e:
                 logger.exception("JMS-Tech bot error: %s", e)
 

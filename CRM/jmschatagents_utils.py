@@ -157,6 +157,57 @@ def send_text(to: str, text: str):
     return SEND_QUEUE.enqueue(payload)
 
 
+def send_template(to: str, template_name: str, language_code: str = "en", components: list = None):
+    """Send a WhatsApp template message via Meta Cloud API."""
+    if not to:
+        logger.error("send_template: missing recipient")
+        return
+    to = to.lstrip("+")
+    template_data = {
+        "name": template_name,
+        "language": {"code": language_code}
+    }
+    if components:
+        template_data["components"] = components
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": to,
+        "type": "template",
+        "template": template_data,
+    }
+    return SEND_QUEUE.enqueue(payload)
+
+
+def send_url_button(to: str, body_text: str, button_text: str, url: str):
+    """
+    Send WhatsApp interactive CTA URL button.
+    """
+    if not to:
+        logger.error("send_url_button: missing recipient")
+        return
+    to = to.lstrip("+")
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": to,
+        "type": "interactive",
+        "interactive": {
+            "type": "cta_url",
+            "body": {"text": body_text},
+            "action": {
+                "name": "cta_url",
+                "parameters": {
+                    "display_text": button_text,
+                    "url": url
+                }
+            }
+        }
+    }
+    return SEND_QUEUE.enqueue(payload)
+
+
 def send_buttons(to: str, body_text: str, buttons: list):
     """
     Send WhatsApp interactive reply buttons (max 3).

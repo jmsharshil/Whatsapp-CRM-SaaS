@@ -1113,6 +1113,24 @@ class TemplateSyncView(APIView):
         if resp.ok:
             new_status = data.get("status", template.status).upper()
             template.status = new_status
+            
+            meta_components = data.get("components", [])
+            for comp in meta_components:
+                comp_type = comp.get("type")
+                if comp_type == "BODY":
+                    template.body_text = comp.get("text", "")
+                elif comp_type == "HEADER":
+                    template.header_type = comp.get("format", "")
+                    if template.header_type == "TEXT":
+                        template.header_text = comp.get("text", "")
+                elif comp_type == "FOOTER":
+                    template.footer_text = comp.get("text", "")
+                elif comp_type == "BUTTONS":
+                    template.buttons = comp.get("buttons", [])
+
+            import re
+            template.variables_count = len(re.findall(r"\{\{\d+\}\}", template.body_text))
+            
             template.save()
             return Response({
                 "id":     template.id,
@@ -1174,13 +1192,26 @@ class TemplateSyncAllView(APIView):
             meta_cat    = mt.get("category", "UTILITY").upper()
             meta_lang   = mt.get("language", "en")
             
-            # Extract body text from components
+            # Extract components (body, header, footer, buttons)
             meta_components = mt.get("components", [])
             body_text = ""
+            header_type = ""
+            header_text = ""
+            footer_text = ""
+            buttons = []
+
             for comp in meta_components:
-                if comp.get("type") == "BODY":
+                comp_type = comp.get("type")
+                if comp_type == "BODY":
                     body_text = comp.get("text", "")
-                    break
+                elif comp_type == "HEADER":
+                    header_type = comp.get("format", "")
+                    if header_type == "TEXT":
+                        header_text = comp.get("text", "")
+                elif comp_type == "FOOTER":
+                    footer_text = comp.get("text", "")
+                elif comp_type == "BUTTONS":
+                    buttons = comp.get("buttons", [])
 
             import re
             variables_count = len(re.findall(r"\{\{\d+\}\}", body_text))
@@ -1192,7 +1223,15 @@ class TemplateSyncAllView(APIView):
 
             rows = Template.objects.filter(organization=org, template_id=meta_id)
             if rows.exists():
-                rows.update(status=meta_status, body_text=body_text, variables_count=variables_count)
+                rows.update(
+                    status=meta_status,
+                    body_text=body_text,
+                    variables_count=variables_count,
+                    header_type=header_type,
+                    header_text=header_text,
+                    footer_text=footer_text,
+                    buttons=buttons
+                )
                 updated += rows.count()
             else:
                 # Template exists on Meta but not locally — create it
@@ -1205,6 +1244,10 @@ class TemplateSyncAllView(APIView):
                     language=meta_lang,
                     body_text=body_text,
                     variables_count=variables_count,
+                    header_type=header_type,
+                    header_text=header_text,
+                    footer_text=footer_text,
+                    buttons=buttons
                 )
                 created += 1
 
