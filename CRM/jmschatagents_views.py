@@ -2650,6 +2650,9 @@ def _handle_mf_bot(phone: str, text: str, phone_number_id: str = None, inbound_m
         session["company"] = ""
         session["last_scheme_context"] = None
         session["history"] = []
+        session["compare_mode"] = False
+        session["compare_step"] = 0
+        session["compare_scheme_1"] = None
         mf_save_session(session)
         
         welcome_text = (
@@ -2657,21 +2660,38 @@ def _handle_mf_bot(phone: str, text: str, phone_number_id: str = None, inbound_m
             "How can I help you today? If you know the mutual fund name then write it, or else select an option from below."
         )
         
-        amcs = ["SBI", "ICICI", "HDFC", "Nippon", "Kotak", "UTI", "Aditya", "DSP", "Franklin", "Axis"]
-        items = []
-        for amc in amcs:
-            items.append({
-                "id": f"company_{amc}",
-                "title": amc[:24]
-            })
-        sections = [{"title": "Select Company", "rows": items}]
-        send_interactive_list(
-            to=phone, 
-            body_text=welcome_text, 
-            button_text="Select Company", 
-            sections=sections
-        )
+        buttons = [
+            {"id": "btn_select_company", "title": "Select Company"},
+            {"id": "btn_compare_schemes", "title": "Compare Schemes"}
+        ]
+        send_buttons(phone, welcome_text, buttons)
         _save_reply(inbound_msg_id, welcome_text)
+        return
+
+    if interactive_id == "btn_select_company":
+        _send_amc_page(phone, 0, "Please select a company:", inbound_msg_id)
+        return
+
+    if interactive_id == "btn_compare_schemes":
+        session["stage"] = "active"
+        session["company"] = ""
+        session["compare_mode"] = True
+        session["compare_step"] = 1
+        session["compare_scheme_1"] = None
+        mf_save_session(session)
+        
+        msg = "🔄 *Compare Mutual Funds*\n\nLet's select the FIRST scheme. Please select a company:"
+        _send_amc_page(phone, 0, msg, inbound_msg_id)
+        return
+
+    if interactive_id and interactive_id.startswith("amcpage_"):
+        page = int(interactive_id.split("_")[1])
+        _send_amc_page(phone, page, "Select Company (Continued):", inbound_msg_id)
+        return
+
+    if interactive_id and interactive_id.startswith("schemepage_"):
+        page = int(interactive_id.split("_")[1])
+        _mf_search_and_send(phone, session.get("last_query", ""), inbound_msg_id, page=page)
         return
 
     # "Know More" (LLM context)
@@ -2741,6 +2761,27 @@ def _handle_mf_bot(phone: str, text: str, phone_number_id: str = None, inbound_m
     # Handle Scheme Selection (Scheme Code is always numeric)
     if interactive_id and interactive_id.isdigit():
         scheme_code = interactive_id
+        
+        # Check compare mode
+        if session.get("compare_mode"):
+            if session.get("compare_step") == 1:
+                session["compare_scheme_1"] = scheme_code
+                session["compare_step"] = 2
+                mf_save_session(session)
+                msg = "✅ First scheme selected.\n\nNow, let's select the SECOND scheme to compare against. Please select a company:"
+                _send_amc_page(phone, 0, msg, inbound_msg_id)
+                return
+            elif session.get("compare_step") == 2:
+                scheme1 = session.get("compare_scheme_1")
+                scheme2 = scheme_code
+                session["compare_mode"] = False
+                session["compare_step"] = 0
+                session["compare_scheme_1"] = None
+                mf_save_session(session)
+                
+                send_text(phone, "🔄 Comparing schemes, please wait a moment...")
+                _send_mutual_fund_comparison(phone, scheme1, scheme2, inbound_msg_id)
+                return
         try:
             resp = requests.get(f"https://api.mfapi.in/mf/{scheme_code}/latest", timeout=30)
             if resp.status_code == 200:
@@ -2768,7 +2809,7 @@ def _handle_mf_bot(phone: str, text: str, phone_number_id: str = None, inbound_m
                         
                         # Send Post-NAV Buttons
                         buttons = [
-                            {"id": "mf_restart", "title": "Find Another"},
+                            {"id": "mf_restart", "title": "Send Another NAV"},
                             {"id": "mf_know_more", "title": "Know More"}
                         ]
                         send_buttons(phone, "What would you like to do next?", buttons)
@@ -2794,7 +2835,7 @@ def _handle_mf_bot(phone: str, text: str, phone_number_id: str = None, inbound_m
     send_text(phone, fallback_msg)
     _save_reply(inbound_msg_id, fallback_msg)
 
-def _mf_search_and_send(phone: str, query: str, inbound_msg_id: int = None):
+def _mf_search_and_send(phone: str, query: str, inbound_msg_id: int = None, page: int = 0):
     try:
         resp = requests.get(f"https://api.mfapi.in/mf/search?q={query}", timeout=30)
         if resp.status_code == 200:
@@ -2802,9 +2843,33 @@ def _mf_search_and_send(phone: str, query: str, inbound_msg_id: int = None):
             if not data:
                 send_text(phone, "No schemes found for that query. Try another one.")
             else:
+                # Filter for Regular Plan - Growth / IDCW
+                filtered_data = []
+                for item in data:
+                    name_lower = item["schemeName"].lower()
+                    
+                    # Exclude Direct, Institutional, Premium, Wholesale, Bonus, Retail
+                    is_excluded = any(x in name_lower for x in ["direct", "institutional", "premium", "wholesale", "bonus", "retail", "institutional plus"])
+                    
+                    # Include Growth or IDCW (or Dividend, which is the old name for IDCW)
+                    is_growth_or_idcw = any(x in name_lower for x in ["growth", " gro", "-gro", "idcw", "div", "dividend"])
+                    
+                    if not is_excluded and is_growth_or_idcw:
+                        filtered_data.append(item)
+                        
+                if not filtered_data:
+                    send_text(phone, "No 'Regular Plan - Growth' or 'IDCW' schemes found for this category.")
+                    return
+                    
+                items_per_page = 9
+                start_idx = page * items_per_page
+                end_idx = start_idx + items_per_page
+                
+                current_data = filtered_data[start_idx:end_idx]
+                
                 items = []
                 seen_titles = set()
-                for item in data:
+                for item in current_data:
                     raw_title = item["schemeName"][:24].strip()
                     title = raw_title
                     counter = 1
@@ -2820,13 +2885,19 @@ def _mf_search_and_send(phone: str, query: str, inbound_msg_id: int = None):
                         "title": title,
                         "description": item["schemeName"][:72].strip()
                     })
-                    if len(items) == 10:
-                        break
+                    
+                has_next = end_idx < len(filtered_data)
+                if has_next:
+                    items.append({
+                        "id": f"schemepage_{page+1}",
+                        "title": "More Schemes ➡️",
+                        "description": "View more results"
+                    })
                         
                 sections = [{"title": "Search Results", "rows": items}]
                 send_interactive_list(
                     to=phone, 
-                    body_text=f"Search Results for '{query}'", 
+                    body_text=f"Search Results for '{query}' (Page {page+1})", 
                     button_text="Select Scheme", 
                     sections=sections
                 )
@@ -2836,3 +2907,139 @@ def _mf_search_and_send(phone: str, query: str, inbound_msg_id: int = None):
             send_text(phone, "Search failed.")
     except Exception as e:
         send_text(phone, f"Error: {str(e)}")
+
+def _send_amc_page(phone: str, page: int, body_text: str, inbound_msg_id: int = None):
+    amcs = [
+        "SBI", "ICICI", "HDFC", "Nippon", "Kotak", "UTI", "Aditya Birla", "DSP", 
+        "Franklin Templeton", "Axis", "Mirae Asset", "Tata", "L&T", "Edelweiss", "Motilal Oswal", 
+        "Parag Parikh", "Quant", "Canara Robeco", "Bandhan", "Navi", "Mahindra Manulife", 
+        "Invesco", "Sundaram", "PGIM India", "WhiteOak", "Baroda BNP", "HSBC", "LIC", 
+        "Union", "Bank of India"
+    ]
+    items_per_page = 9
+    start_idx = page * items_per_page
+    end_idx = start_idx + items_per_page
+    
+    current_amcs = amcs[start_idx:end_idx]
+    
+    items = []
+    for amc in current_amcs:
+        items.append({
+            "id": f"company_{amc}",
+            "title": amc[:24]
+        })
+        
+    has_next = end_idx < len(amcs)
+    if has_next:
+        items.append({
+            "id": f"amcpage_{page+1}",
+            "title": "More Companies ➡️",
+            "description": "View more AMCs"
+        })
+        
+    sections = []
+    sections.append({
+        "title": "Select Company",
+        "rows": items
+    })
+    
+    send_interactive_list(
+        to=phone, 
+        body_text=body_text, 
+        button_text="Select Company", 
+        sections=sections
+    )
+    if inbound_msg_id:
+        _save_reply(inbound_msg_id, body_text)
+
+def _get_historical_nav(nav_data: list, target_days_ago: int):
+    from datetime import datetime, timedelta
+    
+    if not nav_data:
+        return "N/A"
+        
+    latest_date_str = nav_data[0].get("date")
+    if not latest_date_str:
+        return "N/A"
+        
+    try:
+        latest_date = datetime.strptime(latest_date_str, "%d-%m-%Y")
+    except:
+        return "N/A"
+        
+    target_date = latest_date - timedelta(days=target_days_ago)
+    
+    # Find closest date
+    closest_nav = nav_data[0].get("nav", "N/A")
+    min_diff = 99999
+    
+    for item in nav_data:
+        try:
+            item_date = datetime.strptime(item["date"], "%d-%m-%Y")
+            diff = abs((item_date - target_date).days)
+            if diff < min_diff:
+                min_diff = diff
+                closest_nav = item["nav"]
+        except:
+            continue
+            
+    return closest_nav
+
+def _send_mutual_fund_comparison(phone: str, scheme1: str, scheme2: str, inbound_msg_id: int = None):
+    try:
+        import requests
+        
+        # Fetch Scheme 1
+        r1 = requests.get(f"https://api.mfapi.in/mf/{scheme1}/latest", timeout=30).json()
+        # Fetch Scheme 2
+        r2 = requests.get(f"https://api.mfapi.in/mf/{scheme2}/latest", timeout=30).json()
+        
+        s1_meta = r1.get("meta", {})
+        s1_data = r1.get("data", [])
+        
+        s2_meta = r2.get("meta", {})
+        s2_data = r2.get("data", [])
+        
+        name1 = s1_meta.get("scheme_name", f"Scheme {scheme1}")
+        name2 = s2_meta.get("scheme_name", f"Scheme {scheme2}")
+        
+        def format_navs(data):
+            if not data:
+                return ["N/A"] * 5
+            curr = data[0].get("nav", "N/A")
+            nav_1m = _get_historical_nav(data, 30)
+            nav_3m = _get_historical_nav(data, 90)
+            nav_6m = _get_historical_nav(data, 180)
+            nav_1y = _get_historical_nav(data, 365)
+            return curr, nav_1m, nav_3m, nav_6m, nav_1y
+            
+        c1, m1_1, m3_1, m6_1, y1_1 = format_navs(s1_data)
+        c2, m1_2, m3_2, m6_2, y1_2 = format_navs(s2_data)
+        
+        msg = f"📊 *Mutual Fund Comparison*\n\n"
+        msg += f"🔹 *{name1}*\n"
+        msg += f"• Current NAV: ₹{c1}\n"
+        msg += f"• 1 Month ago: ₹{m1_1}\n"
+        msg += f"• 3 Months ago: ₹{m3_1}\n"
+        msg += f"• 6 Months ago: ₹{m6_1}\n"
+        msg += f"• 1 Year ago: ₹{y1_1}\n\n"
+        
+        msg += f"🔹 *{name2}*\n"
+        msg += f"• Current NAV: ₹{c2}\n"
+        msg += f"• 1 Month ago: ₹{m1_2}\n"
+        msg += f"• 3 Months ago: ₹{m3_2}\n"
+        msg += f"• 6 Months ago: ₹{m6_2}\n"
+        msg += f"• 1 Year ago: ₹{y1_2}\n"
+        
+        send_text(phone, msg)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, msg)
+            
+        # Post-Comparison buttons
+        buttons = [
+            {"id": "mf_restart", "title": "Start Over"}
+        ]
+        send_buttons(phone, "What would you like to do next?", buttons)
+        
+    except Exception as e:
+        send_text(phone, f"Failed to compare schemes: {e}")
