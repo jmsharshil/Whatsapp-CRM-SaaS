@@ -354,7 +354,31 @@ class WebhookView(View):
                 for t in tickets[:5]:  # limit to max 5 to avoid spam
                     t_id = str(t.get("transactionNo") or t.get("id", "N/A"))
                     status = str(t.get("ticketStatus", "Open"))
-                    ok = tpl_current_ticket(number, "N/A", t_id, status, "N/A")
+                    
+                    circuit_from = str(t.get("circuitFrom") or "").strip()
+                    circuit_to = str(t.get("circuitTo") or "").strip()
+                    
+                    if circuit_from and circuit_to:
+                        circuit_id = f"{circuit_from} to {circuit_to}"
+                    elif circuit_from:
+                        circuit_id = circuit_from
+                    elif circuit_to:
+                        circuit_id = circuit_to
+                    else:
+                        circuit_id = "N/A"
+                        
+                    ticket_date_raw = t.get("ticketDate", "")
+                    created_on = "N/A"
+                    if ticket_date_raw:
+                        try:
+                            # 2026-06-30T15:39:57.81 or similar ISO format
+                            dt = datetime.fromisoformat(ticket_date_raw)
+                            created_on = dt.strftime("%d %b %Y, %H:%M")
+                        except Exception:
+                            # Fallback if unparseable
+                            created_on = str(ticket_date_raw)
+                            
+                    ok = tpl_current_ticket(number, circuit_id, t_id, status, created_on)
                     self._log_out(number, "[tpl] gigatel_current_ticket", ok)
                     time.sleep(1)
 

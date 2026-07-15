@@ -354,8 +354,13 @@ def handle_gkd_message(msg: dict):
 
     elif state == "SHOWROOM_VISIT":
         session.collected_info = {**session.collected_info, "ShowroomVisitSlot": display_body}
-        tpl_gkd_showroom_confirm(number, display_body)
-        time.sleep(3)  # Increased delay to ensure correct delivery order on WhatsApp
+        
+        # Send confirmation as a regular text message to ensure it arrives immediately 
+        # before the closing name template.
+        conf_msg = f"Great! We have noted your preferred visit time: {display_body}\n\nOur team will be ready to welcome you at our showroom! Let us know if you need any directions."
+        send_gkd_text(number, conf_msg)
+        
+        time.sleep(2)
         goto_closing()
 
     elif state == "B1_Q8":
