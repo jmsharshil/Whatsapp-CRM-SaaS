@@ -2989,10 +2989,10 @@ def _send_mutual_fund_comparison(phone: str, scheme1: str, scheme2: str, inbound
     try:
         import requests
         
-        # Fetch Scheme 1
-        r1 = requests.get(f"https://api.mfapi.in/mf/{scheme1}/latest", timeout=30).json()
-        # Fetch Scheme 2
-        r2 = requests.get(f"https://api.mfapi.in/mf/{scheme2}/latest", timeout=30).json()
+        # Fetch Scheme 1 - Get full history!
+        r1 = requests.get(f"https://api.mfapi.in/mf/{scheme1}", timeout=30).json()
+        # Fetch Scheme 2 - Get full history!
+        r2 = requests.get(f"https://api.mfapi.in/mf/{scheme2}", timeout=30).json()
         
         s1_meta = r1.get("meta", {})
         s1_data = r1.get("data", [])
@@ -3006,12 +3006,34 @@ def _send_mutual_fund_comparison(phone: str, scheme1: str, scheme2: str, inbound
         def format_navs(data):
             if not data:
                 return ["N/A"] * 5
-            curr = data[0].get("nav", "N/A")
-            nav_1m = _get_historical_nav(data, 30)
-            nav_3m = _get_historical_nav(data, 90)
-            nav_6m = _get_historical_nav(data, 180)
-            nav_1y = _get_historical_nav(data, 365)
-            return curr, nav_1m, nav_3m, nav_6m, nav_1y
+                
+            curr_str = data[0].get("nav", "0")
+            try:
+                curr = float(curr_str)
+            except:
+                curr = 0.0
+                
+            def get_with_pct(days):
+                old_str = _get_historical_nav(data, days)
+                if old_str == "N/A" or curr == 0.0:
+                    return old_str
+                try:
+                    old_f = float(old_str)
+                    if old_f == 0:
+                        return old_str
+                    pct = ((curr - old_f) / old_f) * 100
+                    sign = "+" if pct >= 0 else ""
+                    return f"₹{old_str} ({sign}{pct:.2f}%)"
+                except:
+                    return old_str
+                    
+            curr_fmt = f"{curr}" if curr != 0.0 else "N/A"
+            nav_1m = get_with_pct(30)
+            nav_3m = get_with_pct(90)
+            nav_6m = get_with_pct(180)
+            nav_1y = get_with_pct(365)
+            
+            return curr_fmt, nav_1m, nav_3m, nav_6m, nav_1y
             
         c1, m1_1, m3_1, m6_1, y1_1 = format_navs(s1_data)
         c2, m1_2, m3_2, m6_2, y1_2 = format_navs(s2_data)
@@ -3019,17 +3041,17 @@ def _send_mutual_fund_comparison(phone: str, scheme1: str, scheme2: str, inbound
         msg = f"📊 *Mutual Fund Comparison*\n\n"
         msg += f"🔹 *{name1}*\n"
         msg += f"• Current NAV: ₹{c1}\n"
-        msg += f"• 1 Month ago: ₹{m1_1}\n"
-        msg += f"• 3 Months ago: ₹{m3_1}\n"
-        msg += f"• 6 Months ago: ₹{m6_1}\n"
-        msg += f"• 1 Year ago: ₹{y1_1}\n\n"
+        msg += f"• 1 Month: {m1_1}\n"
+        msg += f"• 3 Months: {m3_1}\n"
+        msg += f"• 6 Months: {m6_1}\n"
+        msg += f"• 1 Year: {y1_1}\n\n"
         
         msg += f"🔹 *{name2}*\n"
         msg += f"• Current NAV: ₹{c2}\n"
-        msg += f"• 1 Month ago: ₹{m1_2}\n"
-        msg += f"• 3 Months ago: ₹{m3_2}\n"
-        msg += f"• 6 Months ago: ₹{m6_2}\n"
-        msg += f"• 1 Year ago: ₹{y1_2}\n"
+        msg += f"• 1 Month: {m1_2}\n"
+        msg += f"• 3 Months: {m3_2}\n"
+        msg += f"• 6 Months: {m6_2}\n"
+        msg += f"• 1 Year: {y1_2}\n"
         
         send_text(phone, msg)
         if inbound_msg_id:
