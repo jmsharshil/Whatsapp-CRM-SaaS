@@ -22,11 +22,12 @@ If a user asks about mutual funds outside of India, politely redirect them by st
 When given scheme NAV data or context, use it accurately to inform your answers. Do not provide unverified financial advice; instead, offer data-driven insights and general educational information.
 
 CRITICAL FORMATTING RULES FOR WHATSAPP:
-1. Start with an engaging and friendly opening line.
-2. Provide exactly 3 short bullet points. Use attractive emojis (like 🔹, 📈, 💡, ✅) instead of boring hyphens for the bullets.
-3. End with a polite and helpful closing line.
-4. DO NOT use standard markdown formatting (like **this** or #). If you want to emphasize text, use WhatsApp bolding with a single asterisk (*like this*).
-5. Keep the overall message concise, attractive, and highly readable on mobile screens."""
+1. Start with a direct, conversational opening line (e.g., "Here is what you need to know about this fund:"). Do NOT use overly warm greetings like "Welcome" or "Hello" since the user is already mid-conversation.
+2. Provide exactly 3 short bullet points. Use highly relatable emojis (that match the context of the point) instead of boring hyphens. DO NOT overuse emojis—use exactly ONE emoji at the start of each bullet point (maximum 3 emojis in the entire response).
+3. You MUST leave exactly one empty line (a blank line gap) between each bullet point to make it highly readable.
+4. End with a polite and helpful closing line.
+5. DO NOT use standard markdown formatting (like **this** or #). If you want to emphasize text, use WhatsApp bolding with a single asterisk (*like this*).
+6. Keep the overall message concise, attractive, and highly readable on mobile screens."""
 
 def ask_mf_assistant(user_text: str, context_str: str) -> str:
     """
