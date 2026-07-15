@@ -2574,7 +2574,7 @@ def global_search(request):
 # ─────────────────────────────────────────────────────────────────────────────
 # ═════════════════════════════════════════════════════════════════════════════
 
-MF_BOT_TRIGGER = "mutual funds"
+MF_BOT_TRIGGER = ("mutual funds", "mf")
 MF_SESSION_TTL = 60 * 60 * 24
 
 class SafeCache:
@@ -2642,10 +2642,10 @@ def _handle_mf_bot(phone: str, text: str, phone_number_id: str = None, inbound_m
             return
         else:
             # Fallback to welcome menu if no last query is available
-            text_lower = MF_BOT_TRIGGER
+            text_lower = "mutual funds"  # Just pick the primary one to force fallback
 
     # Welcome Menu
-    if text_lower == MF_BOT_TRIGGER:
+    if text_lower in MF_BOT_TRIGGER:
         session["stage"] = "active"
         session["company"] = ""
         session["last_scheme_context"] = None

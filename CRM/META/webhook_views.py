@@ -271,7 +271,7 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
     else:
         # Check Mutual Funds bot first
         mf_sess = mf_sessions.get(raw_phone)
-        if text_lower == MF_BOT_TRIGGER or (
+        if text_lower in MF_BOT_TRIGGER or (
             mf_sess and mf_sess.get("stage") in ["active", "awaiting_search_query", "awaiting_category", "awaiting_llm_query"]
         ):
             logger.info("[Webhook/JMS] → MUTUAL FUNDS BOT for %s", raw_phone)
