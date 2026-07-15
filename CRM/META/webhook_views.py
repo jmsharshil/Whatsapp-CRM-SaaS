@@ -48,16 +48,19 @@ from CRM.jmschatagents_views import (
     ind_get_session,
     ind_save_session,
     wa_sessions,
+    mf_sessions,
     # Constants
     INDUSTRY_TRIGGERS,
     FAREWELL_KEYWORDS,
     WA_BOT_TRIGGER,
+    MF_BOT_TRIGGER,
     BOT_TRIGGER_KEYWORD,
     IND_SESSION_TTL,
     # Bot handlers
     _process_meta_message,
     _jms_handle_message,
     _handle_wa_bot,
+    _handle_mf_bot,
     # Session key helper
     _sess_key,
     # DB helper
@@ -266,22 +269,33 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
             logger.exception("Industry bot error: %s", e)
 
     else:
-        # Check WhatsApp-API bot first
-        wa_sess = wa_sessions.get(raw_phone)
-        if text_lower == WA_BOT_TRIGGER or (
-            wa_sess and wa_sess.get("stage") == "active"
+        # Check Mutual Funds bot first
+        mf_sess = mf_sessions.get(raw_phone)
+        if text_lower == MF_BOT_TRIGGER or (
+            mf_sess and mf_sess.get("stage") in ["active", "awaiting_search_query", "awaiting_category", "awaiting_llm_query"]
         ):
-            logger.info("[Webhook/JMS] → WHATSAPP BOT for %s", raw_phone)
+            logger.info("[Webhook/JMS] → MUTUAL FUNDS BOT for %s", raw_phone)
             try:
-                _handle_wa_bot(raw_phone, text, phone_number_id, inbound_msg_id=inbound_msg_id)
+                _handle_mf_bot(raw_phone, text, phone_number_id, inbound_msg_id=inbound_msg_id, raw_msg=msg)
             except Exception as e:
-                logger.exception("WhatsApp bot error: %s", e)
+                logger.exception("Mutual Funds bot error: %s", e)
         else:
-            logger.info("[Webhook/JMS] → JMS-TECH BOT for %s", raw_phone)
-            try:
-                _jms_handle_message(raw_phone, text, phone_number_id, inbound_msg_id=inbound_msg_id)
-            except Exception as e:
-                logger.exception("JMS-Tech bot error: %s", e)
+            # Check WhatsApp-API bot next
+            wa_sess = wa_sessions.get(raw_phone)
+            if text_lower == WA_BOT_TRIGGER or (
+                wa_sess and wa_sess.get("stage") == "active"
+            ):
+                logger.info("[Webhook/JMS] → WHATSAPP BOT for %s", raw_phone)
+                try:
+                    _handle_wa_bot(raw_phone, text, phone_number_id, inbound_msg_id=inbound_msg_id)
+                except Exception as e:
+                    logger.exception("WhatsApp bot error: %s", e)
+            else:
+                logger.info("[Webhook/JMS] → JMS-TECH BOT for %s", raw_phone)
+                try:
+                    _jms_handle_message(raw_phone, text, phone_number_id, inbound_msg_id=inbound_msg_id)
+                except Exception as e:
+                    logger.exception("JMS-Tech bot error: %s", e)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

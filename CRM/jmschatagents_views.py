@@ -68,6 +68,7 @@ from CRM.jms_llms.customer_service_llm import process_text_customer_service_stre
 from CRM.jms_llms.sales_marketing_llm import process_text_sales_marketing_stream as salesmarketing_stream, ask_assistant as _marketing_ask
 from CRM.jms_llms.entrepreneurship_llm import process_text_entrepreneurship_stream as entrepreneurship_stream, ask_assistant as _entrepreneur_ask
 from CRM.jms_llms.eye_llm import process_text_eye_stream as eye_stream
+from CRM.jms_llms.mf_llm import ask_mf_assistant
 
 from CRM.jms_llms.views import get_client as _startup_client, AIC_REFERENCE as _AIC_REF
 from CRM.jms_llms.retriever import get_context as _get_context
@@ -2566,3 +2567,264 @@ def global_search(request):
         ).order_by("-timestamp")[:20]
     ]
     return _json({"customers": customers, "messages": messages})
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────────────────
+#  BOT 4 — MUTUAL FUNDS BOT  (trigger: "mutual funds")
+# ─────────────────────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════════════
+
+MF_BOT_TRIGGER = "mutual funds"
+MF_SESSION_TTL = 60 * 60 * 24
+
+class SafeCache:
+    def __init__(self, prefix: str, default_ttl: int):
+        self.prefix = prefix
+        self.default_ttl = default_ttl
+    def get(self, key: str):
+        from django.core.cache import cache
+        return cache.get(self.prefix + key)
+    def set(self, key: str, value, timeout: int = None):
+        from django.core.cache import cache
+        cache.set(self.prefix + key, value, timeout or self.default_ttl)
+    def delete(self, key: str):
+        from django.core.cache import cache
+        cache.delete(self.prefix + key)
+
+mf_sessions = SafeCache(prefix="mf_sess:", default_ttl=MF_SESSION_TTL)
+
+def mf_get_session(phone: str, create: bool = True) -> dict | None:
+    sess = mf_sessions.get(phone)
+    if not sess:
+        if not create:
+            return None
+        sess = {"phone": phone, "stage": "active", "history": []}
+        mf_sessions.set(phone, sess, timeout=MF_SESSION_TTL)
+    return sess
+
+def mf_save_session(sess: dict) -> None:
+    mf_sessions.set(sess["phone"], sess, timeout=MF_SESSION_TTL)
+
+def _handle_mf_bot(phone: str, text: str, phone_number_id: str = None, inbound_msg_id: int = None, raw_msg: dict = None):
+    text_lower = text.lower().strip()
+    session = mf_get_session(phone, create=True)
+    stage = session.get("stage", "active")
+    company = session.get("company", "")
+    
+    # Parse Interactive ID
+    interactive_id = None
+    if raw_msg and raw_msg.get("type") == "interactive":
+        interactive = raw_msg.get("interactive", {})
+        itype = interactive.get("type")
+        if itype == "list_reply":
+            interactive_id = interactive.get("list_reply", {}).get("id", "")
+        elif itype == "button_reply":
+            interactive_id = interactive.get("button_reply", {}).get("id", "")
+
+    # Exit / Farewell
+    farewell_triggers = ["thank you", "thanks", "thankyou", "bye", "goodbye", "exit", "quit", "done", "ok thanks"]
+    if any(trigger == text_lower for trigger in farewell_triggers) or \
+       (text_lower.startswith("ok") and "thank" in text_lower) or \
+       (text_lower.startswith("okay") and "thank" in text_lower):
+        mf_sessions.delete(phone)
+        bye_text = "Thank you for consulting with me! I'm glad I could help with your mutual fund queries. If you need any more information on Indian mutual funds in the future, just type *mutual funds* anytime to start again. Have a great day! 👋"
+        send_text(phone, bye_text)
+        _save_reply(inbound_msg_id, bye_text)
+        return
+
+    # Send Another NAV (mf_restart)
+    if interactive_id == "mf_restart":
+        last_query = session.get("last_query")
+        if last_query:
+            session["stage"] = "active"
+            mf_save_session(session)
+            _mf_search_and_send(phone, last_query, inbound_msg_id)
+            return
+        else:
+            # Fallback to welcome menu if no last query is available
+            text_lower = MF_BOT_TRIGGER
+
+    # Welcome Menu
+    if text_lower == MF_BOT_TRIGGER:
+        session["stage"] = "active"
+        session["company"] = ""
+        session["last_scheme_context"] = None
+        session["history"] = []
+        mf_save_session(session)
+        
+        welcome_text = (
+            "📈 *Welcome to the Mutual Funds Bot!*\n\n"
+            "How can I help you today? If you know the mutual fund name then write it, or else select an option from below."
+        )
+        
+        amcs = ["SBI", "ICICI", "HDFC", "Nippon", "Kotak", "UTI", "Aditya", "DSP", "Franklin", "Axis"]
+        items = []
+        for amc in amcs:
+            items.append({
+                "id": f"company_{amc}",
+                "title": amc[:24],
+                "description": "Select company"
+            })
+        sections = [{"title": "Select Company", "rows": items}]
+        send_interactive_list(
+            to=phone, 
+            body_text=welcome_text, 
+            button_text="Select Company", 
+            sections=sections
+        )
+        _save_reply(inbound_msg_id, welcome_text)
+        return
+
+    # "Know More" (LLM context)
+    if interactive_id == "mf_know_more":
+        session["stage"] = "awaiting_llm_query"
+        mf_save_session(session)
+        msg = "🤖 What would you like to know about this scheme?"
+        send_text(phone, msg)
+        _save_reply(inbound_msg_id, msg)
+        return
+
+    # Handle LLM Query
+    if stage == "awaiting_llm_query":
+        context_str = session.get("last_scheme_context", "No context available.")
+        answer = ask_mf_assistant(text, context_str)
+        send_text(phone, answer)
+        _save_reply(inbound_msg_id, answer)
+        return
+
+    # Handle Company Selection from List
+    if interactive_id and interactive_id.startswith("company_"):
+        selected_company = interactive_id.replace("company_", "")
+        session["stage"] = "awaiting_category"
+        session["company"] = selected_company
+        mf_save_session(session)
+        
+        msg = f"You selected *{selected_company}*. Please choose a category:"
+        cats = ["Equity", "Debt", "Liquid", "Other"]
+        items = []
+        for cat in cats:
+            items.append({
+                "id": f"category_{cat}",
+                "title": cat,
+                "description": f"{cat} schemes"
+            })
+        sections = [{"title": "Select Category", "rows": items}]
+        send_interactive_list(
+            to=phone, 
+            body_text=msg, 
+            button_text="Select Category", 
+            sections=sections
+        )
+        _save_reply(inbound_msg_id, msg)
+        return
+
+    # Handle Category Selection
+    if interactive_id and interactive_id.startswith("category_"):
+        selected_category = interactive_id.replace("category_", "")
+        query = f"{company} {selected_category}".strip()
+        
+        session["stage"] = "active" # Reset stage so direct typing falls back to search
+        session["last_query"] = query
+        mf_save_session(session)
+        
+        _mf_search_and_send(phone, query, inbound_msg_id)
+        return
+
+    # Handle Scheme Selection (Scheme Code is always numeric)
+    if interactive_id and interactive_id.isdigit():
+        scheme_code = interactive_id
+        try:
+            resp = requests.get(f"https://api.mfapi.in/mf/{scheme_code}/latest", timeout=30)
+            if resp.status_code == 200:
+                result = resp.json()
+                if result.get("status") == "SUCCESS":
+                    meta = result.get("meta", {})
+                    nav_data = result.get("data", [])
+                    if nav_data:
+                        latest = nav_data[0]
+                        reply = (
+                            f"📊 *Scheme:* {meta.get('scheme_name', 'N/A')}\n"
+                            f"🏢 *Fund House:* {meta.get('fund_house', 'N/A')}\n"
+                            f"📁 *Category:* {meta.get('scheme_category', 'N/A')}\n\n"
+                            f"📈 *Latest NAV:* ₹{latest.get('nav', 'N/A')}\n"
+                            f"📅 *Date:* {latest.get('date', 'N/A')}"
+                        )
+                        # Save context for LLM
+                        session["last_scheme_context"] = reply
+                        session["stage"] = "active"
+                        mf_save_session(session)
+                        
+                        # Send NAV text
+                        send_text(phone, reply)
+                        _save_reply(inbound_msg_id, reply)
+                        
+                        # Send Post-NAV Buttons
+                        buttons = [
+                            {"id": "mf_restart", "title": "Find Another"},
+                            {"id": "mf_know_more", "title": "Know More"}
+                        ]
+                        send_buttons(phone, "What would you like to do next?", buttons)
+                    else:
+                        send_text(phone, "No NAV data available for this scheme.")
+                else:
+                    send_text(phone, "Failed to fetch NAV data.")
+            else:
+                send_text(phone, "Failed to fetch NAV data.")
+        except Exception as e:
+            send_text(phone, f"Error: {str(e)}")
+        return
+
+    # Direct Search (Fallback for any unhandled text/interactive)
+    if text_lower and not interactive_id:
+        session["last_query"] = text_lower
+        mf_save_session(session)
+        _mf_search_and_send(phone, text_lower, inbound_msg_id)
+        return
+
+    # Fallback
+    fallback_msg = "I didn't understand. Please use the menu options or send 'exit' to quit."
+    send_text(phone, fallback_msg)
+    _save_reply(inbound_msg_id, fallback_msg)
+
+def _mf_search_and_send(phone: str, query: str, inbound_msg_id: int = None):
+    try:
+        resp = requests.get(f"https://api.mfapi.in/mf/search?q={query}", timeout=30)
+        if resp.status_code == 200:
+            data = resp.json()
+            if not data:
+                send_text(phone, "No schemes found for that query. Try another one.")
+            else:
+                items = []
+                seen_titles = set()
+                for item in data:
+                    raw_title = item["schemeName"][:24].strip()
+                    title = raw_title
+                    counter = 1
+                    while title in seen_titles:
+                        suffix = f" {counter}"
+                        base = raw_title[:24 - len(suffix)].strip()
+                        title = base + suffix
+                        counter += 1
+                    seen_titles.add(title)
+                    
+                    items.append({
+                        "id": str(item["schemeCode"]),
+                        "title": title,
+                        "description": item["schemeName"][:72].strip()
+                    })
+                    if len(items) == 10:
+                        break
+                        
+                sections = [{"title": "Search Results", "rows": items}]
+                send_interactive_list(
+                    to=phone, 
+                    body_text=f"Search Results for '{query}'", 
+                    button_text="Select Scheme", 
+                    sections=sections
+                )
+                if inbound_msg_id:
+                    _save_reply(inbound_msg_id, f"Sent search results for {query}")
+        else:
+            send_text(phone, "Search failed.")
+    except Exception as e:
+        send_text(phone, f"Error: {str(e)}")

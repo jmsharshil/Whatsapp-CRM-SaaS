@@ -1927,3 +1927,20 @@ class TechProviderMetaRegistrationView(APIView):
         obj, created = MetaRegistrationDetails.objects.get_or_create(client=client)
         serializer = MetaRegistrationSerializer(obj)
         return Response(serializer.data)
+
+class TechProviderMetaRegistrationView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        org = _get_tech_org(request.user)
+        if not org:
+            return Response({"error": "Access denied. Tech-provider credentials required."}, status=403)
+            
+        try:
+            client = org.clients.get(pk=pk)
+        except ClientAccount.DoesNotExist:
+            return Response({"error": "Client not found."}, status=404)
+            
+        obj, created = MetaRegistrationDetails.objects.get_or_create(client=client)
+        serializer = MetaRegistrationSerializer(obj)
+        return Response(serializer.data)
