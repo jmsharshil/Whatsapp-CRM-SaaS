@@ -2662,8 +2662,7 @@ def _handle_mf_bot(phone: str, text: str, phone_number_id: str = None, inbound_m
         for amc in amcs:
             items.append({
                 "id": f"company_{amc}",
-                "title": amc[:24],
-                "description": "Select company"
+                "title": amc[:24]
             })
         sections = [{"title": "Select Company", "rows": items}]
         send_interactive_list(
@@ -2721,6 +2720,15 @@ def _handle_mf_bot(phone: str, text: str, phone_number_id: str = None, inbound_m
     # Handle Category Selection
     if interactive_id and interactive_id.startswith("category_"):
         selected_category = interactive_id.replace("category_", "")
+        
+        if selected_category.lower() == "other":
+            session["stage"] = "active"
+            mf_save_session(session)
+            msg = "Please type the specific mutual fund name or category you are looking for:"
+            send_text(phone, msg)
+            _save_reply(inbound_msg_id, msg)
+            return
+
         query = f"{company} {selected_category}".strip()
         
         session["stage"] = "active" # Reset stage so direct typing falls back to search
