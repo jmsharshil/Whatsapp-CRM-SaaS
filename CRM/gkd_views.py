@@ -547,5 +547,4 @@ def handle_gkd_message(msg: dict):
         conv_state.collected_fields = full_fields
         conv_state.save()
         
-    conv_obj.status = "prospect"
     conv_obj.save()
