@@ -268,6 +268,7 @@ if USE_AZURE_MEDIA:
     )
     AZURE_URL_EXPIRATION_SECS = int(os.environ.get("AZURE_URL_EXPIRATION_SECS", "3600"))
     AZURE_OVERWRITE_FILES = False
+    AZURE_QUERYSTRING_AUTH = False  # Do not append SAS tokens to image URLs
 
     STORAGES = {
         "default": {
