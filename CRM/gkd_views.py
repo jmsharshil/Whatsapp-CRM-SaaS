@@ -528,7 +528,7 @@ def handle_gkd_message(msg: dict):
         if not created and conv_state.organization != org_obj:
             conv_state.organization = org_obj
         
-        if session.state in ["DONE", "HANDOFF"] or session.state.startswith("CLOSING_"):
+        if session.state in ["DONE", "HANDOFF"]:
             conv_state.is_complete = True
             if session.tags:
                 conv_state.stage = ", ".join(session.tags)
