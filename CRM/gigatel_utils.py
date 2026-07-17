@@ -907,7 +907,7 @@ def tpl_complaint_type(to: str, circuit_id: str) -> bool:
     })
 
 
-def tpl_otdr_question(to: str, circuit_id: str) -> bool:
+def tpl_otdr_question(to: str, circuit_id: str, from_and_to: str = "") -> bool:
     return _meta_post({
         "messaging_product": "whatsapp",
         "to": to,
@@ -920,6 +920,7 @@ def tpl_otdr_question(to: str, circuit_id: str) -> bool:
                     "type": "body",
                     "parameters": [
                         {"type": "text", "text": circuit_id},
+                        {"type": "text", "text": from_and_to},
                     ],
                 },
                 {
@@ -1020,7 +1021,7 @@ def tpl_complaint_failed(to: str) -> bool:
 
 
 def tpl_current_ticket(
-    to: str, circuit_id: str, ticket_id: str, status: str, created_on: str
+    to: str, circuit_id: str, ticket_id: str, status: str, created_on: str, from_and_to: str = ""
 ) -> bool:
     return _meta_post({
         "messaging_product": "whatsapp",
@@ -1037,6 +1038,7 @@ def tpl_current_ticket(
                         {"type": "text", "text": ticket_id},
                         {"type": "text", "text": status},
                         {"type": "text", "text": created_on},
+                        {"type": "text", "text": from_and_to},
                     ],
                 }
             ],

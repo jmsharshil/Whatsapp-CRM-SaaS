@@ -357,15 +357,23 @@ class WebhookView(View):
                     
                     circuit_from = str(t.get("circuitFrom") or "").strip()
                     circuit_to = str(t.get("circuitTo") or "").strip()
+                    circuit_id_str = str(t.get("circuitIdStr") or "").strip()
                     
                     if circuit_from and circuit_to:
-                        circuit_id = f"{circuit_from} to {circuit_to}"
+                        circuit_id_display = f"{circuit_from} to {circuit_to}"
                     elif circuit_from:
-                        circuit_id = circuit_from
+                        circuit_id_display = circuit_from
                     elif circuit_to:
-                        circuit_id = circuit_to
+                        circuit_id_display = circuit_to
                     else:
-                        circuit_id = "N/A"
+                        circuit_id_display = "N/A"
+                        
+                    if circuit_id_str:
+                        circuit_id = circuit_id_str
+                        from_and_to = circuit_id_display
+                    else:
+                        circuit_id = circuit_id_display
+                        from_and_to = ""
                         
                     ticket_date_raw = t.get("ticketDate", "")
                     created_on = "N/A"
@@ -378,7 +386,7 @@ class WebhookView(View):
                             # Fallback if unparseable
                             created_on = str(ticket_date_raw)
                             
-                    ok = tpl_current_ticket(number, circuit_id, t_id, status, created_on)
+                    ok = tpl_current_ticket(number, circuit_id, t_id, status, created_on, from_and_to)
                     self._log_out(number, "[tpl] gigatel_current_ticket", ok)
                     time.sleep(1)
 
@@ -497,7 +505,8 @@ class WebhookView(View):
         session.save()
 
 #        logger.info("[STEP] CIRCUIT_LIST: ✅ Proceeding to OTDR for circuit=%s", circuit_id)
-        ok = tpl_otdr_question(number, circuit_id)
+        from_and_to = detail.get("fromAndTo") or ""
+        ok = tpl_otdr_question(number, circuit_id, from_and_to)
         self._log_out(number, "[tpl] gigatel_otdr_question", ok)
 
     def _step_circuit_select_or_digits(self, number: str, session: "WhatsAppSession", text: str, for_ticket: bool):
@@ -620,7 +629,8 @@ class WebhookView(View):
         session.nature_of_fault_id = 7
         session.save()
 
-        ok = tpl_otdr_question(number, circuit_id)
+        from_and_to = detail.get("fromAndTo") or ""
+        ok = tpl_otdr_question(number, circuit_id, from_and_to)
         self._log_out(number, "[tpl] gigatel_otdr_question", ok)
 
     def _step_await_circuit_digits(self, number: str, session: "WhatsAppSession", text: str, for_ticket: bool):
@@ -759,7 +769,9 @@ class WebhookView(View):
         session.state = "AWAIT_OTDR"
         session.save()
 
-        ok = tpl_otdr_question(number, session.fault_label, session.selected_circuit_id)
+        detail = get_circuit_detail(session.selected_circuit_id) or {}
+        from_and_to = detail.get("fromAndTo") or ""
+        ok = tpl_otdr_question(number, session.selected_circuit_id, from_and_to)
         self._log_out(number, "[tpl] gigatel_otdr_question", ok)
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -810,7 +822,9 @@ class WebhookView(View):
             )
 
         else:
-            ok = tpl_otdr_question(number, session.fault_label, session.selected_circuit_id)
+            detail = get_circuit_detail(session.selected_circuit_id) or {}
+            from_and_to = detail.get("fromAndTo") or ""
+            ok = tpl_otdr_question(number, session.selected_circuit_id, from_and_to)
             self._log_out(number, "[tpl] gigatel_otdr_question (retry)", ok)
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -1246,12 +1260,14 @@ class WebhookView(View):
         ticket_created_on = detail.get("ticketCreatedOn") or detail.get("ticketAllottedOn") or detail.get("ticketStartTime") or "N/A"
 
         if ticket_id:
+            from_and_to = detail.get("fromAndTo") or ""
             ok = tpl_current_ticket(
                 number,
                 str(circuit_id or "N/A"),
                 str(ticket_id),
                 ticket_status,
                 ticket_created_on,
+                from_and_to
             )
             self._log_out(number, "[tpl] gigatel_current_ticket", ok)
         else:
