@@ -2783,7 +2783,7 @@ def _handle_mf_bot(phone: str, text: str, phone_number_id: str = None, inbound_m
                 _send_mutual_fund_comparison(phone, scheme1, scheme2, inbound_msg_id)
                 return
         try:
-            resp = requests.get(f"https://api.mfapi.in/mf/{scheme_code}/latest", timeout=30)
+            resp = requests.get(f"https://api.mfapi.in/mf/{scheme_code}/latest", timeout=60)
             if resp.status_code == 200:
                 result = resp.json()
                 if result.get("status") == "SUCCESS":
@@ -2837,7 +2837,7 @@ def _handle_mf_bot(phone: str, text: str, phone_number_id: str = None, inbound_m
 
 def _mf_search_and_send(phone: str, query: str, inbound_msg_id: int = None, page: int = 0):
     try:
-        resp = requests.get(f"https://api.mfapi.in/mf/search?q={query}", timeout=30)
+        resp = requests.get(f"https://api.mfapi.in/mf/search?q={query}", timeout=60)
         if resp.status_code == 200:
             data = resp.json()
             if not data:
@@ -2990,9 +2990,9 @@ def _send_mutual_fund_comparison(phone: str, scheme1: str, scheme2: str, inbound
         import requests
         
         # Fetch Scheme 1 - Get full history!
-        r1 = requests.get(f"https://api.mfapi.in/mf/{scheme1}", timeout=30).json()
+        r1 = requests.get(f"https://api.mfapi.in/mf/{scheme1}", timeout=60).json()
         # Fetch Scheme 2 - Get full history!
-        r2 = requests.get(f"https://api.mfapi.in/mf/{scheme2}", timeout=30).json()
+        r2 = requests.get(f"https://api.mfapi.in/mf/{scheme2}", timeout=60).json()
         
         s1_meta = r1.get("meta", {})
         s1_data = r1.get("data", [])
