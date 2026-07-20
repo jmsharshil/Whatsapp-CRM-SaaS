@@ -890,7 +890,15 @@ class WebhookView(View):
             self._log_out(number, "[tpl] gigatel_otdr_value_prompt (retry)", ok)
             return
 
-        session.otdr_value = text.strip()
+        value = text.strip()
+        
+        # Validation: meters only (numeric), no decimals, max 6 digits
+        if not value.isdigit() or len(value) > 6:
+            ok = tpl_invalid_meter_value(number)
+            self._log_out(number, "[tpl] invalid_meter_value", ok)
+            return
+
+        session.otdr_value = value
         session.state      = "AWAIT_OTDR_IMAGE"
         session.save()
         ok = tpl_otdr_image_prompt(number)

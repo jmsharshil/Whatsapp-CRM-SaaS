@@ -524,6 +524,18 @@ def email_request_closed(to_email: str, circuit_id: str):
 # Templates
 # ---------------------------------------------------------------------------
 
+def tpl_invalid_meter_value(to: str) -> bool:
+    return _meta_post({
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "template",
+        "template": {
+            "name": "invalid_meter_value",
+            "language": {"code": "en"},
+        },
+    })
+
+
 def tpl_auth_failed(to: str) -> bool:
     return _meta_post({
         "messaging_product": "whatsapp",
