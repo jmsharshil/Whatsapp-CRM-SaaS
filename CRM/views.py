@@ -1285,8 +1285,10 @@ class MetaCustomerListView(APIView):
         except Exception:
             pass
  
-        from django.db.models import Q
-        
+        from django.db.models import Q, Count
+
+        is_tp = _is_tech_provider(user)
+
         # ── Base queryset ─────────────────────────────────────────────────────
         if phone_number_id:
             qs = Conversation.objects.select_related("customer").filter(
@@ -1300,14 +1302,30 @@ class MetaCustomerListView(APIView):
                 client__tech_provider=org
             ).annotate(
                 last_msg_time=Max('messages__timestamp')
-            ).order_by("-last_msg_time", "-created_at")
- 
+            )
+            
+        if is_tp:
+            qs = qs.annotate(
+                closing_count=Count(
+                    'messages',
+                    filter=Q(messages__direction="inbound") & (
+                        Q(messages__content__icontains="thank you") |
+                        Q(messages__content__icontains="thanks") |
+                        Q(messages__content__iexact="tq") |
+                        Q(messages__content__iexact="thx")
+                    ),
+                    distinct=True
+                )
+            )
+            
+        qs = qs.order_by("-last_msg_time", "-created_at")
+
         # ── Optional query filters ────────────────────────────────────────────
         number    = request.query_params.get("number",    "").strip()
         from_date = request.query_params.get("from_date", "").strip()
         to_date   = request.query_params.get("to_date",   "").strip()
         status    = request.query_params.get("status",    "").strip()
- 
+
         if number:
             qs = qs.filter(customer__phone__icontains=number)
         if from_date:
@@ -1315,23 +1333,30 @@ class MetaCustomerListView(APIView):
         if to_date:
             qs = qs.filter(created_at__date__lte=to_date)
         if status:
-            qs = qs.filter(status=status)
- 
+            if is_tp:
+                # If status filter is passed for Tech Provider, we filter using the annotated closing_count
+                if status in ["lead", "confirmed"]:
+                    qs = qs.filter(closing_count__gt=0)
+                elif status == "prospect":
+                    qs = qs.filter(closing_count=0)
+            else:
+                qs = qs.filter(status=status)
+
         # ── Pagination ────────────────────────────────────────────────────────
         page_size = int(request.query_params.get("page_size", 20))
         page_num  = int(request.query_params.get("page", 1))
         paginator = Paginator(qs, page_size)
         page      = paginator.get_page(page_num)
- 
+
         base_url = request.build_absolute_uri(request.path)
- 
+
         def make_url(p):
             if p is None:
                 return None
             params = request.query_params.copy()
             params["page"] = p
             return f"{base_url}?{params.urlencode()}"
- 
+
         results = []
         for conv in page.object_list:
             cust = conv.customer
@@ -1339,12 +1364,17 @@ class MetaCustomerListView(APIView):
             if phone and len(phone) == 10 and phone.isdigit():
                 phone = f"91{phone}"
                 
+            if is_tp:
+                final_status = "confirmed" if conv.closing_count > 0 else "prospect"
+            else:
+                final_status = conv.status
+                
             results.append({
                 "conversation_id": conv.id,
                 "customer_id":     cust.id,
                 "name":            cust.name,
                 "phone":           phone,
-                "status":          conv.status,   # or cust.status — check your model
+                "status":          final_status,
                 "created_at":      conv.created_at.isoformat(),
             })
  

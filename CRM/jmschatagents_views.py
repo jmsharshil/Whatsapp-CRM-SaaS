@@ -2309,9 +2309,14 @@ def customer_list(request):
         total_messages=Count("messages", distinct=True),
         last_seen=Max("messages__timestamp"),
         created_at=Subquery(first_seen_subq),
-        reply_count=Count(
+        closing_count=Count(
             "messages",
-            filter=Q(messages__direction="outbound"),
+            filter=Q(messages__direction="inbound") & (
+                Q(messages__content__icontains="thank you") |
+                Q(messages__content__icontains="thanks") |
+                Q(messages__content__iexact="tq") |
+                Q(messages__content__iexact="thx")
+            ),
             distinct=True,
         ),
         first_message_content=Subquery(first_msg_subq),
@@ -2338,12 +2343,12 @@ def customer_list(request):
 
     all_customers  = list(qs)
     total          = len(all_customers)
-    lead_count     = sum(1 for c in all_customers if c.reply_count > 0)
+    lead_count     = sum(1 for c in all_customers if c.closing_count > 0)
     prospect_count = total - lead_count
 
     results = []
     for c in all_customers:
-        customer_status = "lead" if c.reply_count > 0 else "prospect"
+        customer_status = "lead" if c.closing_count > 0 else "prospect"
         if status and customer_status != status:
             continue
 
@@ -2476,9 +2481,16 @@ def conversation_list(request):
     results = []
     for conv in convs:
         last_msg   = conv.messages.order_by("-timestamp").first()
-        # Lead if there's any outbound message (reply from bot or agent)
-        has_reply  = conv.messages.filter(direction="outbound").exists()
-        auto_status = "lead" if has_reply else "prospect"
+        # Lead if there's any inbound message with a closing sentence
+        has_closing = conv.messages.filter(
+            Q(direction="inbound") & (
+                Q(content__icontains="thank you") |
+                Q(content__icontains="thanks") |
+                Q(content__iexact="tq") |
+                Q(content__iexact="thx")
+            )
+        ).exists()
+        auto_status = "lead" if has_closing else "prospect"
         phone = conv.customer.phone
         if phone and len(phone) == 10 and phone.isdigit():
             phone = f"91{phone}"
