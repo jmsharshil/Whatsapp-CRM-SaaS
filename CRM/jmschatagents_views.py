@@ -27,6 +27,7 @@ from django.core.files.base import File
 from django.core.files.storage import default_storage
 from django.db import transaction
 from django.db.models import Count, Max, Q, Subquery, OuterRef
+from django.db.models.functions import TruncDate
 from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import render
 from django.urls import reverse
@@ -2182,31 +2183,64 @@ def _parse_date_range(request):
 
 @csrf_exempt
 def dashboard_summary(request):
-    if not _auth(request):
+    from rest_framework_simplejwt.authentication import JWTAuthentication
+    from rest_framework.exceptions import AuthenticationFailed
+    
+    auth = JWTAuthentication()
+    try:
+        user_auth_tuple = auth.authenticate(request)
+        if not user_auth_tuple:
+            return _forbidden()
+        user, token = user_auth_tuple
+    except AuthenticationFailed:
         return _forbidden()
+
+    # Get TechProvider's phone_number_id
+    phone_number_id = None
+    org = getattr(user, "organization", None)
+    if not org and hasattr(user, "membership"):
+        org = user.membership.organization
+    
+    if org:
+        try:
+            phone_number_id = org.waba_account.phone_number_id
+        except Exception:
+            pass
 
     now   = timezone.now()
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    total_customers     = Customer.objects.count()
-    total_conversations = Conversation.objects.count()
-    total_messages      = Message.objects.count()
-    active_today        = Conversation.objects.filter(messages__timestamp__gte=today).distinct().count()
-    new_today           = Customer.objects.filter(conversations__created_at__gte=today).distinct().count()
+    if phone_number_id:
+        customer_qs = Customer.objects.filter(conversations__phone_number_id=phone_number_id).distinct()
+        conversation_qs = Conversation.objects.filter(phone_number_id=phone_number_id)
+        message_qs = Message.objects.filter(conversation__phone_number_id=phone_number_id)
+    else:
+        customer_qs = Customer.objects.none()
+        conversation_qs = Conversation.objects.none()
+        message_qs = Message.objects.none()
 
-    status_qs               = Conversation.objects.values("status").annotate(count=Count("id"))
+    total_customers     = customer_qs.count()
+    total_conversations = conversation_qs.count()
+    total_messages      = message_qs.count()
+    active_today        = conversation_qs.filter(messages__timestamp__gte=today).distinct().count()
+    new_today           = customer_qs.filter(conversations__created_at__gte=today).distinct().count()
+
+    status_qs               = conversation_qs.values("status").annotate(count=Count("id"))
     conversations_by_status = {row["status"]: row["count"] for row in status_qs}
 
-    seven_days_ago = today - timedelta(days=6)
     daily_qs = (
-        Message.objects
-        .filter(timestamp__gte=seven_days_ago)
-        .extra(select={"day": "DATE(timestamp)"})
+        message_qs
+        .annotate(day=TruncDate("timestamp"))
         .values("day")
         .annotate(count=Count("id"))
-        .order_by("day")
+        .order_by("-day")[:7]
     )
-    messages_last_7_days = [{"date": str(row["day"]), "count": row["count"]} for row in daily_qs]
+    
+    # Reverse to show chronologically in the chart
+    daily_list = list(daily_qs)
+    daily_list.reverse()
+    
+    messages_last_7_days = [{"date": str(row["day"]), "count": row["count"]} for row in daily_list]
 
     return _json({
         "total_customers":         total_customers,

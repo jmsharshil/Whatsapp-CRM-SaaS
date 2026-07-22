@@ -563,10 +563,7 @@ class MetaDashboardAPIView(APIView):
                 direction='outbound'  # ← Only count sent messages
             )
         else:
-            messages = Message.objects.filter(
-                conversation__client__tech_provider=org,
-                direction='outbound'  # ← Only count sent messages
-            )
+            messages = Message.objects.none()
 
         templates = Template.objects.filter(organization=org)
 
@@ -615,8 +612,8 @@ class MetaDashboardAPIView(APIView):
             ).distinct()
             active_today = client_customers.filter(conversations__messages__timestamp__date=date.today()).distinct().count()
         else:
-            client_customers = Customer.objects.filter(conversations__client__tech_provider=org).distinct()
-            active_today = client_customers.filter(conversations__messages__timestamp__date=date.today()).distinct().count()
+            client_customers = Customer.objects.none()
+            active_today = 0
 
         raw_ticket_phones = WhatsAppSession.objects.exclude(ticket_id="").values_list("mobile_number", flat=True)
         ticket_phones_10d = set(p[-10:] for p in raw_ticket_phones if p)
