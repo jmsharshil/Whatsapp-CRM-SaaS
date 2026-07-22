@@ -2289,6 +2289,10 @@ def customer_list(request):
         customer=OuterRef("pk")
     ).order_by("timestamp").values("content")[:1]
     
+    first_seen_subq = Message.objects.filter(
+        customer=OuterRef("pk")
+    ).order_by("timestamp").values("timestamp")[:1]
+    
     from django.db.models import Q
     base_qs = Customer.objects.all()
     if phone_number_id:
@@ -2304,6 +2308,7 @@ def customer_list(request):
         total_conversations=Count("conversations", distinct=True),
         total_messages=Count("messages", distinct=True),
         last_seen=Max("messages__timestamp"),
+        created_at=Subquery(first_seen_subq),
         reply_count=Count(
             "messages",
             filter=Q(messages__direction="outbound"),
@@ -2321,6 +2326,10 @@ def customer_list(request):
         last_wa_id=Max(
             "messages__id",
             filter=Q(messages__content__iexact="whatsapp"),
+        ),
+        last_mf_id=Max(
+            "messages__id",
+            filter=Q(messages__content__iexact="mutual funds") | Q(messages__content__iexact="mf"),
         ),
     ).order_by("-id")
 
@@ -2346,6 +2355,8 @@ def customer_list(request):
             bots.append((c.last_jms_id, "jms"))
         if c.last_wa_id:
             bots.append((c.last_wa_id, "whatsapp"))
+        if c.last_mf_id:
+            bots.append((c.last_mf_id, "mutual_funds"))
         
         if bots:
             bot_source = max(bots, key=lambda x: x[0])[1]
@@ -2359,6 +2370,7 @@ def customer_list(request):
             "total_conversations": c.total_conversations,
             "total_messages":      c.total_messages,
             "last_seen":           c.last_seen.isoformat() if c.last_seen else None,
+            "created_at":          c.created_at.isoformat() if c.created_at else None,
             "status":              customer_status,
             "bot_source":          bot_source,
         })
@@ -2409,8 +2421,30 @@ def customer_detail(request, phone):
 
 @csrf_exempt
 def conversation_list(request):
-    if not _auth(request):
+    from rest_framework_simplejwt.authentication import JWTAuthentication
+    from rest_framework.exceptions import AuthenticationFailed
+    from django.db.models import Q
+    
+    auth = JWTAuthentication()
+    try:
+        user_auth_tuple = auth.authenticate(request)
+        if not user_auth_tuple:
+            return _forbidden()
+        user, token = user_auth_tuple
+    except AuthenticationFailed:
         return _forbidden()
+
+    # Get TechProvider's phone_number_id
+    phone_number_id = None
+    org = getattr(user, "organization", None)
+    if not org and hasattr(user, "membership"):
+        org = user.membership.organization
+    
+    if org:
+        try:
+            phone_number_id = org.waba_account.phone_number_id
+        except Exception:
+            pass
 
     status_filter  = request.GET.get("status", "").strip()
     phone_filter   = request.GET.get("phone",  "").strip()
@@ -2423,6 +2457,14 @@ def conversation_list(request):
         last_msg_time=Max("messages__timestamp")
     ).order_by("-last_msg_time", "-created_at")
 
+    if phone_number_id:
+        qs = qs.filter(
+            Q(client__phone_number_id=phone_number_id) |
+            Q(phone_number_id=phone_number_id)
+        )
+    else:
+        qs = qs.none()
+
     if status_filter: qs = qs.filter(status=status_filter)
     if phone_filter:  qs = qs.filter(customer__phone__icontains=phone_filter)
     if from_dt:       qs = qs.filter(created_at__gte=from_dt)
@@ -2434,7 +2476,8 @@ def conversation_list(request):
     results = []
     for conv in convs:
         last_msg   = conv.messages.order_by("-timestamp").first()
-        has_reply  = conv.messages.filter(reply_of__isnull=False).exclude(reply_of="").exists()
+        # Lead if there's any outbound message (reply from bot or agent)
+        has_reply  = conv.messages.filter(direction="outbound").exists()
         auto_status = "lead" if has_reply else "prospect"
         phone = conv.customer.phone
         if phone and len(phone) == 10 and phone.isdigit():
