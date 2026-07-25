@@ -286,11 +286,27 @@ class WebhookView(View):
         session.customer_id         = customer_id
         session.customer_company_id = company_id
 
-        session.contact_person_name = (
-            customer.get("registeredOfficeContactPerson")
-            or customer.get("corporateOfficeContactPerson")
-            or mobile
-        )
+        contact_person = None
+        
+        def clean_api_num(num):
+            return self._clean_number(str(num)) if num else ""
+
+        if mobile == clean_api_num(customer.get("registeredOfficeMobileNo")):
+            contact_person = customer.get("registeredOfficeContactPerson")
+        elif mobile == clean_api_num(customer.get("billingOfficeMobileNo")):
+            contact_person = customer.get("billingOfficeContactPerson")
+        elif mobile == clean_api_num(customer.get("corporateOfficeMobileNo")):
+            contact_person = customer.get("corporateOfficeContactPerson")
+            
+        if not contact_person:
+            contact_person = (
+                customer.get("registeredOfficeContactPerson")
+                or customer.get("corporateOfficeContactPerson")
+                or customer.get("billingOfficeContactPerson")
+                or mobile
+            )
+
+        session.contact_person_name = contact_person
 
         session.customer_email = (
             customer.get("registeredOfficeEmail")
