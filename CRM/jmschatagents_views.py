@@ -204,11 +204,12 @@ class SafeCache:
 jms_sessions = SafeCache(prefix="jms_sess:",  default_ttl=60 * 60)   # JMS-Tech bot
 wa_sessions  = SafeCache(prefix="wa_sess:",   default_ttl=60 * 15)   # WhatsApp-API bot
 ind_sessions = SafeCache(prefix="ind_sess:",  default_ttl=60 * 60)   # Industry bot
+avantika_sessions = SafeCache(prefix="avantika_sess:", default_ttl=60 * 60) # Avantika bot
 
 JMS_SESSION_TTL = 60 * 60
 WA_SESSION_TTL  = 60 * 15
 IND_SESSION_TTL = 60 * 60
-
+AVANTIKA_SESSION_TTL = 60 * 60
 
 # ═════════════════════════════════════════════════════════════════════════════
 # SHARED DB HELPERS
@@ -1007,6 +1008,97 @@ def _jms_handle_message(phone: str, text: str, phone_number_id: str = None, inbo
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────────────────
+#  BOT - AVANTIKA BOT  (trigger: "avantika")
+# ─────────────────────────────────────────────────────────────────────────────
+AVANTIKA_BOT_TRIGGER = "avantika"
+
+def _handle_avantika_bot(phone: str, text: str, phone_number_id: str = None, inbound_msg_id: int = None, client_name: str = "") -> bool:
+    """Avantika bot logic: generates and sends a personalized image using database models."""
+    import os
+    from django.conf import settings
+    from PIL import Image, ImageDraw, ImageFont
+    from .jmschatagents_utils import send_image, send_text
+    from .models import AvantikaContact, AvantikaTemplate
+
+    # 1. Check if the user is in the fixed list
+    clean_phone = phone.lstrip('+')
+    try:
+        # Check by clean phone or raw phone
+        contact = AvantikaContact.objects.get(models.Q(phone=clean_phone) | models.Q(phone=f"+{clean_phone}"))
+    except AvantikaContact.DoesNotExist:
+        # Ignore if not in the fixed list, or send a default reply
+        send_text(phone, "Sorry, you are not registered for the Avantika campaign.")
+        return True
+
+    # 2. Get the active template
+    active_template = AvantikaTemplate.objects.filter(is_active=True).first()
+    if not active_template or not active_template.base_image:
+        send_text(phone, "Sorry, no active Avantika campaign at the moment.")
+        return True
+
+    # 3. Generate image and construct URL
+    image_url = generate_avantika_image(contact, active_template)
+    
+    send_image(phone, image_url, caption=f"Hello {contact.name.strip()}, here is your personalized image!")
+    
+    if inbound_msg_id:
+        _save_reply(inbound_msg_id, f"Sent Avantika image to {contact.name.strip()}")
+        
+    return True
+
+
+def generate_avantika_image(contact, active_template) -> str:
+    """Generates the customized image for the contact and returns the public URL."""
+    from PIL import Image, ImageDraw, ImageFont
+    from io import BytesIO
+    from django.core.files.base import ContentFile
+    from django.core.files.storage import default_storage
+    from django.conf import settings
+
+    clean_phone = contact.phone.lstrip('+')
+    
+    # Open the image file from storage (avoids .path which fails on cloud)
+    with active_template.base_image.open('rb') as f:
+        img = Image.open(f).convert("RGB")
+        draw = ImageDraw.Draw(img)
+        
+        try:
+            font = ImageFont.truetype("arial.ttf", active_template.font_size)
+        except IOError:
+            font = ImageFont.load_default()
+        
+        display_name = contact.name.strip()
+        
+        # Draw text at coordinates specified by the admin
+        draw.text((active_template.name_x, active_template.name_y), display_name, fill=active_template.text_color, font=font)
+        
+        # Save to an in-memory buffer
+        buffer = BytesIO()
+        img.save(buffer, format="JPEG")
+        
+        generated_filename = f"avantika/generated/gen_{clean_phone}.jpg"
+        
+        # Delete if already exists to overwrite
+        if default_storage.exists(generated_filename):
+            default_storage.delete(generated_filename)
+            
+        # Save to Django's default storage
+        default_storage.save(generated_filename, ContentFile(buffer.getvalue()))
+        
+        # Construct URL
+        file_url = default_storage.url(generated_filename)
+        
+        # If the storage URL is relative (local dev), prepend the domain
+        if file_url.startswith('/'):
+            domain = getattr(settings, "DOMAIN_URL", "https://0tc80btl-8000.inc1.devtunnels.ms").rstrip('/')
+            image_url = f"{domain}{file_url}"
+        else:
+            # For cloud storage (like Azure/S3), the URL is already absolute
+            image_url = file_url
+            
+    return image_url
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  BOT 2 — WHATSAPP-API ASSISTANT BOT  (trigger: "whatsapp")
 # ─────────────────────────────────────────────────────────────────────────────

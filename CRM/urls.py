@@ -82,4 +82,8 @@ urlpatterns = [
     
     # ── Globestar ─────────────────────────────────────────────────────────────
     path("api/globestar/data/", GlobestarDataAPIView.as_view(), name="globestar-data"),
+    
+    # ── Avantika Bot ──────────────────────────────────────────────────────────
+    path("avantika-template/", avantika_template_view, name="avantika-template-view"),
+    path("avantika-blast/", avantika_blast_view, name="avantika-blast-view"),
 ]

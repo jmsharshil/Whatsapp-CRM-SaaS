@@ -49,6 +49,7 @@ from CRM.jmschatagents_views import (
     ind_save_session,
     wa_sessions,
     mf_sessions,
+    avantika_sessions,
     # Constants
     INDUSTRY_TRIGGERS,
     FAREWELL_KEYWORDS,
@@ -56,11 +57,13 @@ from CRM.jmschatagents_views import (
     MF_BOT_TRIGGER,
     BOT_TRIGGER_KEYWORD,
     IND_SESSION_TTL,
+    AVANTIKA_BOT_TRIGGER,
     # Bot handlers
     _process_meta_message,
     _jms_handle_message,
     _handle_wa_bot,
     _handle_mf_bot,
+    _handle_avantika_bot,
     # Session key helper
     _sess_key,
     # DB helper
@@ -199,42 +202,74 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
     text_lower = text.lower().strip()
     logger.info("[Webhook/JMS] from=%s text=%r", raw_phone, text_lower)
 
+    # ── Sessions ──────────────────────────────────────────────────────────
+    ind_sess = ind_sessions.get(_sess_key(raw_phone))
+    avantika_sess = avantika_sessions.get(raw_phone)
+    mf_sess = mf_sessions.get(raw_phone)
+    wa_sess = wa_sessions.get(raw_phone)
+
     # ── Route decision ────────────────────────────────────────────────────
     go_industry = False
-    go_wa_bot = False
+    go_avantika = False
+    go_mf = False
+    go_wa = False
+    go_jms = False
     skip_all = False
 
+    def _clear_other_sessions(keep_bot):
+        if keep_bot != "industry":
+            isess = ind_sessions.get(_sess_key(raw_phone))
+            if isess and isess.get("stage", "idle") != "idle":
+                isess["stage"] = "idle"
+                isess["active_bot"] = None
+                ind_sessions.set(_sess_key(raw_phone), isess, timeout=IND_SESSION_TTL)
+        if keep_bot != "mf":
+            mf_sessions.delete(raw_phone)
+        if keep_bot != "wa":
+            wa_sessions.delete(raw_phone)
+        if keep_bot != "avantika":
+            avantika_sessions.delete(raw_phone)
+
+    # 1. Explicit Triggers (Top Priority)
     if text_lower in INDUSTRY_TRIGGERS:
         go_industry = True
-    else:
-        ind_sess = ind_sessions.get(_sess_key(raw_phone))
-
+        _clear_other_sessions("industry")
+    elif text_lower == AVANTIKA_BOT_TRIGGER:
+        go_avantika = True
+        _clear_other_sessions("avantika")
+    elif text_lower in MF_BOT_TRIGGER:
+        go_mf = True
+        _clear_other_sessions("mf")
+    elif text_lower == WA_BOT_TRIGGER:
+        go_wa = True
+        _clear_other_sessions("wa")
+    elif text_lower == "jms":
+        go_jms = True
+        _clear_other_sessions("jms")
+    elif text_lower in FAREWELL_KEYWORDS:
         if ind_sess and ind_sess.get("stage", "idle") != "idle":
-            if text_lower in FAREWELL_KEYWORDS:
-                ind_sess["stage"] = "idle"
-                ind_sess["active_bot"] = None
-                ind_sess["chat_history"] = []
-                ind_sessions.set(
-                    _sess_key(raw_phone), ind_sess, timeout=IND_SESSION_TTL
-                )
-                _send(
-                    raw_phone,
-                    f"Thank you for using Technova AI! 😊\n\n"
-                    f"Send *{BOT_TRIGGER_KEYWORD}* anytime to start again.",
-                )
-                skip_all = True
-
-            elif text_lower == "jms":
-                ind_sess["stage"] = "idle"
-                ind_sess["active_bot"] = None
-                ind_sess["chat_history"] = []
-                ind_sessions.set(
-                    _sess_key(raw_phone), ind_sess, timeout=IND_SESSION_TTL
-                )
-                go_industry = False
-
-            else:
-                go_industry = True
+            ind_sess["stage"] = "idle"
+            ind_sess["active_bot"] = None
+            ind_sess["chat_history"] = []
+            ind_sessions.set(_sess_key(raw_phone), ind_sess, timeout=IND_SESSION_TTL)
+            _send(
+                raw_phone,
+                f"Thank you for using Technova AI! 😊\n\n"
+                f"Send *{BOT_TRIGGER_KEYWORD}* anytime to start again.",
+            )
+        skip_all = True
+    else:
+        # 2. Active Sessions (Fallback)
+        if ind_sess and ind_sess.get("stage", "idle") != "idle":
+            go_industry = True
+        elif avantika_sess and avantika_sess.get("stage") == "active":
+            go_avantika = True
+        elif mf_sess and mf_sess.get("stage") in ["active", "awaiting_search_query", "awaiting_category", "awaiting_llm_query"]:
+            go_mf = True
+        elif wa_sess and wa_sess.get("stage") == "active":
+            go_wa = True
+        else:
+            go_jms = True
 
     if skip_all:
         return
@@ -268,34 +303,33 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
         except Exception as e:
             logger.exception("Industry bot error: %s", e)
 
-    else:
-        # Check Mutual Funds bot first
-        mf_sess = mf_sessions.get(raw_phone)
-        if text_lower in MF_BOT_TRIGGER or (
-            mf_sess and mf_sess.get("stage") in ["active", "awaiting_search_query", "awaiting_category", "awaiting_llm_query"]
-        ):
-            logger.info("[Webhook/JMS] → MUTUAL FUNDS BOT for %s", raw_phone)
-            try:
-                _handle_mf_bot(raw_phone, text, phone_number_id, inbound_msg_id=inbound_msg_id, raw_msg=msg)
-            except Exception as e:
-                logger.exception("Mutual Funds bot error: %s", e)
-        else:
-            # Check WhatsApp-API bot next
-            wa_sess = wa_sessions.get(raw_phone)
-            if text_lower == WA_BOT_TRIGGER or (
-                wa_sess and wa_sess.get("stage") == "active"
-            ):
-                logger.info("[Webhook/JMS] → WHATSAPP BOT for %s", raw_phone)
-                try:
-                    _handle_wa_bot(raw_phone, text, phone_number_id, inbound_msg_id=inbound_msg_id)
-                except Exception as e:
-                    logger.exception("WhatsApp bot error: %s", e)
-            else:
-                logger.info("[Webhook/JMS] → JMS-TECH BOT for %s", raw_phone)
-                try:
-                    _jms_handle_message(raw_phone, text, phone_number_id, inbound_msg_id=inbound_msg_id)
-                except Exception as e:
-                    logger.exception("JMS-Tech bot error: %s", e)
+    elif go_avantika:
+        logger.info("[Webhook/JMS] → AVANTIKA BOT for %s", raw_phone)
+        try:
+            _handle_avantika_bot(raw_phone, text, phone_number_id, inbound_msg_id=inbound_msg_id, client_name=client_name)
+        except Exception as e:
+            logger.exception("Avantika bot error: %s", e)
+            
+    elif go_mf:
+        logger.info("[Webhook/JMS] → MUTUAL FUNDS BOT for %s", raw_phone)
+        try:
+            _handle_mf_bot(raw_phone, text, phone_number_id, inbound_msg_id=inbound_msg_id, raw_msg=msg)
+        except Exception as e:
+            logger.exception("Mutual Funds bot error: %s", e)
+            
+    elif go_wa:
+        logger.info("[Webhook/JMS] → WHATSAPP BOT for %s", raw_phone)
+        try:
+            _handle_wa_bot(raw_phone, text, phone_number_id, inbound_msg_id=inbound_msg_id)
+        except Exception as e:
+            logger.exception("WhatsApp bot error: %s", e)
+            
+    elif go_jms:
+        logger.info("[Webhook/JMS] → JMS-TECH BOT for %s", raw_phone)
+        try:
+            _jms_handle_message(raw_phone, text, phone_number_id, inbound_msg_id=inbound_msg_id)
+        except Exception as e:
+            logger.exception("JMS-Tech bot error: %s", e)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -404,7 +438,7 @@ class WhatsAppWebhookView(APIView):
                                 contacts[0] if contacts else {},
                             )
                         else:
-                            # ── JMS INTERNAL (3-bot router) ───────────────
+                            # ── JMS INTERNAL (4-bot router) ───────────────
                             logger.info("[Webhook] Routing message to JMS Internal Bots")
                             _handle_jms_internal_message(msg, value, phone_number_id)
 

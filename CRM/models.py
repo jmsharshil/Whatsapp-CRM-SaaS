@@ -585,3 +585,27 @@ class MetaRegistrationDetails(models.Model):
 
     def __str__(self):
         return f"Meta Registration for {self.client.name}"
+
+
+class AvantikaContact(models.Model):
+    """Fixed list of users allowed to trigger Avantika Bot."""
+    phone = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+    
+    def __str__(self):
+        return f"{self.name} ({self.phone})"
+
+
+class AvantikaTemplate(models.Model):
+    """Dynamic templates for Avantika Bot."""
+    base_image = models.ImageField(upload_to='avantika/templates/')
+    name_x = models.IntegerField(default=100)
+    name_y = models.IntegerField(default=100)
+    font_size = models.IntegerField(default=60)
+    text_color = models.CharField(max_length=20, default="#000000")
+    is_active = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        status = "Active" if self.is_active else "Inactive"
+        return f"Avantika Template {self.id} ({status})"

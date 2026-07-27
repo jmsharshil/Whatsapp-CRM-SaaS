@@ -11,7 +11,7 @@ from rest_framework import status, permissions
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from django.contrib.auth import get_user_model, authenticate
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render, redirect
 
 from .models import *
 from .serializers import*
@@ -105,7 +105,14 @@ class SyncTechProviderWabaView(APIView):
         phone_number_id = None
 
         if phone_data.get("data"):
-            phone_number_id = phone_data["data"][0]["id"]
+            existing_waba = getattr(org, "waba_account", None)
+            existing_pid = existing_waba.phone_number_id if existing_waba else None
+            valid_ids = [p["id"] for p in phone_data["data"]]
+            
+            if existing_pid and existing_pid in valid_ids:
+                phone_number_id = existing_pid
+            else:
+                phone_number_id = valid_ids[0]
 
         # SAVE / UPDATE
         WABAAccount.objects.update_or_create(
@@ -1971,3 +1978,120 @@ class TechProviderMetaRegistrationView(APIView):
         obj, created = MetaRegistrationDetails.objects.get_or_create(client=client)
         serializer = MetaRegistrationSerializer(obj)
         return Response(serializer.data)
+
+
+from django.shortcuts import render
+from django.contrib import messages
+from django.views.decorators.csrf import csrf_exempt
+
+@csrf_exempt
+def avantika_template_view(request):
+    """Admin view to upload and configure Avantika dynamic templates."""
+    from .models import AvantikaTemplate
+    
+    if request.method == "POST":
+        base_image = request.FILES.get("base_image")
+        name_x = request.POST.get("name_x", 100)
+        name_y = request.POST.get("name_y", 100)
+        font_size = request.POST.get("font_size", 60)
+        text_color = request.POST.get("text_color", "#000000")
+        
+        active_template = AvantikaTemplate.objects.filter(is_active=True).first()
+        
+        if base_image:
+            # Deactivate all existing templates
+            AvantikaTemplate.objects.update(is_active=False)
+            
+            # Create the new active template
+            AvantikaTemplate.objects.create(
+                base_image=base_image,
+                name_x=int(name_x),
+                name_y=int(name_y),
+                font_size=int(font_size),
+                text_color=text_color,
+                is_active=True
+            )
+            messages.success(request, "New template saved and activated successfully!")
+        elif active_template:
+            # Update the existing active template
+            active_template.name_x = int(name_x)
+            active_template.name_y = int(name_y)
+            active_template.font_size = int(font_size)
+            active_template.text_color = text_color
+            active_template.save()
+            messages.success(request, "Active template updated successfully!")
+        else:
+            messages.error(request, "Please upload a valid image.")
+            
+        return redirect('avantika-template-view')
+            
+    active_template = AvantikaTemplate.objects.filter(is_active=True).first()
+    return render(request, "avantika_admin.html", {"active_template": active_template})
+
+
+@csrf_exempt
+def avantika_blast_view(request):
+    """Admin view to trigger outbound template blast."""
+    from .models import AvantikaContact, AvantikaTemplate
+    from .jmschatagents_views import generate_avantika_image
+    from .jmschatagents_utils import send_template
+    
+    if request.method == "POST":
+        active_template = AvantikaTemplate.objects.filter(is_active=True).first()
+        if not active_template:
+            messages.error(request, "No active template found!")
+            return render(request, "avantika_admin.html")
+            
+        # Read Meta Template Name from the form
+        meta_template_name = request.POST.get("meta_template_name", "avantikaa").strip()
+        if not meta_template_name:
+            messages.error(request, "Meta template name is required.")
+            return redirect('avantika-template-view')
+            
+        contacts = AvantikaContact.objects.all()
+        count = 0
+        for contact in contacts:
+            try:
+                # 1. Generate customized image and get URL
+                image_url = generate_avantika_image(contact, active_template)
+                
+                # 2. Construct components for the Meta Media Template
+                header_component = {
+                    "type": "header",
+                    "parameters": [
+                        {
+                            "type": "image",
+                            "image": {
+                                "link": image_url
+                            }
+                        }
+                    ]
+                }
+                
+                body_component = {
+                    "type": "body",
+                    "parameters": [
+                        {
+                            "type": "text",
+                            "text": contact.name.strip()
+                        }
+                    ]
+                }
+                
+                components = [header_component, body_component]
+                
+                # 3. Send via WhatsApp API
+                send_template(
+                    to=contact.phone,
+                    template_name=meta_template_name,
+                    language_code="en",
+                    components=components
+                )
+                count += 1
+            except Exception as e:
+                print(f"Error sending blast to {contact.phone}: {str(e)}")
+                
+        messages.success(request, f"Blast campaign successfully sent to {count} contacts!")
+        return redirect('avantika-template-view')
+        
+    return redirect('avantika-template-view')

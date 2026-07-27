@@ -21,3 +21,7 @@ admin.site.register(WhatsAppMessage)
 admin.site.register(WhatsAppSession)
 
 admin.site.register(MetaRegistrationDetails)
+
+# Avantika Models
+admin.site.register(AvantikaContact)
+admin.site.register(AvantikaTemplate)

@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Avantika Template Admin</title>
+    <!-- Import Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4F46E5;
+            --primary-hover: #4338CA;
+            --danger: #EF4444;
+            --danger-hover: #DC2626;
+            --surface: #ffffff;
+            --background: #F3F4F6;
+            --text-main: #1F2937;
+            --text-muted: #6B7280;
+            --border: #E5E7EB;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --radius-md: 0.5rem;
+            --radius-lg: 0.75rem;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--background);
+            color: var(--text-main);
+            margin: 0;
+            padding: 40px 20px;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .card {
+            background-color: var(--surface);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            padding: 32px;
+            border: 1px solid var(--border);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .card:hover {
+            box-shadow: var(--shadow-lg);
+        }
+
+        h2 {
+            margin-top: 0;
+            margin-bottom: 16px;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #111827;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        p.instructions {
+            color: var(--text-muted);
+            margin-bottom: 24px;
+            font-size: 0.95rem;
+            background: #EFF6FF;
+            padding: 12px 16px;
+            border-left: 4px solid #3B82F6;
+            border-radius: 0 var(--radius-md) var(--radius-md) 0;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        label {
+            font-weight: 500;
+            font-size: 0.9rem;
+            color: #374151;
+            margin-bottom: 6px;
+            display: block;
+        }
+
+        input[type="number"], input[type="text"], input[type="file"] {
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 10px 14px;
+            font-size: 0.95rem;
+            width: 100%;
+            box-sizing: border-box;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            background-color: #F9FAFB;
+        }
+        
+        input[type="number"] { width: 120px; }
+
+        input[type="number"]:focus, input[type="text"]:focus, input[type="file"]:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2);
+            background-color: white;
+        }
+
+        input[type="color"] {
+            -webkit-appearance: none;
+            border: 1px solid var(--border);
+            width: 44px;
+            height: 44px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            padding: 2px;
+            background: white;
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+        input[type="color"]::-webkit-color-swatch {
+            border: none;
+            border-radius: 4px;
+        }
+
+        .image-container {
+            position: relative;
+            display: inline-block;
+            border: 2px dashed #CBD5E1;
+            border-radius: var(--radius-md);
+            padding: 4px;
+            background: #F8FAFC;
+            margin-bottom: 24px;
+            width: 100%;
+            box-sizing: border-box;
+            text-align: center;
+            overflow: hidden;
+        }
+
+        #preview {
+            max-width: 100%;
+            display: none;
+            cursor: crosshair;
+            border-radius: 4px;
+            margin: 0 auto;
+        }
+
+        .marker {
+            position: absolute;
+            color: red;
+            font-weight: bold;
+            font-size: 24px;
+            transform: translate(0, -100%);
+            display: none;
+            text-shadow: 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 0px 2px 4px rgba(0,0,0,0.5);
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 1rem;
+            font-weight: 500;
+            border-radius: var(--radius-md);
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-family: inherit;
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+            box-shadow: 0 4px 6px rgba(79, 70, 229, 0.25);
+        }
+        
+        .btn-primary:hover { background-color: var(--primary-hover); }
+
+        .btn-danger {
+            background-color: var(--danger);
+            color: white;
+            box-shadow: 0 4px 6px rgba(239, 68, 68, 0.25);
+        }
+
+        .btn-danger:hover { background-color: var(--danger-hover); }
+
+        .alert-success {
+            background-color: #DEF7EC;
+            color: #03543F;
+            padding: 16px;
+            border-radius: var(--radius-md);
+            margin-bottom: 24px;
+            border-left: 4px solid #31C48D;
+            font-weight: 500;
+            list-style: none;
+        }
+
+        .alert-success li { margin-bottom: 4px; }
+        .alert-success li:last-child { margin-bottom: 0; }
+        
+        hr {
+            border: none;
+            height: 1px;
+            background: var(--border);
+            margin: 32px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        
+        {% if messages %}
+        <ul class="alert-success">
+            {% for message in messages %}
+            <li>✓ {{ message }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        <div class="card">
+            <h2>✨ Avantika Template Setup</h2>
+            <p class="instructions">
+                <strong>Step 1:</strong> Upload your base image.<br>
+                <strong>Step 2:</strong> Click anywhere on the image below to set the precise starting position for the User's Name.<br>
+                <strong>Step 3:</strong> Adjust the Font Size and Color to match your design!
+            </p>
+
+            <form action="/avantika-template/" method="POST" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label>Upload Base Image</label>
+                    <input type="file" name="base_image" id="imageInput" accept="image/*" {% if not active_template %}required{% endif %}>
+                    {% if active_template %}
+                    <small style="color: var(--text-muted); display: block; margin-top: 4px;">Leave empty to keep the currently active image.</small>
+                    {% endif %}
+                </div>
+
+                <div class="image-container">
+                    {% if active_template and active_template.base_image %}
+                        <img id="preview" src="{{ active_template.base_image.url }}" alt="Image Preview" style="display: block;">
+                        <div id="nameMarker" class="marker" style="display: block; left: {{ active_template.name_x }}px; top: {{ active_template.name_y }}px; font-size: {{ active_template.font_size }}px; color: {{ active_template.text_color }};">[Name]</div>
+                        <div id="placeholderText" style="display: none; padding: 40px; color: #94A3B8; font-weight: 500;">Image Preview Area</div>
+                    {% else %}
+                        <img id="preview" src="#" alt="Image Preview">
+                        <div id="nameMarker" class="marker">[Name]</div>
+                        <div id="placeholderText" style="padding: 40px; color: #94A3B8; font-weight: 500;">Image Preview Area</div>
+                    {% endif %}
+                </div>
+
+                <div class="form-row form-group">
+                    <div>
+                        <label>Name X Coordinate</label>
+                        <input type="number" name="name_x" id="nameX" value="{{ active_template.name_x|default:'100' }}" readonly required>
+                    </div>
+                    <div>
+                        <label>Name Y Coordinate</label>
+                        <input type="number" name="name_y" id="nameY" value="{{ active_template.name_y|default:'100' }}" readonly required>
+                    </div>
+                </div>
+
+                <div class="form-row form-group">
+                    <div>
+                        <label>Font Size</label>
+                        <input type="number" name="font_size" id="fontSizeInput" value="{{ active_template.font_size|default:'60' }}" required>
+                    </div>
+                    <div>
+                        <label>Text Color</label>
+                        <input type="color" name="text_color" id="textColorInput" value="{{ active_template.text_color|default:'#000000' }}" required>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-primary" style="width: 100%; margin-top: 10px;">
+                    Save & Activate Template
+                </button>
+            </form>
+        </div>
+
+        <div class="card" style="border-top: 4px solid var(--danger);">
+            <h2>🚀 Outbound Blast Campaign</h2>
+            <p style="color: var(--text-muted); margin-bottom: 24px;">
+                Trigger the Meta Marketing API to generate and send personalized templates to ALL users in the <strong>AvantikaContact</strong> database instantly.
+            </p>
+            <form action="/avantika-blast/" method="POST">
+                {% csrf_token %}
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label>Meta Template Name</label>
+                    <input type="text" name="meta_template_name" value="avantikaa" required placeholder="e.g. avantika_campaign_v1" style="max-width: 300px;">
+                    <small style="display: block; color: var(--text-muted); margin-top: 4px;">Must exactly match your approved Meta Marketing Template name.</small>
+                </div>
+                <button type="submit" class="btn-danger" style="width: 100%;" onclick="return confirm('Are you sure you want to send this template to ALL contacts in the database? This action cannot be undone.');">
+                    Blast Campaign to All Users
+                </button>
+            </form>
+        </div>
+
+    </div>
+
+    <script>
+        const imageInput = document.getElementById('imageInput');
+        const preview = document.getElementById('preview');
+        const nameMarker = document.getElementById('nameMarker');
+        const nameX = document.getElementById('nameX');
+        const nameY = document.getElementById('nameY');
+        const fontSizeInput = document.getElementById('fontSizeInput');
+        const textColorInput = document.getElementById('textColorInput');
+        const placeholderText = document.getElementById('placeholderText');
+
+        // On load, update marker position if image exists
+        if (preview.src && preview.src !== window.location.href && preview.src.indexOf('#') === -1) {
+            preview.onload = function() {
+                // Set the marker to the actual saved coordinates scaled for display
+                const scaleX = preview.width / preview.naturalWidth;
+                const scaleY = preview.height / preview.naturalHeight;
+                nameMarker.style.left = (parseInt(nameX.value) * scaleX) + 'px';
+                nameMarker.style.top = (parseInt(nameY.value) * scaleY) + 'px';
+                updateMarkerStyle();
+            }
+        }
+
+        // Update marker styling based on inputs
+        function updateMarkerStyle() {
+            if (!preview.naturalWidth) return;
+            // The display font size should be scaled relative to the image display size
+            const scale = preview.width / preview.naturalWidth;
+            const baseSize = parseInt(fontSizeInput.value) || 60;
+            const displaySize = Math.max(12, Math.round(baseSize * scale));
+            
+            nameMarker.style.fontSize = displaySize + 'px';
+            nameMarker.style.color = textColorInput.value;
+        }
+
+        fontSizeInput.addEventListener('input', updateMarkerStyle);
+        textColorInput.addEventListener('input', updateMarkerStyle);
+
+        imageInput.addEventListener('change', function() {
+            const file = this.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.src = e.target.result;
+                    preview.style.display = 'block';
+                    placeholderText.style.display = 'none';
+                    nameMarker.style.display = 'none';
+                    
+                    // wait for image to load to get naturalWidth
+                    preview.onload = updateMarkerStyle;
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+
+        preview.addEventListener('click', function(e) {
+            const rect = preview.getBoundingClientRect();
+            const displayX = e.clientX - rect.left;
+            const displayY = e.clientY - rect.top;
+            const scaleX = preview.naturalWidth / preview.width;
+            const scaleY = preview.naturalHeight / preview.height;
+            const actualX = Math.round(displayX * scaleX);
+            const actualY = Math.round(displayY * scaleY);
+
+            nameX.value = actualX;
+            nameY.value = actualY;
+
+            nameMarker.style.left = displayX + 'px';
+            nameMarker.style.top = displayY + 'px';
+            nameMarker.style.display = 'block';
+            updateMarkerStyle();
+        });
+    </script>
+</body>
+</html>
