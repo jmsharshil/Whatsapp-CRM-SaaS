@@ -173,7 +173,7 @@ def handle_gkd_message(msg: dict):
 
     session = ConversationSession(conv_obj)
     
-    is_trigger = bool(re.search(r'^(hi|hello|hey|menu)$', body.lower()))
+    is_trigger = (session.state == "INIT") or bool(re.search(r'^(hi|hello|hey|menu)$', body.lower()))
     if is_trigger:
         session.state = "INIT"
         session.gkd_branch = ""
