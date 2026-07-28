@@ -367,7 +367,7 @@ class WebhookView(View):
                 ok = tpl_no_ticket_found(number, "N/A")
                 self._log_out(number, "[tpl] gigatel_no_ticket_found", ok)
             else:
-                for t in tickets[:5]:  # limit to max 5 to avoid spam
+                for t in tickets:
                     t_id = str(t.get("transactionNo") or t.get("id", "N/A"))
                     status = str(t.get("ticketStatus", "Open"))
                     
