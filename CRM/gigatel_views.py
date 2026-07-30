@@ -367,44 +367,57 @@ class WebhookView(View):
                 ok = tpl_no_ticket_found(number, "N/A")
                 self._log_out(number, "[tpl] gigatel_no_ticket_found", ok)
             else:
-                for t in tickets:
-                    t_id = str(t.get("transactionNo") or t.get("id", "N/A"))
-                    status = str(t.get("ticketStatus", "Open"))
-                    
-                    circuit_from = str(t.get("circuitFrom") or "").strip()
-                    circuit_to = str(t.get("circuitTo") or "").strip()
-                    circuit_id_str = str(t.get("circuitIdStr") or "").strip()
-                    
-                    if circuit_from and circuit_to:
-                        circuit_id_display = f"{circuit_from} to {circuit_to}"
-                    elif circuit_from:
-                        circuit_id_display = circuit_from
-                    elif circuit_to:
-                        circuit_id_display = circuit_to
-                    else:
-                        circuit_id_display = "N/A"
-                        
-                    if circuit_id_str:
-                        circuit_id = circuit_id_str
-                        from_and_to = circuit_id_display
-                    else:
-                        circuit_id = circuit_id_display
-                        from_and_to = ""
-                        
-                    ticket_date_raw = t.get("ticketDate", "")
-                    created_on = "N/A"
-                    if ticket_date_raw:
-                        try:
-                            # 2026-06-30T15:39:57.81 or similar ISO format
-                            dt = datetime.fromisoformat(ticket_date_raw)
-                            created_on = dt.strftime("%d %b %Y, %H:%M")
-                        except Exception:
-                            # Fallback if unparseable
-                            created_on = str(ticket_date_raw)
+                import threading
+                def send_tickets():
+                    # Filter unique tickets by transactionNo or id to avoid duplicates
+                    unique_tickets = []
+                    seen_tids = set()
+                    for t in tickets:
+                        t_id = str(t.get("transactionNo") or t.get("id", "N/A"))
+                        if t_id not in seen_tids:
+                            seen_tids.add(t_id)
+                            unique_tickets.append(t)
                             
-                    ok = tpl_current_ticket(number, circuit_id, t_id, status, created_on, from_and_to)
-                    self._log_out(number, "[tpl] gigatel_current_ticket", ok)
-                    time.sleep(1)
+                    for t in unique_tickets:
+                        t_id = str(t.get("transactionNo") or t.get("id", "N/A"))
+                        status = str(t.get("ticketStatus", "Open"))
+                        
+                        circuit_from = str(t.get("circuitFrom") or "").strip()
+                        circuit_to = str(t.get("circuitTo") or "").strip()
+                        circuit_id_str = str(t.get("circuitIdStr") or "").strip()
+                        
+                        if circuit_from and circuit_to:
+                            circuit_id_display = f"{circuit_from} to {circuit_to}"
+                        elif circuit_from:
+                            circuit_id_display = circuit_from
+                        elif circuit_to:
+                            circuit_id_display = circuit_to
+                        else:
+                            circuit_id_display = "N/A"
+                            
+                        if circuit_id_str:
+                            circuit_id = circuit_id_str
+                            from_and_to = circuit_id_display
+                        else:
+                            circuit_id = circuit_id_display
+                            from_and_to = ""
+                            
+                        ticket_date_raw = t.get("ticketDate", "")
+                        created_on = "N/A"
+                        if ticket_date_raw:
+                            try:
+                                # 2026-06-30T15:39:57.81 or similar ISO format
+                                dt = datetime.fromisoformat(ticket_date_raw)
+                                created_on = dt.strftime("%d %b %Y, %H:%M")
+                            except Exception:
+                                # Fallback if unparseable
+                                created_on = str(ticket_date_raw)
+                                
+                        ok = tpl_current_ticket(number, circuit_id, t_id, status, created_on, from_and_to)
+                        self._log_out(number, "[tpl] gigatel_current_ticket", ok)
+                        time.sleep(1)
+                
+                threading.Thread(target=send_tickets, daemon=True).start()
 
             session.state = "MENU"
             session.save()
