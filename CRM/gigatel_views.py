@@ -419,7 +419,7 @@ class WebhookView(View):
                 
                 threading.Thread(target=send_tickets, daemon=True).start()
 
-            session.state = "MENU"
+            session.state = "DONE"
             session.save()
 
         elif text == "sales":
