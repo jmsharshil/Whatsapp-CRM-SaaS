@@ -202,6 +202,10 @@ def amritcement_get_destinations(dealer_code: str) -> list:
     ]
 
 def amritcement_verify_mobile_no(mobile_no: str) -> dict:
+    # Strip the 91 country code if the number is 12 digits long
+    if mobile_no.isdigit() and len(mobile_no) == 12 and mobile_no.startswith("91"):
+        mobile_no = mobile_no[2:]
+
     url = "https://supersales.bigbanginnovations.in/development/Api/verifyMobileNo"
     payload = {"mobile_no": mobile_no}
     try:

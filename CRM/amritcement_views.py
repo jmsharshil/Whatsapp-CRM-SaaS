@@ -136,6 +136,11 @@ def handle_amritcement_message(msg: dict):
                 interactive_id = interactive.get("button_reply", {}).get("id", "")
                 body_str = interactive_id.lower()
                 display_str = interactive.get("button_reply", {}).get("title", "")
+        elif msg_type == "button":
+            button_info = msg.get("button", {})
+            interactive_id = button_info.get("payload", "")
+            display_str = button_info.get("text", "")
+            body_str = interactive_id.lower() if interactive_id else display_str.lower()
         elif msg_type in ["image", "video"]:
             media_info = msg.get(msg_type, {})
             media_id = media_info.get("id", "")
