@@ -50,8 +50,10 @@ from CRM.jmschatagents_views import (
     wa_sessions,
     mf_sessions,
     avantika_sessions,
+    shopify_sessions,
     # Constants
     INDUSTRY_TRIGGERS,
+    SHOPIFY_BOT_TRIGGER,
     FAREWELL_KEYWORDS,
     WA_BOT_TRIGGER,
     MF_BOT_TRIGGER,
@@ -64,6 +66,7 @@ from CRM.jmschatagents_views import (
     _handle_wa_bot,
     _handle_mf_bot,
     _handle_avantika_bot,
+    _handle_shopify_bot,
     # Session key helper
     _sess_key,
     # DB helper
@@ -77,6 +80,8 @@ from CRM.globestar_views import handle_globestar_message
 from CRM.globestar_utils import GLOBESTAR_PHONE_NUMBER_ID
 from CRM.gkd_views import handle_gkd_message
 from CRM.gkd_utils import GKD_PHONE_NUMBER_ID
+from CRM.amritcement_views import handle_amritcement_message
+from CRM.amritcement_utils import AMRITCEMENT_PHONE_NUMBER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -207,6 +212,7 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
     avantika_sess = avantika_sessions.get(raw_phone)
     mf_sess = mf_sessions.get(raw_phone)
     wa_sess = wa_sessions.get(raw_phone)
+    shopify_sess = shopify_sessions.get(raw_phone)
 
     # ── Route decision ────────────────────────────────────────────────────
     go_industry = False
@@ -214,6 +220,7 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
     go_mf = False
     go_wa = False
     go_jms = False
+    go_shopify = False
     skip_all = False
 
     def _clear_other_sessions(keep_bot):
@@ -229,6 +236,8 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
             wa_sessions.delete(raw_phone)
         if keep_bot != "avantika":
             avantika_sessions.delete(raw_phone)
+        if keep_bot != "shopify":
+            shopify_sessions.delete(raw_phone)
 
     # 1. Explicit Triggers (Top Priority)
     if text_lower in INDUSTRY_TRIGGERS:
@@ -243,6 +252,9 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
     elif text_lower == WA_BOT_TRIGGER:
         go_wa = True
         _clear_other_sessions("wa")
+    elif text_lower == SHOPIFY_BOT_TRIGGER:
+        go_shopify = True
+        _clear_other_sessions("shopify")
     elif text_lower == "jms":
         go_jms = True
         _clear_other_sessions("jms")
@@ -268,6 +280,8 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
             go_mf = True
         elif wa_sess and wa_sess.get("stage") == "active":
             go_wa = True
+        elif shopify_sess and shopify_sess.get("stage", "idle") != "idle":
+            go_shopify = True
         else:
             go_jms = True
 
@@ -323,6 +337,13 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
             _handle_wa_bot(raw_phone, text, phone_number_id, inbound_msg_id=inbound_msg_id)
         except Exception as e:
             logger.exception("WhatsApp bot error: %s", e)
+            
+    elif go_shopify:
+        logger.info("[Webhook/JMS] → SHOPIFY BOT for %s", raw_phone)
+        try:
+            _handle_shopify_bot(raw_phone, text, phone_number_id, inbound_msg_id=inbound_msg_id, raw_msg=msg)
+        except Exception as e:
+            logger.exception("Shopify bot error: %s", e)
             
     elif go_jms:
         logger.info("[Webhook/JMS] → JMS-TECH BOT for %s", raw_phone)
@@ -396,6 +417,7 @@ class WhatsAppWebhookView(APIView):
                         gigatel_phone_id = os.environ.get("META_PHONE_NUMBER_ID", "").strip()
                         globestar_phone_id = GLOBESTAR_PHONE_NUMBER_ID
                         gkd_phone_id = GKD_PHONE_NUMBER_ID
+                        amritcement_phone_id = AMRITCEMENT_PHONE_NUMBER_ID
                         
                         if gigatel_phone_id and phone_number_id == gigatel_phone_id:
                             logger.info("[Webhook] Routing message to Gigatel Bot")
@@ -429,6 +451,9 @@ class WhatsAppWebhookView(APIView):
                         elif gkd_phone_id and phone_number_id == gkd_phone_id:
                             logger.info("[Webhook] Routing message to GKD Bot")
                             handle_gkd_message(msg)
+                        elif amritcement_phone_id and phone_number_id == amritcement_phone_id:
+                            logger.info("[Webhook] Routing message to Amritcement Bot")
+                            handle_amritcement_message(msg)
                         elif client:
                             # ── CLIENT BOT FLOW ───────────────────────────
                             # Route to client-specific bot

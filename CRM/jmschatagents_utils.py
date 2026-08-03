@@ -208,9 +208,9 @@ def send_url_button(to: str, body_text: str, button_text: str, url: str):
     return SEND_QUEUE.enqueue(payload)
 
 
-def send_buttons(to: str, body_text: str, buttons: list):
+def send_buttons(to: str, body_text: str, buttons: list, header_image_url: str = None):
     """
-    Send WhatsApp interactive reply buttons (max 3).
+    Send WhatsApp interactive reply buttons (max 3). Optionally include an image header.
 
     buttons = [
         {"id": "1", "title": "English"},
@@ -222,24 +222,33 @@ def send_buttons(to: str, body_text: str, buttons: list):
         logger.error("send_buttons: missing recipient")
         return
     to = to.lstrip("+")
+    
+    interactive = {
+        "type": "button",
+        "body": {"text": body_text[:1024]},
+        "action": {
+            "buttons": [
+                {
+                    "type": "reply",
+                    "reply": {"id": btn["id"], "title": btn["title"][:20]},
+                }
+                for btn in buttons[:3]
+            ]
+        },
+    }
+    
+    if header_image_url:
+        interactive["header"] = {
+            "type": "image",
+            "image": {"link": header_image_url}
+        }
+
     payload = {
         "messaging_product": "whatsapp",
         "recipient_type": "individual",
         "to": to,
         "type": "interactive",
-        "interactive": {
-            "type": "button",
-            "body": {"text": body_text},
-            "action": {
-                "buttons": [
-                    {
-                        "type": "reply",
-                        "reply": {"id": btn["id"], "title": btn["title"]},
-                    }
-                    for btn in buttons[:3]
-                ]
-            },
-        },
+        "interactive": interactive,
     }
     return SEND_QUEUE.enqueue(payload)
 

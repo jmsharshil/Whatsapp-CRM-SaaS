@@ -609,3 +609,17 @@ class AvantikaTemplate(models.Model):
     def __str__(self):
         status = "Active" if self.is_active else "Inactive"
         return f"Avantika Template {self.id} ({status})"
+
+class AvantikaCampaignHistory(models.Model):
+    """History of sent Avantika campaigns."""
+    contact = models.ForeignKey(AvantikaContact, on_delete=models.SET_NULL, null=True, blank=True)
+    phone = models.CharField(max_length=50, blank=True, null=True)
+    name = models.CharField(max_length=255, blank=True, null=True)
+    template = models.ForeignKey(AvantikaTemplate, on_delete=models.SET_NULL, null=True, blank=True)
+    campaign_run_id = models.CharField(max_length=100, blank=True, null=True)
+    status = models.CharField(max_length=50, default="Sent")
+    error_message = models.TextField(blank=True, null=True)
+    sent_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.phone} - {self.status} at {self.sent_at}"

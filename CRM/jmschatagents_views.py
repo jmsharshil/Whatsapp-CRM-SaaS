@@ -205,11 +205,14 @@ jms_sessions = SafeCache(prefix="jms_sess:",  default_ttl=60 * 60)   # JMS-Tech 
 wa_sessions  = SafeCache(prefix="wa_sess:",   default_ttl=60 * 15)   # WhatsApp-API bot
 ind_sessions = SafeCache(prefix="ind_sess:",  default_ttl=60 * 60)   # Industry bot
 avantika_sessions = SafeCache(prefix="avantika_sess:", default_ttl=60 * 60) # Avantika bot
+shopify_sessions = SafeCache(prefix="shopify_sess:", default_ttl=60 * 15) # Shopify bot
 
 JMS_SESSION_TTL = 60 * 60
 WA_SESSION_TTL  = 60 * 15
 IND_SESSION_TTL = 60 * 60
 AVANTIKA_SESSION_TTL = 60 * 60
+SHOPIFY_SESSION_TTL = 60 * 15
+SHOPIFY_BOT_TRIGGER = "shopify"
 
 # ═════════════════════════════════════════════════════════════════════════════
 # SHARED DB HELPERS
@@ -1063,15 +1066,32 @@ def generate_avantika_image(contact, active_template) -> str:
         img = Image.open(f).convert("RGB")
         draw = ImageDraw.Draw(img)
         
-        try:
-            font = ImageFont.truetype("arial.ttf", active_template.font_size)
-        except IOError:
-            font = ImageFont.load_default()
-        
+        def get_font(size):
+            font_paths = [
+                "arial.ttf",
+                r"C:\Windows\Fonts\arial.ttf",
+                r"C:\Windows\Fonts\segoeui.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/freefont/FreeSans.ttf"
+            ]
+            for path in font_paths:
+                try:
+                    return ImageFont.truetype(path, size)
+                except IOError:
+                    continue
+            return ImageFont.load_default()
+            
+        font = get_font(active_template.font_size)
         display_name = contact.name.strip()
         
         # Draw text at coordinates specified by the admin
         draw.text((active_template.name_x, active_template.name_y), display_name, fill=active_template.text_color, font=font)
+        
+        # Draw phone number slightly smaller, directly below the name
+        phone_font = get_font(max(12, int(active_template.font_size * 0.75)))
+        phone_y = active_template.name_y + active_template.font_size + (active_template.font_size // 4)
+        formatted_phone = f"+{clean_phone}" if not clean_phone.startswith('+') else clean_phone
+        draw.text((active_template.name_x, phone_y), formatted_phone, fill=active_template.text_color, font=phone_font)
         
         # Save to an in-memory buffer
         buffer = BytesIO()
@@ -1091,7 +1111,7 @@ def generate_avantika_image(contact, active_template) -> str:
         
         # If the storage URL is relative (local dev), prepend the domain
         if file_url.startswith('/'):
-            domain = getattr(settings, "DOMAIN_URL", "https://0tc80btl-8000.inc1.devtunnels.ms").rstrip('/')
+            domain = getattr(settings, "DOMAIN_URL", "https://whatsappcrmsaas-emdke9dnb4f8bne6.centralindia-01.azurewebsites.net").rstrip('/')
             image_url = f"{domain}{file_url}"
         else:
             # For cloud storage (like Azure/S3), the URL is already absolute
@@ -3005,6 +3025,7 @@ def _handle_mf_bot(phone: str, text: str, phone_number_id: str = None, inbound_m
         return
 
     # Direct Search (Fallback for any unhandled text/interactive)
+
     if text_lower and not interactive_id:
         session["last_query"] = text_lower
         mf_save_session(session)
@@ -3246,3 +3267,379 @@ def _send_mutual_fund_comparison(phone: str, scheme1: str, scheme2: str, inbound
         
     except Exception as e:
         send_text(phone, f"Failed to compare schemes: {e}")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────────────────
+#  BOT 5 — SHOPIFY BOT (trigger: "shopify")
+# ─────────────────────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+# ── Shopify API Helpers ────────────────────────────────────────────────────────
+def get_shopify_headers():
+    # Hardcoded Shopify Credentials as requested
+    token = getattr(settings, "SHOPIFY_ACCESS_TOKEN", "")
+    client_id = "7829c1c932b2e6ab8d952d2c4ffa2767"
+    return {
+        "X-Shopify-Access-Token": token,
+        "Content-Type": "application/json"
+    }
+
+def get_shopify_url(endpoint: str) -> str:
+    # Hardcoded domain as requested
+    domain = "znyysp-kk.myshopify.com"
+    version = os.getenv("SHOPIFY_API_VERSION", "2024-01")
+    domain = domain.replace("https://", "").replace("http://", "")
+    return f"https://{domain}/admin/api/{version}/{endpoint}"
+
+def search_customer_by_phone(phone: str):
+    url = get_shopify_url("customers/search.json")
+    clean_phone = phone.replace('+', '')
+    params = {"query": f"phone:*{clean_phone}*"}
+    try:
+        response = requests.get(url, headers=get_shopify_headers(), params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        customers = data.get("customers", [])
+        if customers:
+            return customers[0]
+        return None
+    except Exception as e:
+        logger.error(f"Error searching Shopify customer: {e}")
+        return None
+
+def create_customer(phone: str, first_name: str, last_name: str = ""):
+    url = get_shopify_url("customers.json")
+    if not phone.startswith("+"):
+        phone = f"+{phone}"
+    payload = {
+        "customer": {
+            "first_name": first_name,
+            "last_name": last_name,
+            "phone": phone,
+        }
+    }
+    try:
+        response = requests.post(url, headers=get_shopify_headers(), json=payload, timeout=10)
+        response.raise_for_status()
+        return response.json().get("customer")
+    except Exception as e:
+        logger.error(f"Error creating Shopify customer: {e}")
+        return None
+
+def create_draft_order(customer_id, variant_id, quantity: int = 1):
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        if isinstance(variant_id, str) and "gid://" in variant_id:
+            variant_id = variant_id.split("/")[-1]
+        if isinstance(customer_id, str) and "gid://" in customer_id:
+            customer_id = customer_id.split("/")[-1]
+            
+        url = get_shopify_url("draft_orders.json")
+        payload = {
+            "draft_order": {
+                "line_items": [
+                    {
+                        "variant_id": int(variant_id),
+                        "quantity": int(quantity)
+                    }
+                ],
+                "customer": {
+                    "id": int(customer_id)
+                },
+                "use_customer_default_address": True
+            }
+        }
+        
+        import requests
+        response = requests.post(url, headers=get_shopify_headers(), json=payload, timeout=10)
+        if not response.ok:
+            with open(r'c:\Users\pranj\vscode\JMS_\scratch\shopify_error.txt', 'w') as f:
+                f.write(f"Status: {response.status_code}\nText: {response.text}")
+            logger.error(f"Shopify Error: {response.status_code} - {response.text}")
+        response.raise_for_status()
+        return response.json().get("draft_order", {}).get("id")
+    except Exception as e:
+        with open(r'c:\Users\pranj\vscode\JMS_\scratch\shopify_error.txt', 'w') as f:
+            f.write(f"Exception: {str(e)}")
+        logger.error(f"Error creating Shopify order: {e}")
+        return None
+
+def get_products():
+    url = get_shopify_url("products.json")
+    params = {"status": "active", "limit": 10}
+    try:
+        response = requests.get(url, headers=get_shopify_headers(), params=params, timeout=10)
+        response.raise_for_status()
+        return response.json().get("products", [])
+    except Exception as e:
+        logger.error(f"Error fetching Shopify products: {e}")
+        return []
+
+def get_product_by_id(product_id: str):
+    url = get_shopify_url(f"products/{product_id}.json")
+    try:
+        response = requests.get(url, headers=get_shopify_headers(), timeout=10)
+        response.raise_for_status()
+        return response.json().get("product")
+    except Exception as e:
+        logger.error(f"Error fetching product {product_id}: {e}")
+        return None
+
+
+    except Exception as e:
+        logger.error(f"Error creating Shopify order: {e}")
+        return None
+
+
+def _handle_shopify_bot(phone: str, text: str, phone_number_id: str, inbound_msg_id: int = None, raw_msg: dict = None):
+    text_lower = text.lower().strip()
+    session = shopify_sessions.get(phone)
+    
+    if not session or text_lower == SHOPIFY_BOT_TRIGGER:
+        session = {"stage": "idle", "phone": phone}
+        shopify_sessions.set(phone, session, timeout=SHOPIFY_SESSION_TTL)
+
+    stage = session.get("stage")
+    
+    if stage == "idle":
+        # Check if customer exists in Shopify
+        customer = search_customer_by_phone(phone)
+        if customer:
+            session["stage"] = "browsing_brands"
+            session["shopify_customer_id"] = customer["id"]
+            shopify_sessions.set(phone, session, timeout=SHOPIFY_SESSION_TTL)
+            
+            msg = f"Welcome back to our Shopify store, {customer.get('first_name', 'Customer')}! 👋"
+            _send_shopify_brands(phone, inbound_msg_id, welcome_msg=msg)
+        else:
+            session["stage"] = "registration"
+            shopify_sessions.set(phone, session, timeout=SHOPIFY_SESSION_TTL)
+            
+            msg = "Welcome to our Shopify store! 👋 It looks like you're new here.\n\nPlease reply with your *First Name* to get started:"
+            send_text(phone, msg)
+            if inbound_msg_id:
+                _save_reply(inbound_msg_id, msg)
+        return
+
+    if stage == "registration":
+        first_name = text.strip()
+        customer = create_customer(phone, first_name)
+        if customer:
+            session["stage"] = "browsing_brands"
+            session["shopify_customer_id"] = customer["id"]
+            shopify_sessions.set(phone, session, timeout=SHOPIFY_SESSION_TTL)
+            
+            msg = f"Thanks, {first_name}! Your account has been created. 🎉"
+            _send_shopify_brands(phone, inbound_msg_id, welcome_msg=msg)
+        else:
+            msg = "Sorry, there was an issue creating your account. Please try again later."
+            send_text(phone, msg)
+            if inbound_msg_id:
+                _save_reply(inbound_msg_id, msg)
+        return
+        
+    interactive_id = ""
+    if raw_msg and raw_msg.get("type") == "interactive":
+        interactive = raw_msg.get("interactive", {})
+        itype = interactive.get("type", "")
+        if itype == "list_reply":
+            interactive_id = interactive.get("list_reply", {}).get("id", "")
+        elif itype == "button_reply":
+            interactive_id = interactive.get("button_reply", {}).get("id", "")
+
+    if stage == "browsing_brands":
+        if interactive_id and interactive_id.startswith("brand_"):
+            brand = interactive_id.replace("brand_", "")
+            session["stage"] = "browsing_products"
+            session["selected_brand"] = brand
+            shopify_sessions.set(phone, session, timeout=SHOPIFY_SESSION_TTL)
+            _send_shopify_shoes(phone, inbound_msg_id, brand)
+        return
+
+    if stage == "browsing_products":
+        if interactive_id and interactive_id.startswith("prod_"):
+            prod_id = interactive_id.replace("prod_", "")
+            product = get_product_by_id(prod_id)
+            if product:
+                variants = product.get("variants", [])
+                if variants:
+                    session["stage"] = "quantity_selection"
+                    session["selected_product_id"] = prod_id
+                    # Default to first variant
+                    session["selected_variant_id"] = str(variants[0]["id"])
+                    shopify_sessions.set(phone, session, timeout=SHOPIFY_SESSION_TTL)
+                    
+                    # Send Product Details Image first
+                    image_url = ""
+                    if product.get("image") and product.get("image").get("src"):
+                        image_url = product["image"]["src"]
+                    elif product.get("images") and len(product["images"]) > 0:
+                        image_url = product["images"][0].get("src")
+                        
+                    desc = product.get("body_html", "")
+                    if desc:
+                        import re
+                        desc = re.sub('<[^<]+>', '', desc).strip()
+                        
+                    price = variants[0].get("price", "0.00")
+                    caption = f"*{product.get('title')}*\nPrice: ₹{price}\n\n{desc}"
+                    
+                    # Merge image and quantity buttons into one message
+                    buttons = [
+                        {"id": "qty_1", "title": "Qty: 1"},
+                        {"id": "qty_2", "title": "Qty: 2"},
+                        {"id": "qty_3", "title": "Qty: 3"}
+                    ]
+                    send_buttons(phone, caption, buttons, header_image_url=image_url)
+                    if inbound_msg_id:
+                        _save_reply(inbound_msg_id, "Sent product details and quantity buttons")
+            else:
+                send_text(phone, "Product not found. Please try again.")
+        return
+        
+    if stage == "variant_selection":
+        if interactive_id and interactive_id.startswith("var_"):
+            var_id = interactive_id.replace("var_", "")
+            session["stage"] = "quantity_selection"
+            session["selected_variant_id"] = var_id
+            shopify_sessions.set(phone, session, timeout=SHOPIFY_SESSION_TTL)
+            
+            buttons = [
+                {"id": "qty_1", "title": "1"},
+                {"id": "qty_2", "title": "2"},
+                {"id": "qty_3", "title": "3"}
+            ]
+            send_buttons(phone, "Great! Please select the quantity:", buttons)
+            if inbound_msg_id:
+                _save_reply(inbound_msg_id, "Requested quantity")
+        return
+        
+    if stage == "quantity_selection":
+        if interactive_id and interactive_id.startswith("qty_"):
+            qty = int(interactive_id.replace("qty_", ""))
+            
+            session["stage"] = "order_confirmation"
+            session["qty"] = qty
+            shopify_sessions.set(phone, session, timeout=SHOPIFY_SESSION_TTL)
+            
+            prod_id = session.get("selected_product_id")
+            var_id = session.get("selected_variant_id")
+            product = get_product_by_id(prod_id)
+            
+            if product:
+                variant = next((v for v in product.get("variants", []) if str(v.get("id")) == var_id), None)
+                if variant:
+                    price = float(variant.get("price", "0.00"))
+                    total = price * qty
+                    
+                    summary = f"🛒 *Order Summary*\n"
+                    summary += f"Product: {product.get('title')}\n"
+                    summary += f"Variant: {variant.get('title')}\n"
+                    summary += f"Quantity: {qty}\n"
+                    summary += f"Total: ₹{total:.2f}"
+                    
+                    # Merge summary and buttons into one message
+                    buttons = [
+                        {"id": "confirm_order", "title": "Confirm Order"},
+                        {"id": "cancel_order", "title": "Cancel"}
+                    ]
+                    send_buttons(phone, summary, buttons)
+                    if inbound_msg_id:
+                        _save_reply(inbound_msg_id, "Sent order summary and confirmation")
+                else:
+                    send_text(phone, "Error finding variant. Please try again.")
+            else:
+                send_text(phone, "Error finding product. Please try again.")
+        return
+
+    if stage == "order_confirmation":
+        if interactive_id == "confirm_order":
+            send_text(phone, "⏳ Placing your order, please wait...")
+            
+            customer_id = session.get("shopify_customer_id")
+            variant_id = session.get("selected_variant_id")
+            qty = session.get("qty", 1)
+            
+            order_id = create_draft_order(customer_id, variant_id, qty)
+            if order_id:
+                msg = f"✅ Order successfully placed!\nYour Order ID is: #{order_id}\n\nThank you for shopping with us!"
+            else:
+                msg = "❌ There was an issue placing your order. Please try again later."
+                
+            send_text(phone, msg)
+            if inbound_msg_id:
+                _save_reply(inbound_msg_id, msg)
+                
+            shopify_sessions.delete(phone)
+            
+        elif interactive_id == "cancel_order":
+            msg = "❌ Your order has been cancelled. Send 'shopify' anytime to start a new order."
+            send_text(phone, msg)
+            if inbound_msg_id:
+                _save_reply(inbound_msg_id, "Order cancelled")
+            shopify_sessions.delete(phone)
+            
+        return
+
+def _send_shopify_brands(phone: str, inbound_msg_id: int, welcome_msg: str = ""):
+    products = get_products()
+    brands = set()
+    for p in products:
+        vendor = p.get("vendor")
+        if vendor:
+            brands.add(vendor)
+            
+    items = []
+    for b in list(brands)[:10]:
+        items.append({
+            "id": f"brand_{b}",
+            "title": b,
+            "description": "Tap to view shoes"
+        })
+        
+    if not items:
+        send_text(phone, "No brands available right now.")
+        return
+        
+    sections = [{"title": "Select a Brand", "rows": items}]
+    body = f"{welcome_msg}\n\nBrowse our latest shoes collection by Brand:" if welcome_msg else "Browse our latest shoes collection by Brand:"
+    send_interactive_list(
+        to=phone,
+        body_text=body,
+        button_text="Select Brand",
+        sections=sections
+    )
+    if inbound_msg_id:
+        _save_reply(inbound_msg_id, "Sent brands list")
+
+def _send_shopify_shoes(phone: str, inbound_msg_id: int, brand: str):
+    products = get_products()
+    items = []
+    for p in products:
+        if p.get("vendor") != brand:
+            continue
+        title = p.get("title", "")[:24]
+        price = p.get("variants", [{}])[0].get("price", "0.00") if p.get("variants") else "0.00"
+        items.append({
+            "id": f"prod_{p['id']}",
+            "title": title,
+            "description": f"Price: ₹{price}"
+        })
+    
+    if not items:
+        send_text(phone, f"No shoes available for {brand} right now.")
+        return
+        
+    sections = [{"title": f"{brand} Shoes", "rows": items[:10]}]
+    send_interactive_list(
+        to=phone,
+        body_text=f"Here are the latest shoes from *{brand}*:",
+        button_text="View Shoes",
+        sections=sections
+    )
+    if inbound_msg_id:
+        _save_reply(inbound_msg_id, f"Sent {brand} shoes list")
+

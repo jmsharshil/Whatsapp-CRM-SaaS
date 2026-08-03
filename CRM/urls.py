@@ -85,5 +85,7 @@ urlpatterns = [
     
     # ── Avantika Bot ──────────────────────────────────────────────────────────
     path("avantika-template/", avantika_template_view, name="avantika-template-view"),
-    path("avantika-blast/", avantika_blast_view, name="avantika-blast-view"),
+    path("avantika-campaign/", avantika_campaign_view, name="avantika-campaign-view"),
+    path("avantika-upload-csv/", avantika_upload_csv_view, name="avantika-upload-csv-view"),
+    path("api/avantika/history/", avantika_history_api, name="avantika-history-api"),
 ]

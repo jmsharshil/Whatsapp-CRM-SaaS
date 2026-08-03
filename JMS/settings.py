@@ -27,7 +27,7 @@ load_dotenv(BASE_DIR / ".env")
 SECRET_KEY = 'django-insecure-8neajf6u9)0(xi-#ndb9qmf^9snvvw&bdrpx+h%q_j^_=$#%g7'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
@@ -298,3 +298,5 @@ META_APP_ID="3910497682418674"
 META_BUSINESS_ID = "4219973054881506"
 META_PERMANENT_TOKEN = "EAA3kk7FBaZCIBRejscriGIa8PZCsqMZAVPYdLsZC9ZAep1NuDmZBZAKVXoBcFq1zhdxdtlZCLtKZASvufQCsJAqss89btZBLBgtRVf1UqLHqiP24AZCevnEEw5USzBCZBojecmcW0aprpe4TxbHPbbT8W3rn05bmAcAEKdSgwrSgLFLW8LuNO5Ic7McFpCzcUKC2dgZDZD"
 VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "123")
+
+SHOPIFY_ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN", "")

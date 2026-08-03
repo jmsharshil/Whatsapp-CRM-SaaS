@@ -1980,14 +1980,32 @@ class TechProviderMetaRegistrationView(APIView):
         return Response(serializer.data)
 
 
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+
+def _authenticate_client(request):
+    auth_header = request.headers.get("Authorization", "")
+    phone_number_id = None
+    if auth_header.startswith("Bearer "):
+        phone_number_id = auth_header.replace("Bearer ", "").strip()
+    if not phone_number_id:
+        return None, JsonResponse({"error": "phone_number_id is required in Authorization header"}, status=401)
+    if phone_number_id != "1160424227149252":
+        return None, JsonResponse({"error": "Unauthorized phone_number_id. Only JMS is allowed."}, status=403)
+        
+    return phone_number_id, None
 
 @csrf_exempt
 def avantika_template_view(request):
     """Admin view to upload and configure Avantika dynamic templates."""
     from .models import AvantikaTemplate
+    
+    is_api = request.headers.get("Authorization", "").startswith("Bearer ")
+    if is_api:
+        pid, err = _authenticate_client(request)
+        if err: return err
     
     if request.method == "POST":
         base_image = request.FILES.get("base_image")
@@ -1999,10 +2017,7 @@ def avantika_template_view(request):
         active_template = AvantikaTemplate.objects.filter(is_active=True).first()
         
         if base_image:
-            # Deactivate all existing templates
             AvantikaTemplate.objects.update(is_active=False)
-            
-            # Create the new active template
             AvantikaTemplate.objects.create(
                 base_image=base_image,
                 name_x=int(name_x),
@@ -2011,87 +2026,215 @@ def avantika_template_view(request):
                 text_color=text_color,
                 is_active=True
             )
+            if is_api:
+                return JsonResponse({"success": True, "message": "Template saved and activated successfully"})
             messages.success(request, "New template saved and activated successfully!")
         elif active_template:
-            # Update the existing active template
             active_template.name_x = int(name_x)
             active_template.name_y = int(name_y)
             active_template.font_size = int(font_size)
             active_template.text_color = text_color
             active_template.save()
+            if is_api:
+                return JsonResponse({"success": True, "message": "Active template updated successfully"})
             messages.success(request, "Active template updated successfully!")
         else:
+            if is_api:
+                return JsonResponse({"error": "Please upload a valid image."}, status=400)
             messages.error(request, "Please upload a valid image.")
             
         return redirect('avantika-template-view')
             
+    if is_api:
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+        
     active_template = AvantikaTemplate.objects.filter(is_active=True).first()
     return render(request, "avantika_admin.html", {"active_template": active_template})
 
 
+import csv
+import io
+
 @csrf_exempt
-def avantika_blast_view(request):
-    """Admin view to trigger outbound template blast."""
-    from .models import AvantikaContact, AvantikaTemplate
+def avantika_upload_csv_view(request):
+    """Admin view to upload CSV and populate AvantikaContact."""
+    from .models import AvantikaContact
+    
+    is_api = request.headers.get("Authorization", "").startswith("Bearer ")
+    if is_api:
+        pid, err = _authenticate_client(request)
+        if err: return err
+        
+    if request.method == "POST":
+        csv_file = request.FILES.get("csv_file")
+        if not csv_file:
+            if is_api: return JsonResponse({"error": "Please upload a CSV file."}, status=400)
+            messages.error(request, "Please upload a CSV file.")
+            return redirect('avantika-template-view')
+        
+        if not csv_file.name.endswith('.csv'):
+            if is_api: return JsonResponse({"error": "File is not a valid CSV."}, status=400)
+            messages.error(request, "File is not a valid CSV.")
+            return redirect('avantika-template-view')
+            
+        try:
+            file_data = csv_file.read().decode("utf-8")
+            csv_data = csv.reader(io.StringIO(file_data))
+            
+            # Clear old contacts so only the newly uploaded CSV is stored
+            AvantikaContact.objects.all().delete()
+            
+            # Read first row to see if it's a header
+            first_row = next(csv_data, None)
+            if first_row:
+                if any(c.isalpha() for c in first_row[0]):
+                    pass # Header skipped
+                else:
+                    _process_row(first_row, AvantikaContact)
+                    
+            count = 0
+            for row in csv_data:
+                if _process_row(row, AvantikaContact):
+                    count += 1
+                    
+            if is_api:
+                return JsonResponse({"success": True, "imported_count": count})
+            messages.success(request, f"Successfully imported/updated {count} contacts from CSV!")
+        except Exception as e:
+            if is_api:
+                return JsonResponse({"error": f"Error processing CSV: {str(e)}"}, status=500)
+            messages.error(request, f"Error processing CSV: {str(e)}")
+            
+    if is_api:
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    return redirect('avantika-template-view')
+
+def _process_row(row, AvantikaContact):
+    if len(row) >= 2:
+        phone = row[0].strip()
+        name = row[1].strip()
+        if phone:
+            clean_phone = phone.lstrip('+')
+            obj, created = AvantikaContact.objects.update_or_create(
+                phone=clean_phone,
+                defaults={'name': name}
+            )
+            return True
+    return False
+
+
+@csrf_exempt
+def avantika_campaign_view(request):
+    """Admin view to trigger outbound template campaign."""
+    from .models import AvantikaContact, AvantikaTemplate, AvantikaCampaignHistory
     from .jmschatagents_views import generate_avantika_image
     from .jmschatagents_utils import send_template
+    import json
+    
+    is_api = request.headers.get("Authorization", "").startswith("Bearer ")
+    if is_api:
+        pid, err = _authenticate_client(request)
+        if err: return err
     
     if request.method == "POST":
         active_template = AvantikaTemplate.objects.filter(is_active=True).first()
         if not active_template:
+            if is_api: return JsonResponse({"error": "No active template found"}, status=404)
             messages.error(request, "No active template found!")
             return render(request, "avantika_admin.html")
             
-        # Read Meta Template Name from the form
-        meta_template_name = request.POST.get("meta_template_name", "avantikaa").strip()
-        if not meta_template_name:
-            messages.error(request, "Meta template name is required.")
-            return redirect('avantika-template-view')
+        # Hardcode the template name since it is fixed
+        meta_template_name = "avantikaa"
+        
+        import uuid
+        run_id = str(uuid.uuid4())
             
         contacts = AvantikaContact.objects.all()
         count = 0
+        errors = []
         for contact in contacts:
             try:
-                # 1. Generate customized image and get URL
                 image_url = generate_avantika_image(contact, active_template)
                 
-                # 2. Construct components for the Meta Media Template
-                header_component = {
-                    "type": "header",
-                    "parameters": [
-                        {
-                            "type": "image",
-                            "image": {
-                                "link": image_url
-                            }
-                        }
-                    ]
-                }
-                
-                body_component = {
-                    "type": "body",
-                    "parameters": [
-                        {
-                            "type": "text",
-                            "text": contact.name.strip()
-                        }
-                    ]
-                }
-                
+                header_component = {"type": "header", "parameters": [{"type": "image", "image": {"link": image_url}}]}
+                body_component = {"type": "body", "parameters": [{"type": "text", "text": contact.name.strip()}]}
                 components = [header_component, body_component]
                 
-                # 3. Send via WhatsApp API
                 send_template(
                     to=contact.phone,
                     template_name=meta_template_name,
                     language_code="en",
                     components=components
                 )
+                AvantikaCampaignHistory.objects.create(
+                    contact=contact,
+                    phone=contact.phone,
+                    name=contact.name,
+                    template=active_template,
+                    campaign_run_id=run_id,
+                    status="Sent"
+                )
                 count += 1
             except Exception as e:
-                print(f"Error sending blast to {contact.phone}: {str(e)}")
+                errors.append({"phone": contact.phone, "error": str(e)})
+                print(f"Error sending campaign to {contact.phone}: {str(e)}")
+                AvantikaCampaignHistory.objects.create(
+                    contact=contact,
+                    phone=contact.phone,
+                    name=contact.name,
+                    template=active_template,
+                    campaign_run_id=run_id,
+                    status="Failed",
+                    error_message=str(e)
+                )
                 
-        messages.success(request, f"Blast campaign successfully sent to {count} contacts!")
+        if is_api:
+            return JsonResponse({"success": True, "sent_count": count, "errors": errors if errors else None})
+            
+        messages.success(request, f"Campaign successfully sent to {count} contacts!")
         return redirect('avantika-template-view')
         
+    if is_api:
+        return JsonResponse({"error": "Method not allowed"}, status=405)
     return redirect('avantika-template-view')
+
+@csrf_exempt
+def avantika_history_api(request):
+    """API to return history of Avantika campaign sent."""
+    from .models import AvantikaCampaignHistory
+    
+    is_api = request.headers.get("Authorization", "").startswith("Bearer ")
+    if is_api:
+        pid, err = _authenticate_client(request)
+        if err: return err
+
+    history_records = AvantikaCampaignHistory.objects.all().order_by('-sent_at')
+    
+    # Filter by specific template/campaign if provided
+    template_id = request.GET.get('template_id')
+    if template_id:
+        history_records = history_records.filter(template_id=template_id)
+        
+    campaign_run_id = request.GET.get('campaign_run_id')
+    if campaign_run_id:
+        history_records = history_records.filter(campaign_run_id=campaign_run_id)
+    
+    sent_count = history_records.filter(status="Sent").count()
+    failed_count = history_records.filter(status="Failed").count()
+    
+    data = []
+    for record in history_records:
+        data.append({
+            "campaign_run_id": record.campaign_run_id,
+            "phone": record.phone or (record.contact.phone if record.contact else ""),
+            "name": record.name or (record.contact.name if record.contact else ""),
+            "status": record.status,
+            "sent_at": record.sent_at.isoformat() if record.sent_at else None,
+            "error_message": record.error_message
+        })
+        
+    return JsonResponse({
+        "total_sent": sent_count,
+        "total_failed": failed_count,
+        "history": data
+    })

@@ -160,7 +160,6 @@
             color: red;
             font-weight: bold;
             font-size: 24px;
-            transform: translate(0, -100%);
             display: none;
             text-shadow: 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 0px 2px 4px rgba(0,0,0,0.5);
             pointer-events: none;
@@ -257,11 +256,17 @@
                 <div class="image-container">
                     {% if active_template and active_template.base_image %}
                         <img id="preview" src="{{ active_template.base_image.url }}" alt="Image Preview" style="display: block;">
-                        <div id="nameMarker" class="marker" style="display: block; left: {{ active_template.name_x }}px; top: {{ active_template.name_y }}px; font-size: {{ active_template.font_size }}px; color: {{ active_template.text_color }};">[Name]</div>
+                        <div id="nameMarker" class="marker" style="display: none; line-height: 1.2;">
+                            <div id="markerName">[Name]</div>
+                            <div id="markerNumber" style="font-size: 75%; opacity: 0.9;">[Number]</div>
+                        </div>
                         <div id="placeholderText" style="display: none; padding: 40px; color: #94A3B8; font-weight: 500;">Image Preview Area</div>
                     {% else %}
                         <img id="preview" src="#" alt="Image Preview">
-                        <div id="nameMarker" class="marker">[Name]</div>
+                        <div id="nameMarker" class="marker" style="line-height: 1.2;">
+                            <div id="markerName">[Name]</div>
+                            <div id="markerNumber" style="font-size: 75%; opacity: 0.9;">[Number]</div>
+                        </div>
                         <div id="placeholderText" style="padding: 40px; color: #94A3B8; font-weight: 500;">Image Preview Area</div>
                     {% endif %}
                 </div>
@@ -294,22 +299,64 @@
             </form>
         </div>
 
+        <div class="card" style="border-top: 4px solid var(--primary);">
+            <h2>📁 Upload Contacts (CSV)</h2>
+            <p style="color: var(--text-muted); margin-bottom: 24px;">
+                Upload a CSV file containing phone numbers and names to populate the AvantikaContact database. The bot will only generate images for these registered contacts.
+            </p>
+            <form action="/avantika-upload-csv/" method="POST" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label>CSV File</label>
+                    <input type="file" name="csv_file" accept=".csv" required>
+                    <small style="display: block; color: var(--text-muted); margin-top: 4px;">Format: First column Phone Number, Second column Name.</small>
+                </div>
+                <button type="submit" class="btn-primary" style="width: 100%;">
+                    Upload Contacts
+                </button>
+            </form>
+        </div>
+
         <div class="card" style="border-top: 4px solid var(--danger);">
-            <h2>🚀 Outbound Blast Campaign</h2>
+            <h2>🚀 Outbound Campaign</h2>
             <p style="color: var(--text-muted); margin-bottom: 24px;">
                 Trigger the Meta Marketing API to generate and send personalized templates to ALL users in the <strong>AvantikaContact</strong> database instantly.
             </p>
-            <form action="/avantika-blast/" method="POST">
+            <form action="/avantika-campaign/" method="POST">
                 {% csrf_token %}
-                <div class="form-group" style="margin-bottom: 16px;">
-                    <label>Meta Template Name</label>
-                    <input type="text" name="meta_template_name" value="avantikaa" required placeholder="e.g. avantika_campaign_v1" style="max-width: 300px;">
-                    <small style="display: block; color: var(--text-muted); margin-top: 4px;">Must exactly match your approved Meta Marketing Template name.</small>
-                </div>
                 <button type="submit" class="btn-danger" style="width: 100%;" onclick="return confirm('Are you sure you want to send this template to ALL contacts in the database? This action cannot be undone.');">
-                    Blast Campaign to All Users
+                    Run Campaign for All Users
                 </button>
             </form>
+        </div>
+
+        <div class="card" style="border-top: 4px solid #10B981;">
+            <h2>📊 Campaign History</h2>
+            <p style="color: var(--text-muted); margin-bottom: 24px;">
+                View the status of your recent outbound campaigns.
+            </p>
+            <button type="button" class="btn-primary" style="width: 100%; margin-bottom: 16px; background-color: #10B981; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.25);" onclick="loadHistory(this)">
+                Load History
+            </button>
+            <div id="historyStats" style="display: none; margin-bottom: 16px; font-weight: 500;">
+                <span style="color: #03543F; background: #DEF7EC; padding: 4px 8px; border-radius: 4px;">Sent: <span id="sentCount">0</span></span>
+                <span style="color: #991B1B; background: #FEE2E2; padding: 4px 8px; border-radius: 4px; margin-left: 8px;">Failed: <span id="failedCount">0</span></span>
+            </div>
+            <div style="overflow-x: auto;">
+                <table id="historyTable" style="width: 100%; border-collapse: collapse; display: none; text-align: left; font-size: 0.9rem;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid var(--border);">
+                            <th style="padding: 12px 8px;">Run ID</th>
+                            <th style="padding: 12px 8px;">Name</th>
+                            <th style="padding: 12px 8px;">Phone</th>
+                            <th style="padding: 12px 8px;">Status</th>
+                            <th style="padding: 12px 8px;">Sent At</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyBody">
+                    </tbody>
+                </table>
+            </div>
         </div>
 
     </div>
@@ -325,14 +372,21 @@
         const placeholderText = document.getElementById('placeholderText');
 
         // On load, update marker position if image exists
+        function initializeMarker() {
+            if (!preview.naturalWidth) return;
+            const scaleX = preview.width / preview.naturalWidth;
+            const scaleY = preview.height / preview.naturalHeight;
+            nameMarker.style.left = (parseInt(nameX.value) * scaleX) + 'px';
+            nameMarker.style.top = (parseInt(nameY.value) * scaleY) + 'px';
+            updateMarkerStyle();
+            nameMarker.style.display = 'block';
+        }
+
         if (preview.src && preview.src !== window.location.href && preview.src.indexOf('#') === -1) {
-            preview.onload = function() {
-                // Set the marker to the actual saved coordinates scaled for display
-                const scaleX = preview.width / preview.naturalWidth;
-                const scaleY = preview.height / preview.naturalHeight;
-                nameMarker.style.left = (parseInt(nameX.value) * scaleX) + 'px';
-                nameMarker.style.top = (parseInt(nameY.value) * scaleY) + 'px';
-                updateMarkerStyle();
+            if (preview.complete) {
+                initializeMarker();
+            } else {
+                preview.onload = initializeMarker;
             }
         }
 
@@ -385,6 +439,54 @@
             nameMarker.style.display = 'block';
             updateMarkerStyle();
         });
+
+        function loadHistory(btn) {
+            btn.textContent = 'Loading...';
+            btn.disabled = true;
+            
+            fetch('/api/avantika/history/')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('sentCount').textContent = data.total_sent;
+                    document.getElementById('failedCount').textContent = data.total_failed;
+                    document.getElementById('historyStats').style.display = 'block';
+                    
+                    const tbody = document.getElementById('historyBody');
+                    tbody.innerHTML = '';
+                    
+                    if (data.history && data.history.length > 0) {
+                        data.history.forEach(item => {
+                            const tr = document.createElement('tr');
+                            tr.style.borderBottom = '1px solid var(--border)';
+                            
+                            const statusColor = item.status === 'Sent' ? '#10B981' : (item.status === 'Failed' ? '#EF4444' : 'var(--text-main)');
+                            
+                            tr.innerHTML = `
+                                <td style="padding: 12px 8px;">${item.campaign_run_id || '-'}</td>
+                                <td style="padding: 12px 8px;">${item.name || '-'}</td>
+                                <td style="padding: 12px 8px;">${item.phone || '-'}</td>
+                                <td style="padding: 12px 8px; color: ${statusColor}; font-weight: 500;">
+                                    ${item.status} ${item.error_message ? `<span title="${item.error_message}">⚠️</span>` : ''}
+                                </td>
+                                <td style="padding: 12px 8px;">${item.sent_at ? new Date(item.sent_at).toLocaleString() : '-'}</td>
+                            `;
+                            tbody.appendChild(tr);
+                        });
+                        document.getElementById('historyTable').style.display = 'table';
+                    } else {
+                        tbody.innerHTML = '<tr><td colspan="5" style="padding: 12px 8px; text-align: center; color: var(--text-muted);">No history found.</td></tr>';
+                        document.getElementById('historyTable').style.display = 'table';
+                    }
+                })
+                .catch(err => {
+                    console.error('Error fetching history:', err);
+                    alert('Failed to load history.');
+                })
+                .finally(() => {
+                    btn.textContent = 'Load History';
+                    btn.disabled = false;
+                });
+        }
     </script>
 </body>
 </html>
