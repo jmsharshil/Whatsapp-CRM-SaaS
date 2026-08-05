@@ -11,7 +11,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.lib.styles import getSampleStyleSheet
 logger = logging.getLogger(__name__)
 
-GIGATEL_BASE    = os.environ.get("GIGATEL_API_BASE", "http://mob.gigatel.me:60114/api")
+GIGATEL_BASE    = "http://prod.gigatel.me:40503/api"
 GIGATEL_HEADERS = {
     "X-Authorization": os.environ.get(
         "GIGATEL_AUTH",
