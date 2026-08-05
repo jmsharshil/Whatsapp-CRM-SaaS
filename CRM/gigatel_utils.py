@@ -50,7 +50,7 @@ def verify_customer(mobile_no: str) -> dict | None:
             f"{GIGATEL_BASE}/Customer/GetCustomerVerifyByMobileNo",
             params={"mobileNo": mobile_no},
             headers=GIGATEL_HEADERS,
-            timeout=15,
+            timeout=20,
         )
 #        logger.debug("[CRM] verify_customer: status=%s body=%s", r.status_code, r.text[:500])
         r.raise_for_status()
@@ -91,7 +91,7 @@ def get_circuits_by_customer(customer_id: int) -> list:
             f"{GIGATEL_BASE}/Circuit/GetCircuitByCustomerId",
             params={"customerId": customer_id},
             headers=GIGATEL_HEADERS,
-            timeout=15,
+            timeout=20,
         )
 #        logger.debug(
 #            "[CRM] get_circuits_by_customer: status=%s body=%s", r.status_code, r.text[:500]
@@ -136,7 +136,7 @@ def get_running_tickets(customer_company_id: int) -> list:
             f"{GIGATEL_BASE}/Customer/GetRunningTicketByCustomerCompanyId",
             params={"CustomerCompanyId": customer_company_id},
             headers=GIGATEL_HEADERS,
-            timeout=15,
+            timeout=20,
         )
         r.raise_for_status()
         data = r.json()
@@ -159,7 +159,7 @@ def get_circuit_detail(circuit_id: str) -> dict | None:
             f"{GIGATEL_BASE}/Circuit/GetCircuitDetailByCircuitId",
             params={"circuitId": circuit_id},
             headers=GIGATEL_HEADERS,
-            timeout=15,
+            timeout=20,
         )
 #        logger.debug(
 #            "[CRM] get_circuit_detail: status=%s body=%s", r.status_code, r.text[:500]
@@ -258,7 +258,7 @@ def check_otdr_fault_side(
                 "otdr": otdr_value,
             },
             headers={**GIGATEL_HEADERS, "Content-Type": "application/json"},
-            timeout=15,
+            timeout=20,
         )
         r.raise_for_status()
         data = r.json()
@@ -327,7 +327,7 @@ def raise_complaint(payload: dict) -> dict | None:
             f"{GIGATEL_BASE}/Customer/InsertUpdateCustomerComplaintFormData",
             data=payload,
             headers=GIGATEL_HEADERS,
-            timeout=15,
+            timeout=20,
         )
         r.raise_for_status()
 #        logger.warning("[CRM] raise_complaint: FULL response status=%s body=%s",
