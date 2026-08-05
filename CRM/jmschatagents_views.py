@@ -1089,7 +1089,11 @@ def generate_avantika_image(contact, active_template) -> str:
         
         # Draw phone number slightly smaller, directly below the name
         phone_font = get_font(max(12, int(active_template.font_size * 0.75)))
-        phone_y = active_template.name_y + active_template.font_size + (active_template.font_size // 4)
+        
+        # Calculate precise bottom of the name text to avoid large gaps
+        name_bbox = draw.textbbox((active_template.name_x, active_template.name_y), display_name, font=font)
+        phone_y = name_bbox[3] + 5  # 5 pixels gap directly below the name
+        
         formatted_phone = f"+{clean_phone}" if not clean_phone.startswith('+') else clean_phone
         draw.text((active_template.name_x, phone_y), formatted_phone, fill=active_template.text_color, font=phone_font)
         
