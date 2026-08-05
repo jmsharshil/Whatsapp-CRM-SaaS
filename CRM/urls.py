@@ -8,9 +8,13 @@ from .views import *
 from CRM.views import MetaConversationMessageListView
 from CRM.jmschatagents_views import *
 from CRM.gigatel_views import GigatelDataExportView
+import CRM.gigatel_views
 from CRM.globestar_views import GlobestarDataAPIView
 
 urlpatterns = [
+
+    # Dedicated Gigatel Webhook
+    path('api/gigatel/webhook/', CRM.gigatel_views.WebhookView.as_view(), name="gigatel-webhook-dedicated"),
 
     # Old webhook path → now uses multi-tenant WhatsAppWebhookView
     path('webhook/', WhatsAppWebhookView.as_view(), name="webhook"),
