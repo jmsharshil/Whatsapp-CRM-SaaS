@@ -158,8 +158,14 @@ def download_meta_media(media_id: str) -> str:
 
 # --- external APIs ---
 
-def amritcement_create_order(payload: dict) -> dict:
-    url = "https://supershop.bigbanginnovations.in/apilive/order/createOrder"
+def amritcement_create_order(payload: dict, is_dealer: bool = True) -> dict:
+    if is_dealer:
+        # Purchase Order API for Dealer
+        url = "https://supershop.bigbanginnovations.in/apilive/order/createOrder" 
+    else:
+        # Create Sales Order API for ASD
+        url = "https://supershop.bigbanginnovations.in/apilive/order/createSalesOrder" # Replace with exact ASD API url when known
+        
     headers = {}
     try:
         r = requests.post(url, data=payload, headers=headers, timeout=15)
@@ -210,12 +216,40 @@ def amritcement_verify_mobile_no(mobile_no: str) -> dict:
     payload = {"mobile_no": mobile_no}
     try:
         r = requests.post(url, data=payload, timeout=15)
+        
+        if r.status_code == 503:
+            return {"success": False, "error_type": "SERVICE_UNAVAILABLE", "message": "Service Unavailable"}
+            
         r.raise_for_status()
+        
         try:
-            return r.json()
-        except Exception as json_err:
+            resp_json = r.json()
+            if not resp_json:
+                return {"success": False, "error_type": "INVALID_RESPONSE", "message": "Empty response"}
+                
+            if resp_json.get("success") or str(resp_json.get("status", "")) == "1" or resp_json.get("customer_code"):
+                # Handle missing fields in what appears to be a successful response
+                customer_type = resp_json.get("data", {}).get("customer_type") or resp_json.get("customer_type")
+                customer_code = resp_json.get("data", {}).get("customer_code") or resp_json.get("customer_code")
+                
+                if not customer_type:
+                    logger.error("[Amritcement] verifyMobileNo API missing customer_type for %s", mobile_no)
+                    return {"success": False, "error_type": "MISSING_CUSTOMER_TYPE", "message": "Missing Customer Type"}
+                if not customer_code:
+                    logger.error("[Amritcement] verifyMobileNo API missing customer_code for %s", mobile_no)
+                    return {"success": False, "error_type": "MISSING_CUSTOMER_CODE", "message": "Missing Customer Code"}
+                    
+                return {"success": True, "data": resp_json.get("data", resp_json)}
+            else:
+                return {"success": False, "error_type": "NOT_REGISTERED", "message": "Not Registered"}
+
+        except ValueError:
             logger.error("[Amritcement] verifyMobileNo API returned non-JSON. Status: %s, Text: '%s'", r.status_code, r.text)
-            return {"success": False, "message": "Invalid API Response"}
+            return {"success": False, "error_type": "INVALID_RESPONSE", "message": "Invalid API Response"}
+            
+    except requests.exceptions.Timeout:
+        logger.exception("[Amritcement] verifyMobileNo API timeout")
+        return {"success": False, "error_type": "TIMEOUT", "message": "Request Timeout"}
     except Exception as e:
         logger.exception("[Amritcement] verifyMobileNo API failed: %s", e)
-        return {"success": False, "message": str(e)}
+        return {"success": False, "error_type": "API_FAILURE", "message": str(e)}
