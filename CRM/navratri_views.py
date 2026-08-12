@@ -198,9 +198,25 @@ class NavratriRegistrationAPIView(APIView):
                 send_payload = {
                     "messaging_product": "whatsapp",
                     "to": phone_number,
-                    "type": "image",
-                    "image": {
-                        "id": media_id
+                    "type": "template",
+                    "template": {
+                        "name": "navratri_entry_pass",
+                        "language": {
+                            "code": "en"
+                        },
+                        "components": [
+                            {
+                                "type": "header",
+                                "parameters": [
+                                    {
+                                        "type": "image",
+                                        "image": {
+                                            "id": media_id
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
                     }
                 }
                 
