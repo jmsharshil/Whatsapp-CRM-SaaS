@@ -159,13 +159,8 @@ def download_meta_media(media_id: str) -> str:
 # --- external APIs ---
 
 def amritcement_create_order(payload: dict, is_dealer: bool = True) -> dict:
-    if is_dealer:
-        # Purchase Order API for Dealer
-        url = "https://supershop.bigbanginnovations.in/apilive/order/createOrderForBot" 
-    else:
-        # Create Sales Order API for ASD
-        url = "https://supershop.bigbanginnovations.in/apilive/order/createSalesOrder" # Replace with exact ASD API url when known
-        
+    # Purchase Order API for Dealer and Sales Order API for ASD use the same URL
+    url = "https://supershop.bigbanginnovations.in/apilive/order/createOrderForBot"
     headers = {}
     try:
         r = requests.post(url, data=payload, headers=headers, timeout=15)

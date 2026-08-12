@@ -645,9 +645,9 @@ def handle_amritcement_message(msg: dict):
                 
                 # Payload mapping based on Postman screenshot and PDF
                 payload = {
-                    "shop_id": "423",
-                    "token": "4b9d9b3b5ff69eb5234bc55f425c78c1",
-                    "user_id": "423",
+                    "shop_id": dealer_data.get("shop_id", ""),
+                    "token": dealer_data.get("token", ""),
+                    "user_id": dealer_data.get("shop_id", ""),
                     "customer_id": customer_id,
                     "customer_name": customer_name,
                     "order_date": datetime.now().strftime("%d-%m-%Y"),
