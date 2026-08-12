@@ -202,9 +202,11 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
         cache.set(dedup_key, "1", timeout=300)
 
     # ── Extract text ──────────────────────────────────────────────────────
+    msg_type = msg.get("type", "")
     text = _extract_text_for_routing(msg)
-    if not text:
+    if not text and msg_type != "image":
         return
+    text = text or ""
 
     text_lower = text.lower().strip()
     logger.info("[Webhook/JMS] from=%s text=%r", raw_phone, text_lower)
@@ -354,29 +356,72 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
     elif go_navratri:
         logger.info("[Webhook/JMS] → NAVRATRI 2-WAY for %s", raw_phone)
         
-        # Check if the user is asking exactly for the approval status
-        # Check if the user is asking exactly for the approval status (without apostrophe to avoid encoding issues)
-        expected_substring = "like to check the approval status of my pass. could you please let me know if it has been approved"
-        
-        if expected_substring in text_lower:
-            reply_text = "Status in review. We will update you shortly!"
-            
-            # Send using correct Navratri Phone Number ID
+        if msg_type == "image":
+            logger.info("Received image for Navratri. Generating pass.")
             try:
-                from CRM.navratri_views import NAVRATRI_PHONE_NUMBER_ID
-                token = getattr(settings, "META_PERMANENT_TOKEN", os.getenv("META_ACCESS_TOKEN", ""))
-                url = f"https://graph.facebook.com/v22.0/{NAVRATRI_PHONE_NUMBER_ID}/messages"
-                headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-                payload = {"messaging_product": "whatsapp", "to": raw_phone, "type": "text", "text": {"body": reply_text}}
-                requests.post(url, json=payload, headers=headers)
-            except Exception as e:
-                logger.error(f"Navratri auto-reply send error: {e}")
+                from CRM.models import NavratriRegistration
+                from CRM.navratri_views import NavratriRegistrationAPIView
+                phone_no_plus = raw_phone.replace("+", "")
+                search_phones = [raw_phone, phone_no_plus]
+                if len(phone_no_plus) > 10:
+                    search_phones.append(phone_no_plus[-10:])
                 
-            _save_reply(inbound_msg_id, reply_text)
+                # Get the most recent registration for this phone
+                reg = NavratriRegistration.objects.filter(phone_number__in=search_phones).order_by('-id').first()
+                if reg:
+                    # Download the image from Meta
+                    media_id = msg.get("image", {}).get("id")
+                    if media_id:
+                        try:
+                            token = getattr(settings, "META_PERMANENT_TOKEN", os.getenv("META_ACCESS_TOKEN", ""))
+                            # 1. Get media URL
+                            media_url_req = requests.get(f"https://graph.facebook.com/v22.0/{media_id}", headers={"Authorization": f"Bearer {token}"})
+                            if media_url_req.status_code == 200:
+                                media_url = media_url_req.json().get("url")
+                                # 2. Download binary data
+                                img_resp = requests.get(media_url, headers={"Authorization": f"Bearer {token}"})
+                                if img_resp.status_code == 200:
+                                    # Save to media folder
+                                    import os
+                                    save_dir = os.path.join(settings.BASE_DIR, 'media', 'navratri_payments')
+                                    os.makedirs(save_dir, exist_ok=True)
+                                    file_path = os.path.join(save_dir, f"{reg.id}_{media_id}.jpg")
+                                    with open(file_path, 'wb') as f:
+                                        f.write(img_resp.content)
+                                    logger.info(f"Downloaded Navratri payment screenshot for reg {reg.id}")
+                        except Exception as dl_err:
+                            logger.error(f"Failed to download Navratri image: {dl_err}")
+                
+                    import threading
+                    view = NavratriRegistrationAPIView()
+                    threading.Timer(1, view.send_navratri_pass_task, args=[reg.id]).start()
+                else:
+                    logger.error(f"Navratri registration not found for image from {raw_phone}")
+            except Exception as e:
+                logger.error(f"Navratri image processing error: {e}")
         else:
-            # We just saved the message in CRM. We do not send any automated reply.
-            # This allows human agents to handle it or a future Navratri bot to take over.
-            pass
+            # Check if the user is asking exactly for the approval status (without apostrophe to avoid encoding issues)
+            expected_substring = "like to check the approval status of my pass. could you please let me know if it has been approved"
+            
+            if expected_substring in text_lower:
+                reply_text = "Status in review. We will update you shortly!"
+                
+                # Send using correct Navratri Phone Number ID
+                try:
+                    from CRM.navratri_views import NAVRATRI_PHONE_NUMBER_ID
+                    token = getattr(settings, "META_PERMANENT_TOKEN", os.getenv("META_ACCESS_TOKEN", ""))
+                    url = f"https://graph.facebook.com/v22.0/{NAVRATRI_PHONE_NUMBER_ID}/messages"
+                    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+                    payload = {"messaging_product": "whatsapp", "to": raw_phone, "type": "text", "text": {"body": reply_text}}
+                    requests.post(url, json=payload, headers=headers)
+                except Exception as e:
+                    logger.error(f"Navratri auto-reply send error: {e}")
+                    
+                _save_reply(inbound_msg_id, reply_text)
+            else:
+                # We just saved the message in CRM. We do not send any automated reply.
+                # This allows human agents to handle it or a future Navratri bot to take over.
+                pass
             
     elif go_shopify:
         logger.info("[Webhook/JMS] → SHOPIFY BOT for %s", raw_phone)

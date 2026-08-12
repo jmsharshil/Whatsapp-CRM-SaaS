@@ -40,15 +40,11 @@ class NavratriRegistrationAPIView(APIView):
                 pass_quantity=int(data.get('pass_quantity', 1))
             )
             
-            # Send WhatsApp Template Message
+            # Send WhatsApp Template Messages (Registration + Payment Link)
             self.send_whatsapp_template(reg.phone_number, reg.name)
             
             # Sync to Google Sheets
             self.sync_to_google_sheet(reg)
-            
-            # Schedule the pass generation and sending 5 minutes (300 seconds) later
-            import threading
-            threading.Timer(300, self.send_navratri_pass_task, args=[reg.id]).start()
             
             return Response({"status": "success", "message": "Registration successful", "id": reg.id}, status=status.HTTP_201_CREATED)
         except Exception as e:
@@ -110,6 +106,28 @@ class NavratriRegistrationAPIView(APIView):
                 if conversation.bot_state != "NAVRATRI":
                     conversation.bot_state = "NAVRATRI"
                     conversation.save(update_fields=["bot_state"])
+                
+                # SEND PAYMENT LINK TEMPLATE
+                payload_payment = {
+                    "messaging_product": "whatsapp",
+                    "to": phone_number,
+                    "type": "template",
+                    "template": {
+                        "name": "payment_link",
+                        "language": {
+                            "code": "en"
+                        }
+                    }
+                }
+                
+                try:
+                    r2 = requests.post(url, json=payload_payment, headers=headers, timeout=10)
+                    if r2.status_code not in (200, 201):
+                        logger.error(f"Meta API error sending payment link: {r2.status_code} - {r2.text}")
+                    else:
+                        logger.info(f"Payment link sent to {phone_number} successfully.")
+                except Exception as e2:
+                    logger.error(f"Payment link sending exception: {str(e2)}")
                 
                 Message.objects.create(
                     conversation=conversation,
@@ -262,17 +280,20 @@ class NavratriRegistrationAPIView(APIView):
             if bg_img.mode != 'RGB':
                 bg_img = bg_img.convert('RGB')
             
-            # Calculate coordinates to place QR code in the center (assuming standard size like the template)
-            qr_width, qr_height = qr_img.size
+            # Convert qr_img to RGB so it pastes correctly onto the background
+            qr_img = qr_img.convert('RGB')
             
-            # Resize QR to fit well on the template. Given standard portrait dimensions, 450x450 usually fits well.
-            qr_size = 730
-            qr_img = qr_img.resize((qr_size, qr_size))
+            # Resize QR to fit nicely on the template, using NEAREST to keep sharp edges
+            qr_size = 650
+            qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.NEAREST)
+            
+            # Calculate coordinates to place QR code in the center
+            qr_width, qr_height = qr_img.size
             
             bg_w, bg_h = bg_img.size
             # Assuming center placement for the QR code
-            offset_w = (bg_w - qr_size) // 2
-            offset_h = (bg_h - qr_size) // 2 + 50 # Slightly lower than exact center to align with the design's placeholder box
+            offset_w = (bg_w - qr_width) // 2
+            offset_h = (bg_h - qr_height) // 2 + 50 # Slightly lower than exact center to align with the design's placeholder box
             
             bg_img.paste(qr_img, (offset_w, offset_h))
             
