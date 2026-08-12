@@ -315,14 +315,58 @@ def handle_amritcement_message(msg: dict):
                     session.save()
                     send_amritcement_template(from_number, "amritcement_not_registered", "en")
             elif body_str == "menu_ledger" or "ledger" in body_str or "ledger / outstanding / cn-dn" in display_str.lower():
-                session.state = "LEDGER_INPUT_CODE"
+                if getattr(session, "dealer_data", None):
+                    dealer_code = session.dealer_data.get("customer_code") or session.dealer_data.get("CUSTOMER_CODE")
+                    if dealer_code:
+                        resp = amritcement_get_ledger(dealer_code)
+                        logger.info(f"[Amritcement Debug] Ledger API Response for {dealer_code}: {resp}")
+                        
+                        if resp and (resp.get("CUSTOMER_CODE") or resp.get("customer_code")):
+                            outstanding = resp.get("CLOSING_BAL", "0")
+                            due_invoices = "NA"
+                            cn_dn = "NA"
+                            due_dates = "NA"
+                            
+                            components = [
+                                {
+                                    "type": "body",
+                                    "parameters": [
+                                        {"type": "text", "text": str(outstanding)},
+                                        {"type": "text", "text": str(due_invoices)},
+                                        {"type": "text", "text": str(cn_dn)},
+                                        {"type": "text", "text": str(due_dates)}
+                                    ]
+                                }
+                            ]
+                            send_amritcement_template(from_number, "amritcement_ledger", "en", components)
+                        else:
+                            send_amritcement_text(from_number, "Failed to retrieve ledger details or invalid dealer code. Please try again.")
+                    else:
+                        send_amritcement_text(from_number, "Customer code not found in session. Please contact support.")
+                else:
+                    logger.info(f"[Amritcement Debug] Dealer data missing for {from_number} during ledger")
+                    session.state = "NOT_REGISTERED"
+                    send_amritcement_template(from_number, "amritcement_not_registered", "en")
+                
+                session.state = "MENU"
                 session.save()
-                send_amritcement_text(from_number, "Please enter your Dealer/Customer Code to view ledger details:")
             elif body_str == "menu_claim" or "claim" in body_str or "claims submission" in display_str.lower():
-                session.state = "CLAIM_INPUT_CODE"
-                session.claim_data = {}
-                session.save()
-                send_amritcement_text(from_number, "Please enter your User Number to proceed with claim submission:")
+                if getattr(session, "dealer_data", None):
+                    customer_code = session.dealer_data.get("customer_code") or session.dealer_data.get("CUSTOMER_CODE")
+                    if customer_code:
+                        session.state = "CLAIM_TYPE_SELECT"
+                        session.claim_data = {"user_no": customer_code}
+                        session.save()
+                        tpl_amritcement_claim_types(from_number)
+                    else:
+                        send_amritcement_text(from_number, "Customer code not found in session. Please contact support.")
+                        session.state = "MENU"
+                        session.save()
+                else:
+                    logger.info(f"[Amritcement Debug] Dealer data missing for {from_number} during claim")
+                    session.state = "NOT_REGISTERED"
+                    session.save()
+                    send_amritcement_template(from_number, "amritcement_not_registered", "en")
             else:
                 tpl_amritcement_main_menu(from_number)
 
