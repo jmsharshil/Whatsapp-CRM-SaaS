@@ -161,7 +161,7 @@ def download_meta_media(media_id: str) -> str:
 def amritcement_create_order(payload: dict, is_dealer: bool = True) -> dict:
     if is_dealer:
         # Purchase Order API for Dealer
-        url = "https://supershop.bigbanginnovations.in/apilive/order/createOrder" 
+        url = "https://supershop.bigbanginnovations.in/apilive/order/createOrderForBot" 
     else:
         # Create Sales Order API for ASD
         url = "https://supershop.bigbanginnovations.in/apilive/order/createSalesOrder" # Replace with exact ASD API url when known

@@ -47,7 +47,7 @@ def tpl_amritcement_main_menu(number: str):
     send_amritcement_template(number, "amritcement_welcome_", "en")
 
 def tpl_amritcement_products(number: str):
-    send_amritcement_template(number, "amritcement_cement_type", "en")
+    send_amritcement_template(number, "amritcement_cement_type_", "en")
     
 def tpl_amritcement_destinations(number: str, dealer_data: dict, qty: str, customer_type: str = "Dealer"):
     rows = []
