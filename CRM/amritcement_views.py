@@ -323,9 +323,22 @@ def handle_amritcement_message(msg: dict):
                         
                         if resp and (resp.get("CUSTOMER_CODE") or resp.get("customer_code")):
                             outstanding = resp.get("CLOSING_BAL", "0")
-                            due_invoices = "NA"
-                            cn_dn = "NA"
-                            due_dates = "NA"
+                            
+                            ledger_entries = resp.get("LEDGER", [])
+                            # Count the number of invoices
+                            invoices_count = sum(1 for item in ledger_entries if "Invoice" in str(item.get("PARTICULARS", "")))
+                            due_invoices = str(invoices_count) if invoices_count > 0 else "0"
+                            
+                            # Count CN/DN (Credit Note / Debit Note)
+                            cn_dn_count = sum(1 for item in ledger_entries if "Note" in str(item.get("PARTICULARS", "")) or "CN" in str(item.get("PARTICULARS", "")) or "DN" in str(item.get("PARTICULARS", "")))
+                            cn_dn = str(cn_dn_count) if cn_dn_count > 0 else "0"
+                            
+                            statement_from = resp.get("STATEMENT_FROM", "")
+                            statement_to = resp.get("STATEMENT_TO", "")
+                            if statement_from and statement_to:
+                                due_dates = f"{statement_from} to {statement_to}"
+                            else:
+                                due_dates = "NA"
                             
                             components = [
                                 {
