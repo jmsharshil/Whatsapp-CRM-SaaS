@@ -287,7 +287,8 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
             go_shopify = True
         else:
             # Check if this is an active Navratri conversation
-            navratri_conv = Conversation.objects.filter(customer__phone=raw_phone, bot_state="NAVRATRI").first()
+            phone_no_plus = raw_phone.replace("+", "")
+            navratri_conv = Conversation.objects.filter(customer__phone__in=[raw_phone, phone_no_plus], bot_state="NAVRATRI").first()
             if navratri_conv:
                 go_navratri = True
             else:
