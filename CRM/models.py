@@ -623,3 +623,41 @@ class AvantikaCampaignHistory(models.Model):
     
     def __str__(self):
         return f"{self.phone} - {self.status} at {self.sent_at}"
+
+
+class NavratriRegistration(models.Model):
+    name = models.CharField(max_length=255)
+    phone_number = models.CharField(max_length=50)
+    email = models.EmailField(blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
+    aadhar_card_number = models.CharField(max_length=50, blank=True, null=True)
+    
+    GUARDIAN_RELATION_CHOICES = [
+        ("father", "Father"),
+        ("mother", "Mother"),
+        ("brother", "Brother"),
+        ("sister", "Sister"),
+        ("husband", "Husband"),
+        ("wife", "Wife"),
+        ("legal guardian", "Legal Guardian"),
+        ("friend", "Friend"),
+    ]
+
+    guardian_relation = models.CharField(max_length=100, choices=GUARDIAN_RELATION_CHOICES, blank=True, null=True)
+    guardian_name = models.CharField(max_length=255, blank=True, null=True)
+    guardian_phone_number = models.CharField(max_length=50, blank=True, null=True)
+    guardian_email = models.EmailField(blank=True, null=True)
+    
+    PASS_TYPE_CHOICES = [
+        ("single_day_pass", "Single Day Pass"),
+        ("season_pass", "Season Pass"),
+    ]
+
+    pass_type = models.CharField(max_length=100, choices=PASS_TYPE_CHOICES, blank=True, null=True)
+    select_date = models.CharField(max_length=100, blank=True, null=True)
+    pass_quantity = models.IntegerField(default=1)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name} - {self.phone_number}"

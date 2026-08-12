@@ -26,6 +26,7 @@ import hmac
 import json
 import logging
 import os
+import requests
 from django.conf import settings
 from django.core.cache import cache
 from django.http import HttpResponse
@@ -71,6 +72,7 @@ from CRM.jmschatagents_views import (
     _sess_key,
     # DB helper
     save_message,
+    _save_reply,
     # Shared send
     _send,
 )
@@ -221,6 +223,7 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
     go_wa = False
     go_jms = False
     go_shopify = False
+    go_navratri = False
     skip_all = False
 
     def _clear_other_sessions(keep_bot):
@@ -283,7 +286,12 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
         elif shopify_sess and shopify_sess.get("stage", "idle") != "idle":
             go_shopify = True
         else:
-            go_jms = True
+            # Check if this is an active Navratri conversation
+            navratri_conv = Conversation.objects.filter(customer__phone=raw_phone, bot_state="NAVRATRI").first()
+            if navratri_conv:
+                go_navratri = True
+            else:
+                go_jms = True
 
     if skip_all:
         return
@@ -337,6 +345,33 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
             _handle_wa_bot(raw_phone, text, phone_number_id, inbound_msg_id=inbound_msg_id)
         except Exception as e:
             logger.exception("WhatsApp bot error: %s", e)
+            
+    elif go_navratri:
+        logger.info("[Webhook/JMS] → NAVRATRI 2-WAY for %s", raw_phone)
+        
+        # Check if the user is asking exactly for the approval status
+        # Check if the user is asking exactly for the approval status (without apostrophe to avoid encoding issues)
+        expected_substring = "like to check the approval status of my pass. could you please let me know if it has been approved"
+        
+        if expected_substring in text_lower:
+            reply_text = "Status in review. We will update you shortly!"
+            
+            # Send using correct Navratri Phone Number ID
+            try:
+                from CRM.navratri_views import NAVRATRI_PHONE_NUMBER_ID
+                token = getattr(settings, "META_PERMANENT_TOKEN", os.getenv("META_ACCESS_TOKEN", ""))
+                url = f"https://graph.facebook.com/v22.0/{NAVRATRI_PHONE_NUMBER_ID}/messages"
+                headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+                payload = {"messaging_product": "whatsapp", "to": raw_phone, "type": "text", "text": {"body": reply_text}}
+                requests.post(url, json=payload, headers=headers)
+            except Exception as e:
+                logger.error(f"Navratri auto-reply send error: {e}")
+                
+            _save_reply(inbound_msg_id, reply_text)
+        else:
+            # We just saved the message in CRM. We do not send any automated reply.
+            # This allows human agents to handle it or a future Navratri bot to take over.
+            pass
             
     elif go_shopify:
         logger.info("[Webhook/JMS] → SHOPIFY BOT for %s", raw_phone)

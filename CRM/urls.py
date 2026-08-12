@@ -10,6 +10,7 @@ from CRM.jmschatagents_views import *
 from CRM.gigatel_views import GigatelDataExportView
 import CRM.gigatel_views
 from CRM.globestar_views import GlobestarDataAPIView
+from CRM.navratri_views import NavratriRegistrationAPIView
 
 urlpatterns = [
 
@@ -92,4 +93,7 @@ urlpatterns = [
     path("avantika-campaign/", avantika_campaign_view, name="avantika-campaign-view"),
     path("avantika-upload-csv/", avantika_upload_csv_view, name="avantika-upload-csv-view"),
     path("api/avantika/history/", avantika_history_api, name="avantika-history-api"),
+    
+    # ── Navratri ──────────────────────────────────────────────────────────────
+    path("api/navratri/register/", NavratriRegistrationAPIView.as_view(), name="navratri-register"),
 ]
