@@ -90,8 +90,6 @@ def tpl_amritcement_destinations(number: str, dealer_data: dict, qty: str, custo
     }
     send_amritcement_interactive(number, interactive_data)
 
-def tpl_amritcement_packing(number: str):
-    send_amritcement_template(number, "amritcement_select_packing", "en")
 
 def tpl_amritcement_ship_to_select(number: str, dealer_data: dict, current_selections: list):
     own_party = {
@@ -360,21 +358,9 @@ def handle_amritcement_message(msg: dict):
                 prod_name = display_str
                 prod_id = interactive_id if interactive_id else prod_name.replace(" ", "_").lower()
                 session.order_data = {"product_id": prod_id, "product_name": prod_name}
-                session.state = "ORDER_PACKING_SELECT"
-                session.save()
-                tpl_amritcement_packing(from_number)
-            else:
-                send_amritcement_text(from_number, "Selected product is not available. Please choose one of the available products.")
-                
-        elif state == "ORDER_PACKING_SELECT":
-            packing_types = ["50 kg bag", "jumbo bag", "bulk order (for big projects)"]
-            if display_str.lower() in packing_types or interactive_id.startswith("pack_"):
-                pack_type = display_str
-                order_data = session.order_data or {}
-                order_data["packing"] = pack_type
-                session.order_data = order_data
                 session.state = "ORDER_QTY_ENTER"
                 session.save()
+                
                 cust_type = getattr(session, "customer_type", "Dealer")
                 qty_unit = "Metric Ton (MT)" if cust_type.lower() == "dealer" else "Bags"
                 
@@ -388,8 +374,7 @@ def handle_amritcement_message(msg: dict):
                 ]
                 send_amritcement_template(from_number, "amritcement_quantity", "en", components)
             else:
-                send_amritcement_text(from_number, "Please select a valid packing type.")
-                tpl_amritcement_packing(from_number)
+                send_amritcement_text(from_number, "Selected product is not available. Please choose one of the available products.")
                 
         elif state == "ORDER_QTY_ENTER":
             cust_type = getattr(session, "customer_type", "Dealer")
