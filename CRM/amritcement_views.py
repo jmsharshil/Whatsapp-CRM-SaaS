@@ -193,6 +193,7 @@ def handle_amritcement_message(msg: dict):
         body_str = ""
         display_str = ""
         interactive_id = ""
+        media_url = ""
 
         if msg_type == "text":
             body_str = msg.get("text", {}).get("body", "").strip().lower()
@@ -222,7 +223,8 @@ def handle_amritcement_message(msg: dict):
             local_path = download_meta_media(media_id) if media_id else ""
             
             # For now, store the caption or the local path. As requested, we won't send the actual file to external API yet.
-            display_str = caption if caption else f"Media Saved: {local_path}"
+            media_url = local_path
+            display_str = caption
             body_str = display_str.lower()
 
         logger.info(f"[Amritcement Debug] Parsed -> body_str: '{body_str}', display_str: '{display_str}', interactive_id: '{interactive_id}'")
@@ -232,8 +234,32 @@ def handle_amritcement_message(msg: dict):
         conv, _ = Conversation.objects.get_or_create(customer=customer, phone_number_id=AMRITCEMENT_PHONE_NUMBER_ID, defaults={'client': client_account})
 
         session = ConversationSession(conv)
+        
+        # Log inbound message to DB
+        try:
+            meta_id = msg.get("id", "")
+            inbound_content = display_str if display_str else body_str
+            if msg_type in ["image", "video"]:
+                inbound_content = f"Media URL: {media_url}"
+                if display_str:
+                    inbound_content += f"\nCaption: {display_str}"
+                    
+            Message.objects.create(
+                conversation=conv,
+                client=client_account,
+                customer=customer,
+                meta_message_id=meta_id,
+                content=inbound_content,
+                direction="inbound",
+                message_type=msg_type if msg_type else "text",
+                status="received",
+                client_name=client_account.name if client_account else ""
+            )
+        except Exception as e:
+            logger.exception("[Amritcement Debug] Failed to save inbound message to DB: %s", e)
+            
         state = session.state
-
+        
         logger.info(f"[Amritcement Debug] Current State: {state}")
 
         now_ts = datetime.now().timestamp()
@@ -617,7 +643,9 @@ def handle_amritcement_message(msg: dict):
             selected_party = next((p for p in parties if p["code"].upper() == val), None)
             
             if not selected_party:
-                send_amritcement_text(from_number, "Please select a Ship-To Party to continue.")
+                send_amritcement_text(from_number, "Please select a valid Ship-To Party to continue.")
+                current_codes = [c["code"] for c in current_selections]
+                tpl_amritcement_ship_to_select(from_number, dealer_data, current_codes)
                 return
                 
             if selected_party["code"] in [c["code"] for c in current_selections]:
@@ -802,7 +830,7 @@ def handle_amritcement_message(msg: dict):
                 tpl_amritcement_claim_types(from_number)
                 
         elif state == "CLAIM_INVOICE_ENTER":
-            if msg_type == "interactive":
+            if msg_type != "text":
                 send_amritcement_text(from_number, "Please type the Invoice Number. Do not use previous menus.")
                 return
             claim_data = session.claim_data or {}
@@ -813,7 +841,7 @@ def handle_amritcement_message(msg: dict):
             send_amritcement_template(from_number, "amritcement_claims_quantity", "en")
             
         elif state == "CLAIM_QTY_ENTER":
-            if msg_type == "interactive":
+            if msg_type != "text":
                 send_amritcement_text(from_number, "Please type the Quantity discrepancy. Do not use previous menus.")
                 return
             claim_data = session.claim_data or {}
@@ -824,7 +852,7 @@ def handle_amritcement_message(msg: dict):
             send_amritcement_template(from_number, "amritcement_claims_issue", "en")
             
         elif state == "CLAIM_ISSUE_ENTER":
-            if msg_type == "interactive":
+            if msg_type != "text":
                 send_amritcement_text(from_number, "Please type the Issue Description. Do not use previous menus.")
                 return
             claim_data = session.claim_data or {}
@@ -840,15 +868,14 @@ def handle_amritcement_message(msg: dict):
                 return
             
             claim_data = session.claim_data or {}
-            desc = display_str
             
             payload = {
                 "user_no": claim_data.get("user_no", ""),
                 "claim_type": claim_data.get("claim_type", ""),
                 "invoice_no": claim_data.get("invoice_no", ""),
                 "issue_detail": claim_data.get("issue_detail", ""),
-                "issue_image": desc,
-                "description": desc
+                "issue_image": media_url,
+                "description": display_str
             }
             
             resp = amritcement_add_claim_submission(payload)
