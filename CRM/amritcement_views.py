@@ -628,8 +628,14 @@ def handle_amritcement_message(msg: dict):
             order_data["ship_to_list"] = current_selections
             session.order_data = order_data
             
+            available_count = len([p for p in parties if p["code"] not in [c["code"] for c in current_selections]])
+            
             if len(current_selections) >= 3:
                 send_amritcement_text(from_number, "A maximum of three Ship-To Parties can be selected for a single order.")
+                session.state = "ORDER_CONFIRM"
+                session.save()
+                tpl_amritcement_order_summary(from_number, order_data, dealer_data, getattr(session, "customer_type", "Dealer"))
+            elif available_count == 0:
                 session.state = "ORDER_CONFIRM"
                 session.save()
                 tpl_amritcement_order_summary(from_number, order_data, dealer_data, getattr(session, "customer_type", "Dealer"))
@@ -796,6 +802,9 @@ def handle_amritcement_message(msg: dict):
                 tpl_amritcement_claim_types(from_number)
                 
         elif state == "CLAIM_INVOICE_ENTER":
+            if msg_type == "interactive":
+                send_amritcement_text(from_number, "Please type the Invoice Number. Do not use previous menus.")
+                return
             claim_data = session.claim_data or {}
             claim_data["invoice_no"] = display_str
             session.claim_data = claim_data
@@ -804,6 +813,9 @@ def handle_amritcement_message(msg: dict):
             send_amritcement_template(from_number, "amritcement_claims_quantity", "en")
             
         elif state == "CLAIM_QTY_ENTER":
+            if msg_type == "interactive":
+                send_amritcement_text(from_number, "Please type the Quantity discrepancy. Do not use previous menus.")
+                return
             claim_data = session.claim_data or {}
             claim_data["qty"] = display_str
             session.claim_data = claim_data
@@ -812,6 +824,9 @@ def handle_amritcement_message(msg: dict):
             send_amritcement_template(from_number, "amritcement_claims_issue", "en")
             
         elif state == "CLAIM_ISSUE_ENTER":
+            if msg_type == "interactive":
+                send_amritcement_text(from_number, "Please type the Issue Description. Do not use previous menus.")
+                return
             claim_data = session.claim_data or {}
             claim_data["issue_detail"] = display_str
             session.claim_data = claim_data
@@ -820,8 +835,12 @@ def handle_amritcement_message(msg: dict):
             send_amritcement_template(from_number, "amritcement_claims_upload", "en")
             
         elif state == "CLAIM_UPLOAD_ENTER":
+            if msg_type not in ["image", "video"]:
+                send_amritcement_text(from_number, "Please upload a photo or video to proceed. Text is not accepted.")
+                return
+            
             claim_data = session.claim_data or {}
-            desc = display_str if body_str != "skip" else ""
+            desc = display_str
             
             payload = {
                 "user_no": claim_data.get("user_no", ""),
