@@ -45,6 +45,7 @@ from CRM.META.client_views import handle_client_message
 # ── JMS internal bot imports ──────────────────────────────────────────────────
 from CRM.jmschatagents_views import (
     # Session stores
+    jms_sessions,
     ind_sessions,
     ind_get_session,
     ind_save_session,
@@ -220,6 +221,7 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
     mf_sess = mf_sessions.get(raw_phone)
     wa_sess = wa_sessions.get(raw_phone)
     shopify_sess = shopify_sessions.get(raw_phone)
+    jms_sess = jms_sessions.get(raw_phone)
 
     # ── Route decision ────────────────────────────────────────────────────
     go_industry = False
@@ -246,6 +248,8 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
             avantika_sessions.delete(raw_phone)
         if keep_bot != "shopify":
             shopify_sessions.delete(raw_phone)
+        if keep_bot != "jms":
+            jms_sessions.delete(raw_phone)
 
     # 1. Explicit Triggers (Top Priority)
     if text_lower in INDUSTRY_TRIGGERS:
@@ -290,6 +294,8 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
             go_wa = True
         elif shopify_sess and shopify_sess.get("stage", "idle") != "idle":
             go_shopify = True
+        elif jms_sess and jms_sess.get("stage", "idle") != "idle":
+            go_jms = True
         else:
             # Check if this is an active Navratri conversation
             phone_no_plus = raw_phone.replace("+", "")
