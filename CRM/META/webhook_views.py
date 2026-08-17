@@ -50,7 +50,6 @@ from CRM.jmschatagents_views import (
     ind_save_session,
     wa_sessions,
     mf_sessions,
-    avantika_sessions,
     shopify_sessions,
     # Constants
     INDUSTRY_TRIGGERS,
@@ -60,13 +59,11 @@ from CRM.jmschatagents_views import (
     MF_BOT_TRIGGER,
     BOT_TRIGGER_KEYWORD,
     IND_SESSION_TTL,
-    AVANTIKA_BOT_TRIGGER,
     # Bot handlers
     _process_meta_message,
     _jms_handle_message,
     _handle_wa_bot,
     _handle_mf_bot,
-    _handle_avantika_bot,
     _handle_shopify_bot,
     # Session key helper
     _sess_key,
@@ -75,6 +72,12 @@ from CRM.jmschatagents_views import (
     _save_reply,
     # Shared send
     _send,
+)
+from CRM.jaivik_views import (
+    avantika_sessions,
+    AVANTIKA_SESSION_TTL,
+    AVANTIKA_BOT_TRIGGER,
+    _handle_avantika_bot,
 )
 
 from CRM.gigatel_views import handle_gigatel_message
@@ -503,6 +506,7 @@ class WhatsAppWebhookView(APIView):
                         globestar_phone_id = GLOBESTAR_PHONE_NUMBER_ID
                         gkd_phone_id = GKD_PHONE_NUMBER_ID
                         amritcement_phone_id = AMRITCEMENT_PHONE_NUMBER_ID
+                        jaivik_phone_id = "1232951769906831"
                         
                         if gigatel_phone_id and phone_number_id == gigatel_phone_id:
                             logger.info("[Webhook] Routing message to Gigatel Bot")
@@ -539,6 +543,13 @@ class WhatsAppWebhookView(APIView):
                         elif amritcement_phone_id and phone_number_id == amritcement_phone_id:
                             logger.info("[Webhook] Routing message to Amritcement Bot")
                             handle_amritcement_message(msg)
+                        elif jaivik_phone_id and phone_number_id == jaivik_phone_id:
+                            logger.info("[Webhook] Routing message to Jaivik (Avantika) Bot")
+                            raw_phone = msg.get("from", "").strip()
+                            if not raw_phone.startswith("+"):
+                                raw_phone = f"+{raw_phone}"
+                            text = _extract_text_for_routing(msg) or ""
+                            _handle_avantika_bot(raw_phone, text, phone_number_id)
                         elif client:
                             # ── CLIENT BOT FLOW ───────────────────────────
                             # Route to client-specific bot

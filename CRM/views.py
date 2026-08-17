@@ -1992,20 +1992,34 @@ def _authenticate_client(request):
         phone_number_id = auth_header.replace("Bearer ", "").strip()
     if not phone_number_id:
         return None, JsonResponse({"error": "phone_number_id is required in Authorization header"}, status=401)
-    if phone_number_id != "1160424227149252":
+    if phone_number_id not in ["1160424227149252", "1232951769906831"]:
         return None, JsonResponse({"error": "Unauthorized phone_number_id. Only JMS is allowed."}, status=403)
         
     return phone_number_id, None
 
+def _strict_avantika_auth(request):
+    auth_header = request.headers.get("Authorization", "")
+    phone_number_id = None
+    if auth_header.startswith("Bearer "):
+        phone_number_id = auth_header.replace("Bearer ", "").strip()
+    
+    if not phone_number_id:
+        phone_number_id = request.GET.get("auth") or request.POST.get("auth")
+        
+    if phone_number_id != "1232951769906831":
+        return JsonResponse({"error": "Unauthorized access. Invalid or missing auth."}, status=403)
+        
+    return None
+
 @csrf_exempt
 def avantika_template_view(request):
     """Admin view to upload and configure Avantika dynamic templates."""
+    auth_err = _strict_avantika_auth(request)
+    if auth_err: return auth_err
+    
     from .models import AvantikaTemplate
     
     is_api = request.headers.get("Authorization", "").startswith("Bearer ")
-    if is_api:
-        pid, err = _authenticate_client(request)
-        if err: return err
     
     if request.method == "POST":
         base_image = request.FILES.get("base_image")
@@ -2049,7 +2063,8 @@ def avantika_template_view(request):
         return JsonResponse({"error": "Method not allowed"}, status=405)
         
     active_template = AvantikaTemplate.objects.filter(is_active=True).first()
-    return render(request, "avantika_admin.html", {"active_template": active_template})
+    auth_token = request.GET.get("auth") or request.POST.get("auth")
+    return render(request, "avantika_admin.html", {"active_template": active_template, "auth_token": auth_token})
 
 
 import csv
@@ -2058,12 +2073,12 @@ import io
 @csrf_exempt
 def avantika_upload_csv_view(request):
     """Admin view to upload CSV and populate AvantikaContact."""
+    auth_err = _strict_avantika_auth(request)
+    if auth_err: return auth_err
+    
     from .models import AvantikaContact
     
     is_api = request.headers.get("Authorization", "").startswith("Bearer ")
-    if is_api:
-        pid, err = _authenticate_client(request)
-        if err: return err
         
     if request.method == "POST":
         csv_file = request.FILES.get("csv_file")
@@ -2113,11 +2128,12 @@ def _process_row(row, AvantikaContact):
     if len(row) >= 2:
         phone = row[0].strip()
         name = row[1].strip()
+        address = row[2].strip() if len(row) > 2 else ""
         if phone:
             clean_phone = phone.lstrip('+')
             obj, created = AvantikaContact.objects.update_or_create(
                 phone=clean_phone,
-                defaults={'name': name}
+                defaults={'name': name, 'address': address}
             )
             return True
     return False
@@ -2126,15 +2142,14 @@ def _process_row(row, AvantikaContact):
 @csrf_exempt
 def avantika_campaign_view(request):
     """Admin view to trigger outbound template campaign."""
+    auth_err = _strict_avantika_auth(request)
+    if auth_err: return auth_err
+    
     from .models import AvantikaContact, AvantikaTemplate, AvantikaCampaignHistory
-    from .jmschatagents_views import generate_avantika_image
-    from .jmschatagents_utils import send_template
+    from .jaivik_views import generate_avantika_image, jaivik_send_template
     import json
     
     is_api = request.headers.get("Authorization", "").startswith("Bearer ")
-    if is_api:
-        pid, err = _authenticate_client(request)
-        if err: return err
     
     if request.method == "POST":
         active_template = AvantikaTemplate.objects.filter(is_active=True).first()
@@ -2144,7 +2159,7 @@ def avantika_campaign_view(request):
             return render(request, "avantika_admin.html")
             
         # Hardcode the template name since it is fixed
-        meta_template_name = "avantikaa"
+        meta_template_name = "image"
         
         import uuid
         run_id = str(uuid.uuid4())
@@ -2159,8 +2174,7 @@ def avantika_campaign_view(request):
                 header_component = {"type": "header", "parameters": [{"type": "image", "image": {"link": image_url}}]}
                 body_component = {"type": "body", "parameters": [{"type": "text", "text": contact.name.strip()}]}
                 components = [header_component, body_component]
-                
-                send_template(
+                jaivik_send_template(
                     to=contact.phone,
                     template_name=meta_template_name,
                     language_code="en",
@@ -2201,12 +2215,12 @@ def avantika_campaign_view(request):
 @csrf_exempt
 def avantika_history_api(request):
     """API to return history of Avantika campaign sent."""
+    auth_err = _strict_avantika_auth(request)
+    if auth_err: return auth_err
+    
     from .models import AvantikaCampaignHistory
     
     is_api = request.headers.get("Authorization", "").startswith("Bearer ")
-    if is_api:
-        pid, err = _authenticate_client(request)
-        if err: return err
 
     history_records = AvantikaCampaignHistory.objects.all().order_by('-sent_at')
     

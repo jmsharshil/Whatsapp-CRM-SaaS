@@ -591,6 +591,7 @@ class AvantikaContact(models.Model):
     """Fixed list of users allowed to trigger Avantika Bot."""
     phone = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=255)
+    address = models.CharField(max_length=500, blank=True, null=True)
     
     def __str__(self):
         return f"{self.name} ({self.phone})"

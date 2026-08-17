@@ -245,6 +245,7 @@
 
             <form action="/avantika-template/" method="POST" enctype="multipart/form-data">
                 {% csrf_token %}
+                <input type="hidden" name="auth" value="{{ auth_token }}">
                 <div class="form-group">
                     <label>Upload Base Image</label>
                     <input type="file" name="base_image" id="imageInput" accept="image/*" {% if not active_template %}required{% endif %}>
@@ -259,6 +260,7 @@
                         <div id="nameMarker" class="marker" style="display: none; line-height: 1.2;">
                             <div id="markerName">[Name]</div>
                             <div id="markerNumber" style="font-size: 75%; opacity: 0.9;">[Number]</div>
+                            <div id="markerAddress" style="font-size: 75%; opacity: 0.9;">[Address]</div>
                         </div>
                         <div id="placeholderText" style="display: none; padding: 40px; color: #94A3B8; font-weight: 500;">Image Preview Area</div>
                     {% else %}
@@ -266,6 +268,7 @@
                         <div id="nameMarker" class="marker" style="line-height: 1.2;">
                             <div id="markerName">[Name]</div>
                             <div id="markerNumber" style="font-size: 75%; opacity: 0.9;">[Number]</div>
+                            <div id="markerAddress" style="font-size: 75%; opacity: 0.9;">[Address]</div>
                         </div>
                         <div id="placeholderText" style="padding: 40px; color: #94A3B8; font-weight: 500;">Image Preview Area</div>
                     {% endif %}
@@ -306,6 +309,7 @@
             </p>
             <form action="/avantika-upload-csv/" method="POST" enctype="multipart/form-data">
                 {% csrf_token %}
+                <input type="hidden" name="auth" value="{{ auth_token }}">
                 <div class="form-group" style="margin-bottom: 16px;">
                     <label>CSV File</label>
                     <input type="file" name="csv_file" accept=".csv" required>
@@ -324,6 +328,7 @@
             </p>
             <form action="/avantika-campaign/" method="POST">
                 {% csrf_token %}
+                <input type="hidden" name="auth" value="{{ auth_token }}">
                 <button type="submit" class="btn-danger" style="width: 100%;" onclick="return confirm('Are you sure you want to send this template to ALL contacts in the database? This action cannot be undone.');">
                     Run Campaign for All Users
                 </button>
@@ -444,7 +449,7 @@
             btn.textContent = 'Loading...';
             btn.disabled = true;
             
-            fetch('/api/avantika/history/')
+            fetch('/api/avantika/history/?auth={{ auth_token }}')
                 .then(response => response.json())
                 .then(data => {
                     document.getElementById('sentCount').textContent = data.total_sent;
