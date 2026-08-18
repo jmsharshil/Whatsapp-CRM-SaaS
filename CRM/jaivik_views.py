@@ -178,7 +178,7 @@ def generate_avantika_image(contact, active_template) -> str:
         file_url = default_storage.url(generated_filename)
         
         if file_url.startswith('/'):
-            domain = getattr(settings, "DOMAIN_URL", "https://0tc80btl-8000.inc1.devtunnels.ms").rstrip('/')
+            domain = getattr(settings, "DOMAIN_URL", "https://whatsappcrmsaas-emdke9dnb4f8bne6.centralindia-01.azurewebsites.net").rstrip('/')
             image_url = f"{domain}{file_url}"
         else:
             image_url = file_url

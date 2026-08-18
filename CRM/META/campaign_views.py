@@ -380,40 +380,65 @@ class CampaignListCreateView(APIView):
         # ── 6. Build Meta components (same for all recipients) ───────────────
         components = _build_template_components(template, variables)
 
-        # ── 7. Send to Meta one-by-one ───────────────────────────────────────
+        # ── 7. Send to Meta concurrently ─────────────────────────────────────
         sent_count   = 0
         failed_count = 0
         error_samples = []
 
         recipients = CampaignRecipient.objects.filter(campaign=campaign).order_by("id")
+        
+        import concurrent.futures
+        from django.db import close_old_connections
 
-        for recipient in recipients:
-            success, msg_id, error_detail = _send_meta_template_message(
-                phone_number_id=waba.phone_number_id,
-                access_token=token,
-                to_number=recipient.phone_number,
-                template_name=template.name,
-                language_code=template.language,
-                components=components,
-            )
-
-            if success:
-                recipient.status         = "sent"
-                recipient.meta_message_id = msg_id
-                recipient.sent_at        = timezone.now()
-                sent_count += 1
-            else:
-                recipient.status       = "failed"
-                recipient.error_detail = error_detail
-                failed_count += 1
-                if len(error_samples) < 5:
-                    error_samples.append(f"{recipient.phone_number}: {error_detail}")
-                logger.warning(
-                    "Campaign %s — failed to send to %s: %s",
-                    campaign.id, recipient.phone_number, error_detail,
+        def process_recipient(recipient):
+            close_old_connections()
+            try:
+                success, msg_id, error_detail = _send_meta_template_message(
+                    phone_number_id=waba.phone_number_id,
+                    access_token=token,
+                    to_number=recipient.phone_number,
+                    template_name=template.name,
+                    language_code=template.language,
+                    components=components,
                 )
 
-            recipient.save()
+                if success:
+                    recipient.status         = "sent"
+                    recipient.meta_message_id = msg_id
+                    recipient.sent_at        = timezone.now()
+                else:
+                    recipient.status       = "failed"
+                    recipient.error_detail = error_detail
+                    logger.warning(
+                        "Campaign %s — failed to send to %s: %s",
+                        campaign.id, recipient.phone_number, error_detail,
+                    )
+
+                recipient.save()
+                return success, error_detail, recipient.phone_number
+            except Exception as e:
+                logger.error("Exception in campaign worker for %s: %s", recipient.phone_number, str(e))
+                # Attempt to save the failed status if possible, but if DB connection is broken, this might fail too.
+                try:
+                    recipient.status = "failed"
+                    recipient.error_detail = f"System Error: {str(e)}"
+                    recipient.save()
+                except:
+                    pass
+                return False, f"System Error: {str(e)}", recipient.phone_number
+            finally:
+                close_old_connections()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [executor.submit(process_recipient, recipient) for recipient in recipients]
+            for future in concurrent.futures.as_completed(futures):
+                success, error_detail, phone_number = future.result()
+                if success:
+                    sent_count += 1
+                else:
+                    failed_count += 1
+                    if len(error_samples) < 5:
+                        error_samples.append(f"{phone_number}: {error_detail}")
 
         # ── 8. Finalise Campaign ─────────────────────────────────────────────
         campaign.sent_count   = sent_count

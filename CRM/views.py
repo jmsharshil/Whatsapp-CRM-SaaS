@@ -2174,9 +2174,15 @@ def avantika_campaign_view(request):
         contacts = AvantikaContact.objects.all()
         count = 0
         errors = []
-        for contact in contacts:
+
+        def process_contact(contact):
             try:
-                image_url = generate_avantika_image(contact, active_template)
+                # Fetch a fresh instance of the template for this thread.
+                # Django's FieldFile (used in generate_avantika_image for base_image) 
+                # is not thread-safe if shared across threads because it maintains state.
+                local_template = AvantikaTemplate.objects.get(id=active_template.id)
+                
+                image_url = generate_avantika_image(contact, local_template)
                 
                 header_component = {"type": "header", "parameters": [{"type": "image", "image": {"link": image_url}}]}
                 body_component = {"type": "body", "parameters": [{"type": "text", "text": contact.name.strip()}]}
@@ -2191,23 +2197,49 @@ def avantika_campaign_view(request):
                     contact=contact,
                     phone=contact.phone,
                     name=contact.name,
-                    template=active_template,
+                    template=local_template,
                     campaign_run_id=run_id,
                     status="Sent"
                 )
-                count += 1
+                return True, None
             except Exception as e:
-                errors.append({"phone": contact.phone, "error": str(e)})
                 print(f"Error sending campaign to {contact.phone}: {str(e)}")
+                
+                try:
+                    fail_template = AvantikaTemplate.objects.get(id=active_template.id)
+                except:
+                    fail_template = active_template
+                    
                 AvantikaCampaignHistory.objects.create(
                     contact=contact,
                     phone=contact.phone,
                     name=contact.name,
-                    template=active_template,
+                    template=fail_template,
                     campaign_run_id=run_id,
                     status="Failed",
                     error_message=str(e)
                 )
+                return False, {"phone": contact.phone, "error": str(e)}
+
+        import concurrent.futures
+        from django.db import close_old_connections
+        
+        def process_contact_wrapper(contact):
+            # Ensure each thread gets a clean DB connection if needed
+            close_old_connections()
+            try:
+                return process_contact(contact)
+            finally:
+                close_old_connections()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [executor.submit(process_contact_wrapper, contact) for contact in contacts]
+            for future in concurrent.futures.as_completed(futures):
+                success, error = future.result()
+                if success:
+                    count += 1
+                else:
+                    errors.append(error)
                 
         if is_api:
             return JsonResponse({"success": True, "sent_count": count, "errors": errors if errors else None})
