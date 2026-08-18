@@ -556,6 +556,49 @@ class WhatsAppWebhookView(APIView):
                                 raw_phone = f"+{raw_phone}"
                             text = _extract_text_for_routing(msg) or ""
                             _handle_avantika_bot(raw_phone, text, phone_number_id)
+                        elif phone_number_id == "1168578376348442":
+                            logger.info(f"[Webhook] Saving message for disabled bot number {phone_number_id}")
+                            
+                            raw_phone = msg.get("from", "").strip()
+                            if not raw_phone.startswith("+"):
+                                raw_phone = f"+{raw_phone}"
+                                
+                            msg_type = msg.get("type", "text")
+                            text = _extract_text_for_routing(msg) or ""
+                            
+                            client_acc = client if client else ClientAccount.objects.filter(phone_number_id=phone_number_id).first()
+                            
+                            if msg_type in ["image", "video", "audio", "document", "sticker"]:
+                                media_id = msg.get(msg_type, {}).get("id")
+                                if media_id:
+                                    from CRM.globestar_views import download_media_from_whatsapp
+                                    token = client_acc.access_token if client_acc and client_acc.access_token else getattr(settings, "META_PERMANENT_TOKEN", getattr(settings, "META_ACCESS_TOKEN", ""))
+                                    
+                                    dl_url = download_media_from_whatsapp(media_id, token)
+                                    if dl_url:
+                                        prefix = f"[{msg_type.upper()}]"
+                                        media_text = f"{prefix} {dl_url}"
+                                        text = f"{media_text}\n{text}" if text else media_text
+                                    else:
+                                        media_text = f"[{msg_type.upper()}]"
+                                        text = f"{media_text}\n{text}" if text else media_text
+                                        
+                            client_name = contacts[0].get("profile", {}).get("name", "") if contacts else ""
+                            
+                            # Save to CRM directly
+                            db_msg = save_message(
+                                phone=raw_phone,
+                                content=text,
+                                reply_of=None,
+                                client_name=client_name,
+                                client_obj=client_acc,
+                                phone_number_id=phone_number_id,
+                            )
+                            
+                            if db_msg:
+                                db_msg.message_type = msg.get("type", "text")
+                                db_msg.meta_message_id = msg.get("id", "")
+                                db_msg.save(update_fields=["message_type", "meta_message_id"])
                         elif client:
                             # ── CLIENT BOT FLOW ───────────────────────────
                             # Route to client-specific bot
@@ -565,10 +608,6 @@ class WhatsAppWebhookView(APIView):
                                 contacts[0] if contacts else {},
                             )
                         else:
-                            if phone_number_id == "1168578376348442":
-                                logger.info(f"[Webhook] Stopping JMS fallback for disabled bot number {phone_number_id}")
-                                continue
-                                
                             # ── JMS INTERNAL (4-bot router) ───────────────
                             logger.info("[Webhook] Routing message to JMS Internal Bots")
                             _handle_jms_internal_message(msg, value, phone_number_id)
