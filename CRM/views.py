@@ -1285,12 +1285,16 @@ class MetaCustomerListView(APIView):
         # ── Get WABA phone_number_id for this org ─────────────────────────────
         phone_number_id = None
         waba_phone = None
-        try:
-            waba = org.waba_account
-            phone_number_id = waba.phone_number_id
-            waba_phone = waba.phone_number
-        except Exception:
-            pass
+        if hasattr(org, "phone_number_id"):
+            phone_number_id = org.phone_number_id
+            waba_phone = org.phone_number
+        else:
+            try:
+                waba = org.waba_account
+                phone_number_id = waba.phone_number_id
+                waba_phone = waba.phone_number
+            except Exception:
+                pass
  
         from django.db.models import Q, Count
 
@@ -1391,7 +1395,8 @@ class MetaCustomerListView(APIView):
             "previous":   make_url(page.previous_page_number() if page.has_previous() else None),
             "results":    results,
             "page_size":  page_size,
-            "waba_phone": waba_phone,  # shown as badge in sidebar
+            "waba_phone": waba_phone,
+            "waba_id": phone_number_id,
         })
 
 class MetaConversationMessageListView(APIView):
@@ -1415,10 +1420,13 @@ class MetaConversationMessageListView(APIView):
 
         # Basic security check
         phone_number_id = None
-        try:
-            phone_number_id = org.waba_account.phone_number_id
-        except Exception:
-            pass
+        if hasattr(org, "phone_number_id"):
+            phone_number_id = org.phone_number_id
+        else:
+            try:
+                phone_number_id = org.waba_account.phone_number_id
+            except Exception:
+                pass
             
         if phone_number_id:
             # Check client's phone_number_id first
@@ -1448,6 +1456,94 @@ class MetaConversationMessageListView(APIView):
             "messages": messages,
         })
 
+class MetaDirectMessageSendView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        org = getattr(user, "organization", None)
+        if not org and hasattr(user, "membership"):
+            org = user.membership.organization
+        if not org and hasattr(user, "client_membership"):
+            org = user.client_membership.client
+
+        if not org:
+            return Response({"detail": "No organization found."}, status=400)
+
+        conversation_id = request.data.get("conversation_id")
+        text = request.data.get("message")
+
+        if not conversation_id or not text:
+            return Response({"error": "conversation_id and message are required"}, status=400)
+
+        try:
+            conv = Conversation.objects.select_related("client", "customer").get(id=conversation_id)
+        except Conversation.DoesNotExist:
+            return Response({"error": "Conversation not found"}, status=404)
+
+        waba = conv.client
+        customer = conv.customer
+        if not waba or not customer:
+            return Response({"error": "Invalid conversation state"}, status=400)
+
+        phone_number_id = waba.phone_number_id
+        token = waba.access_token
+
+        if not phone_number_id or not token:
+            return Response({"error": "WABA not fully configured for this conversation."}, status=400)
+
+        url = f"https://graph.facebook.com/v22.0/{phone_number_id}/messages"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": customer.phone,
+            "type": "text",
+            "text": {"body": text}
+        }
+
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=15)
+            data = resp.json()
+            if not resp.ok:
+                error_msg = data.get("error", {}).get("message", "Unknown Meta error")
+                return Response({"error": error_msg, "meta_response": data}, status=400)
+            
+            meta_message_id = data.get("messages", [{}])[0].get("id")
+
+            # Pause Bot
+            from CRM.models import ConversationState, Message
+            try:
+                state = ConversationState.objects.get(conversation=conv)
+                state.stage = "human_handoff"
+                state.save()
+            except ConversationState.DoesNotExist:
+                pass
+
+            msg = Message.objects.create(
+                conversation=conv,
+                client=waba,
+                customer=customer,
+                content=text,
+                direction='outbound',
+                status='sent',
+                message_type='text',
+                meta_message_id=meta_message_id
+            )
+
+            return Response({
+                "id": msg.id,
+                "text": msg.content,
+                "ts": msg.timestamp.timestamp() * 1000,
+                "side": "bot",
+                "status": msg.status,
+                "type": msg.message_type
+            })
+
+        except requests.RequestException as exc:
+            return Response({"error": f"Meta API call failed: {exc}"}, status=502)
 
 class LeadsProspectsView(APIView):
     """

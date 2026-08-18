@@ -5,7 +5,7 @@ from CRM.META.webhook_views import *
 from CRM.META.waba_views import *
 from CRM.META.client_views import *
 from .views import *
-from CRM.views import MetaConversationMessageListView
+from CRM.views import MetaConversationMessageListView, MetaDirectMessageSendView
 from CRM.jmschatagents_views import *
 from CRM.gigatel_views import GigatelDataExportView
 import CRM.gigatel_views
@@ -29,6 +29,7 @@ urlpatterns = [
     path("api/industry/conversations/",                          conversation_list,       name="industry_conversation_list"),
     path("api/industry/conversations/<int:conversation_id>/messages/", conversation_messages, name="industry_conversation_messages"),
     path("api/v1/conversations/<int:conversation_id>/messages/", MetaConversationMessageListView.as_view()),
+    path("api/send-direct-message/", MetaDirectMessageSendView.as_view(), name="send-direct-message"),
     path("api/industry/messages/recent/",                        recent_messages,         name="industry_recent_messages"),
     path("api/industry/analytics/messages/",                     analytics_messages,      name="industry_analytics_messages"),
     path("api/industry/analytics/customers/",                    analytics_customers,     name="industry_analytics_customers"),
