@@ -1487,7 +1487,9 @@ class MetaDirectMessageSendView(APIView):
             return Response({"error": "Invalid conversation state"}, status=400)
 
         phone_number_id = waba.phone_number_id
-        token = waba.access_token
+        
+        import os
+        token = os.environ.get("WHATSAPP_TOKEN", waba.access_token)
 
         if not phone_number_id or not token:
             return Response({"error": "WABA not fully configured for this conversation."}, status=400)
