@@ -565,6 +565,10 @@ class WhatsAppWebhookView(APIView):
                                 contacts[0] if contacts else {},
                             )
                         else:
+                            if phone_number_id == "1168578376348442":
+                                logger.info(f"[Webhook] Stopping JMS fallback for disabled bot number {phone_number_id}")
+                                continue
+                                
                             # ── JMS INTERNAL (4-bot router) ───────────────
                             logger.info("[Webhook] Routing message to JMS Internal Bots")
                             _handle_jms_internal_message(msg, value, phone_number_id)

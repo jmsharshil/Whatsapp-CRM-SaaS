@@ -1481,15 +1481,22 @@ class MetaDirectMessageSendView(APIView):
         except Conversation.DoesNotExist:
             return Response({"error": "Conversation not found"}, status=404)
 
-        waba = conv.client
+        waba = conv.client or org
         customer = conv.customer
         if not waba or not customer:
             return Response({"error": "Invalid conversation state"}, status=400)
 
-        phone_number_id = waba.phone_number_id
-        
+        if hasattr(waba, "phone_number_id"):
+            phone_number_id = waba.phone_number_id
+        else:
+            phone_number_id = getattr(waba.waba_account, "phone_number_id", None) if hasattr(waba, "waba_account") else None
+            
         import os
-        token = os.environ.get("WHATSAPP_TOKEN", waba.access_token)
+        token = os.environ.get("WHATSAPP_TOKEN")
+        if not token and hasattr(waba, "access_token"):
+            token = waba.access_token
+        if not token and hasattr(waba, "waba_account"):
+            token = getattr(waba.waba_account, "access_token", None)
 
         if not phone_number_id or not token:
             return Response({"error": "WABA not fully configured for this conversation."}, status=400)

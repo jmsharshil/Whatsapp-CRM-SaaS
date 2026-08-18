@@ -398,6 +398,10 @@ def handle_client_message(
         body=text, wa_msg_id=wa_msg_id, msg_type=msg_type,
     )
 
+    if client.phone_number_id == "1168578376348442":
+        logger.info("[ClientBot] Bot explicitly disabled for %s — message saved to CRM only", client.phone_number_id)
+        return
+
     # ── Bot state machine ─────────────────────────────────────────────────
     state = _get_or_create_state(conversation, client)
 
