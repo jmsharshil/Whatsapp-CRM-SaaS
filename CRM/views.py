@@ -1531,9 +1531,12 @@ class MetaDirectMessageSendView(APIView):
             except ConversationState.DoesNotExist:
                 pass
 
+            from CRM.models import ClientAccount
+            msg_client = waba if isinstance(waba, ClientAccount) else None
+
             msg = Message.objects.create(
                 conversation=conv,
-                client=waba,
+                client=msg_client,
                 customer=customer,
                 content=text,
                 direction='outbound',
