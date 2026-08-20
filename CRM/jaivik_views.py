@@ -168,11 +168,13 @@ def generate_avantika_image(contact, active_template) -> str:
         buffer = BytesIO()
         img.save(buffer, format="JPEG")
         
-        generated_filename = f"avantika/generated/gen_{clean_phone}.jpg"
+        import time
+        timestamp = int(time.time())
+        generated_filename = f"avantika/generated/gen_{clean_phone}_{timestamp}.jpg"
         
-        if default_storage.exists(generated_filename):
-            default_storage.delete(generated_filename)
-            
+        # We don't necessarily need to delete the exact old one since the timestamp is unique now,
+        # but if we wanted to clean up we could list and delete old files. 
+        # For now, just save the new one to avoid Meta cache.
         default_storage.save(generated_filename, ContentFile(buffer.getvalue()))
         
         file_url = default_storage.url(generated_filename)

@@ -414,7 +414,7 @@
             // The display font size should be scaled relative to the image display size
             const scale = preview.width / preview.naturalWidth;
             const baseSize = parseInt(fontSizeInput.value) || 60;
-            const displaySize = Math.max(12, Math.round(baseSize * scale));
+            const displaySize = Math.max(4, Math.round(baseSize * scale));
             
             nameMarker.style.fontSize = displaySize + 'px';
             nameMarker.style.color = textColorInput.value;
