@@ -120,7 +120,10 @@ def generate_avantika_image(contact, active_template) -> str:
         draw = ImageDraw.Draw(img)
         
         def get_font(size):
+            from django.conf import settings
+            import os
             font_paths = [
+                os.path.join(settings.BASE_DIR, 'CRM', 'fonts', 'Roboto-Regular.ttf'),
                 r"C:\Windows\Fonts\segoeuib.ttf",
                 r"C:\Windows\Fonts\segoeui.ttf",
                 r"C:\Windows\Fonts\calibrib.ttf",
