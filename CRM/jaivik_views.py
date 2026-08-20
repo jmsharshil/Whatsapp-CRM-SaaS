@@ -83,27 +83,10 @@ def jaivik_send_template(to: str, template_name: str, language_code: str = "en",
 
 
 def _handle_avantika_bot(phone: str, text: str, phone_number_id: str = None, inbound_msg_id: int = None, client_name: str = "") -> bool:
-    """Avantika bot logic using Jaivik views."""
-    clean_phone = phone.lstrip('+')
-    try:
-        contact = AvantikaContact.objects.get(models.Q(phone=clean_phone) | models.Q(phone=f"+{clean_phone}"))
-    except AvantikaContact.DoesNotExist:
-        jaivik_send_text(phone, "Sorry, you are not registered for the Avantika campaign.")
-        return True
-
-    active_template = AvantikaTemplate.objects.filter(is_active=True).first()
-    if not active_template or not active_template.base_image:
-        jaivik_send_text(phone, "Sorry, no active Avantika campaign at the moment.")
-        return True
-
-    image_url = generate_avantika_image(contact, active_template)
-    
-    jaivik_send_image(phone, image_url, caption=f"Hello {contact.name.strip()}, here is your personalized image!")
-    
-    if inbound_msg_id:
-        from .jmschatagents_views import _save_reply
-        _save_reply(inbound_msg_id, f"Sent Avantika image to {contact.name.strip()}")
-        
+    """Avantika bot logic using Jaivik views.
+    As per user request, this bot should NOT auto-reply to incoming messages.
+    The inbound message is already saved by the unified webhook.
+    """
     return True
 
 
