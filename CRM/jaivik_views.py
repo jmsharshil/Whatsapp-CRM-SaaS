@@ -146,11 +146,11 @@ def generate_avantika_image(contact, active_template) -> str:
         font = get_font(active_template.font_size)
         display_name = contact.name.strip()
         
-        draw.text((active_template.name_x, active_template.name_y), display_name, fill=active_template.text_color, font=font)
+        draw.text((active_template.name_x, active_template.name_y), display_name, fill=active_template.text_color, font=font, anchor="mt")
         
         phone_font = get_font(max(12, int(active_template.font_size * 0.75)))
         
-        name_bbox = draw.textbbox((active_template.name_x, active_template.name_y), display_name, font=font)
+        name_bbox = draw.textbbox((active_template.name_x, active_template.name_y), display_name, font=font, anchor="mt")
         phone_y = name_bbox[3] + 5 
         
         if len(clean_phone) == 10:
@@ -160,13 +160,13 @@ def generate_avantika_image(contact, active_template) -> str:
         else:
             formatted_phone = clean_phone
             
-        draw.text((active_template.name_x, phone_y), formatted_phone, fill=active_template.text_color, font=phone_font)
+        draw.text((active_template.name_x, phone_y), formatted_phone, fill=active_template.text_color, font=phone_font, anchor="mt")
         
         address = getattr(contact, "address", "")
         if address:
-            phone_bbox = draw.textbbox((active_template.name_x, phone_y), formatted_phone, font=phone_font)
+            phone_bbox = draw.textbbox((active_template.name_x, phone_y), formatted_phone, font=phone_font, anchor="mt")
             address_y = phone_bbox[3] + 5
-            draw.text((active_template.name_x, address_y), address.strip(), fill=active_template.text_color, font=phone_font)
+            draw.text((active_template.name_x, address_y), address.strip(), fill=active_template.text_color, font=phone_font, anchor="mt")
         
         buffer = BytesIO()
         img.save(buffer, format="JPEG")
