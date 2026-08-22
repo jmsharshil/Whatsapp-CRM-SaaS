@@ -766,11 +766,17 @@ def handle_amritcement_message(msg: dict):
                 }]
                 
                 dealer_data = getattr(session, "dealer_data", {})
-                customer_id = dealer_data.get("customer_id", dealer_data.get("customer_code", ""))
-                customer_name = dealer_data.get("name", from_number)
                 
                 customer_type = getattr(session, "customer_type", "Dealer")
                 is_dealer = customer_type.lower() == "dealer"
+                
+                if not is_dealer and "dealer" in dealer_data:
+                    # For ASD (Subdealer), use the main dealer's customer_id
+                    customer_id = dealer_data["dealer"].get("customer_id", "")
+                else:
+                    customer_id = dealer_data.get("customer_id", dealer_data.get("customer_code", ""))
+                    
+                customer_name = dealer_data.get("name", from_number)
                 
                 payload = {
                     "shop_id": dealer_data.get("shop_id", ""),
@@ -796,7 +802,7 @@ def handle_amritcement_message(msg: dict):
                 if not is_dealer:
                     dealer_info = dealer_data.get("dealer", {})
                     if dealer_info:
-                        payload["dealer_id"] = dealer_info.get("CustomerCode", "")
+                        payload["dealer_id"] = dealer_info.get("customer_id", dealer_info.get("CustomerCode", ""))
                         payload["dealer_name"] = dealer_info.get("Name", "")
                 
                 resp = amritcement_create_order(payload, is_dealer=is_dealer)
