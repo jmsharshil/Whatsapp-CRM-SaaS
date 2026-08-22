@@ -160,23 +160,43 @@ def tpl_amritcement_plant_select(number: str, dealer_data: dict) -> bool:
 def tpl_amritcement_order_summary(number: str, order_data: dict, dealer_data: dict, customer_type: str = "Dealer"):
     qty_unit = "MT" if customer_type.lower() == "dealer" else "bags"
     
-    ship_to_list = order_data.get("ship_to_list", [])
-    dests = ", ".join([p.get("destination", "") for p in ship_to_list if p.get("destination")])
-    if not dests:
-        dests = "N/A"
+    if customer_type.lower() == "asd":
+        dealer = dealer_data.get("dealer", {})
+        dealer_name = dealer.get("Name", "")
+        dealer_code = dealer.get("CustomerCode", "")
+        own_dest = dealer_data.get("destination", "N/A")
         
-    components = [
-        {
-            "type": "body",
-            "parameters": [
-                {"type": "text", "text": str(order_data.get('product_name', ''))},
-                {"type": "text", "text": str(order_data.get('qty', '')) + f" {qty_unit}"},
-                {"type": "text", "text": dests[:30]},
-                {"type": "text", "text": "48 hours"}
-            ]
-        }
-    ]
-    send_amritcement_template(number, "amritcement_po_confirmation", "en", components)
+        components = [
+            {
+                "type": "body",
+                "parameters": [
+                    {"type": "text", "text": str(order_data.get('product_name', ''))},
+                    {"type": "text", "text": str(order_data.get('qty', ''))},
+                    {"type": "text", "text": str(own_dest)[:30]},
+                    {"type": "text", "text": str(dealer_name)[:30]},
+                    {"type": "text", "text": str(dealer_code)[:30]}
+                ]
+            }
+        ]
+        send_amritcement_template(number, "amritcement_po_confirmation_asd_", "en", components)
+    else:
+        ship_to_list = order_data.get("ship_to_list", [])
+        dests = ", ".join([p.get("destination", "") for p in ship_to_list if p.get("destination")])
+        if not dests:
+            dests = "N/A"
+            
+        components = [
+            {
+                "type": "body",
+                "parameters": [
+                    {"type": "text", "text": str(order_data.get('product_name', ''))},
+                    {"type": "text", "text": str(order_data.get('qty', '')) + f" {qty_unit}"},
+                    {"type": "text", "text": dests[:30]},
+                    {"type": "text", "text": "48 hours"}
+                ]
+            }
+        ]
+        send_amritcement_template(number, "amritcement_po_confirmation", "en", components)
 
 def tpl_amritcement_claim_types(number: str):
     send_amritcement_template(number, "amritcement_claims", "en")
@@ -517,9 +537,16 @@ def handle_amritcement_message(msg: dict):
                 return
             
             session.order_data = order_data
-            session.state = "ORDER_INCO_TERM_SELECT"
-            session.save()
-            tpl_amritcement_inco_terms(from_number)
+            
+            cust_type = getattr(session, "customer_type", "Dealer")
+            if cust_type.lower() == "asd":
+                session.state = "ORDER_CONFIRM"
+                session.save()
+                tpl_amritcement_order_summary(from_number, order_data, dealer_data, cust_type)
+            else:
+                session.state = "ORDER_INCO_TERM_SELECT"
+                session.save()
+                tpl_amritcement_inco_terms(from_number)
                 
         elif state == "ORDER_INCO_TERM_SELECT":
             val = display_str.lower().strip()
@@ -569,9 +596,14 @@ def handle_amritcement_message(msg: dict):
                     order_data["plant_code"] = "UN01"
                     
                 session.order_data = order_data
-                session.state = "ORDER_SHIP_TO_SELECT"
-                session.save()
-                tpl_amritcement_ship_to_select(from_number, dealer_data, [c["code"] for c in order_data.get("ship_to_list", [])])
+                if cust_type.lower() == "asd":
+                    session.state = "ORDER_CONFIRM"
+                    session.save()
+                    tpl_amritcement_order_summary(from_number, order_data, dealer_data, cust_type)
+                else:
+                    session.state = "ORDER_SHIP_TO_SELECT"
+                    session.save()
+                    tpl_amritcement_ship_to_select(from_number, dealer_data, [c["code"] for c in order_data.get("ship_to_list", [])])
             else:
                 session.order_data = order_data
                 success = tpl_amritcement_plant_select(from_number, dealer_data)
@@ -609,9 +641,15 @@ def handle_amritcement_message(msg: dict):
             order_data["plant_code"] = selected_plant.get("plant_code")
             session.order_data = order_data
             
-            session.state = "ORDER_SHIP_TO_SELECT"
-            session.save()
-            tpl_amritcement_ship_to_select(from_number, dealer_data, [c["code"] for c in order_data.get("ship_to_list", [])])
+            cust_type = getattr(session, "customer_type", "Dealer")
+            if cust_type.lower() == "asd":
+                session.state = "ORDER_CONFIRM"
+                session.save()
+                tpl_amritcement_order_summary(from_number, order_data, dealer_data, cust_type)
+            else:
+                session.state = "ORDER_SHIP_TO_SELECT"
+                session.save()
+                tpl_amritcement_ship_to_select(from_number, dealer_data, [c["code"] for c in order_data.get("ship_to_list", [])])
                 
         elif state == "ORDER_SHIP_TO_SELECT":
             if interactive_id.startswith("ship_"):
@@ -728,13 +766,12 @@ def handle_amritcement_message(msg: dict):
                 }]
                 
                 dealer_data = getattr(session, "dealer_data", {})
-                customer_id = dealer_data.get("customer_code", "")
+                customer_id = dealer_data.get("customer_id", dealer_data.get("customer_code", ""))
                 customer_name = dealer_data.get("name", from_number)
                 
                 customer_type = getattr(session, "customer_type", "Dealer")
                 is_dealer = customer_type.lower() == "dealer"
                 
-                # Payload mapping based on Postman screenshot and PDF
                 payload = {
                     "shop_id": dealer_data.get("shop_id", ""),
                     "token": dealer_data.get("token", ""),
@@ -755,6 +792,12 @@ def handle_amritcement_message(msg: dict):
                     "ship_to_parties": json.dumps(order_data.get("ship_to_list", [])),
                     "items": json.dumps(items)
                 }
+                
+                if not is_dealer:
+                    dealer_info = dealer_data.get("dealer", {})
+                    if dealer_info:
+                        payload["dealer_id"] = dealer_info.get("CustomerCode", "")
+                        payload["dealer_name"] = dealer_info.get("Name", "")
                 
                 resp = amritcement_create_order(payload, is_dealer=is_dealer)
                 if str(resp.get("status")) == "1":
