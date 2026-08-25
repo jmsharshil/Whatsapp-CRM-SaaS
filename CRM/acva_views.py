@@ -145,7 +145,7 @@ def _handle_acva_message_internal(msg: dict):
 
     session = ConversationSession(conv_obj)
     
-    is_trigger = (body.lower().strip() == "hi")
+    is_trigger = (body.lower().strip() == "acva")
     if is_trigger:
         session.state = "INIT"
         session.collected_info = {}
@@ -162,8 +162,8 @@ def _handle_acva_message_internal(msg: dict):
 
     # Flow Logic
     if state == "IDLE":
-        # Do not reply if state is IDLE and they didn't say "Hi"
-        logger.info("[ACVA] Ignored message because state is IDLE and message is not 'Hi'")
+        # Do not reply if state is IDLE and they didn't say "ACVA"
+        logger.info("[ACVA] Ignored message because state is IDLE and message is not 'ACVA'")
         return
 
     if state == "INIT":
