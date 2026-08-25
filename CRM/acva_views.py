@@ -120,6 +120,7 @@ def _handle_acva_message_internal(msg: dict):
         body = f"[{msg_type}] " + json.dumps(msg.get(msg_type, msg))
         display_body = body
 
+    print(f"========== ACVA MESSAGE RECVD: number={number} body={body} msg_type={msg_type} ==========")
     logger.info("[ACVA] from=%s type=%s body=%r display=%r id=%s", number, msg_type, body, display_body, msg_id)
 
     conv_obj, conv_created = Conversation.objects.get_or_create(

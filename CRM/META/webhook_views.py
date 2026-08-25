@@ -560,6 +560,7 @@ class WhatsAppWebhookView(APIView):
                             text = _extract_text_for_routing(msg) or ""
                             _handle_avantika_bot(raw_phone, text, phone_number_id)
                         elif acva_phone_id and phone_number_id == acva_phone_id:
+                            print(f"========== WEBHOOK MATCHED ACVA PHONE ID: {acva_phone_id} ==========")
                             logger.info("[Webhook] Routing message to ACVA Bot")
                             handle_acva_message(msg)
                         elif phone_number_id == "1168578376348442":
