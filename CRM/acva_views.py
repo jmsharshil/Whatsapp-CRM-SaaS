@@ -208,7 +208,9 @@ def _handle_acva_message_internal(msg: dict):
             session.save()
             tpl_acva_opt8_speak(number)
         else:
-            send_acva_text(number, "Invalid option. Please reply with 'Hi' or 'Menu' to start again.")
+            session.state = "IDLE"
+            session.save()
+            return
 
     elif state == "OPT1_LEARN":
         if "benefits" in display_str or "1" in body_str:
@@ -220,9 +222,9 @@ def _handle_acva_message_internal(msg: dict):
             session.save()
             tpl_acva_main_menu(number)
         else:
-            session.state = "MENU_SELECTION"
+            session.state = "IDLE"
             session.save()
-            tpl_acva_main_menu(number)
+            return
 
     elif state == "OPT2_ELIGIBILITY":
         if "other" in display_str or "8" in body_str:
@@ -245,9 +247,9 @@ def _handle_acva_message_internal(msg: dict):
         if "counsellor" in display_str or "team" in display_str:
             goto_handoff()
         else:
-            session.state = "MENU_SELECTION"
+            session.state = "IDLE"
             session.save()
-            tpl_acva_main_menu(number)
+            return
 
     elif state == "OPT5_CURRICULUM":
         if "1" in body_str or "pattern" in display_str:
@@ -255,16 +257,17 @@ def _handle_acva_message_internal(msg: dict):
             session.save()
             tpl_acva_opt5_all(number)
         else:
-            # Fallback or answer other FAQs
-            send_acva_text(number, "For more details, please request a counselling call or reply 'Menu'.")
+            session.state = "IDLE"
+            session.save()
+            return
 
     elif state == "OPT5_EXAM":
         if "team" in display_str:
             goto_handoff()
         else:
-            session.state = "MENU_SELECTION"
+            session.state = "IDLE"
             session.save()
-            tpl_acva_main_menu(number)
+            return
 
     elif state == "OPT7_SUPPORT":
         if "speak" in display_str or "team" in display_str:
