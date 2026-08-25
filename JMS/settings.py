@@ -300,3 +300,30 @@ META_PERMANENT_TOKEN = "EAA3kk7FBaZCIBRejscriGIa8PZCsqMZAVPYdLsZC9ZAep1NuDmZBZAK
 VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "123")
 
 SHOPIFY_ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN", "")
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'console': {
+            'format': '%(asctime)s %(levelname)s %(name)s %(message)s',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'console',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
