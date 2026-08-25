@@ -140,12 +140,12 @@ def _handle_acva_message_internal(msg: dict):
     )
 
     if not conv_obj.bot_state:
-        conv_obj.bot_state = "INIT"
+        conv_obj.bot_state = "IDLE"
         conv_obj.save()
 
     session = ConversationSession(conv_obj)
     
-    is_trigger = bool(re.search(r'^(hi|hello|hey|menu)$', body.lower()))
+    is_trigger = (body.lower().strip() == "hi")
     if is_trigger:
         session.state = "INIT"
         session.collected_info = {}
@@ -161,6 +161,11 @@ def _handle_acva_message_internal(msg: dict):
         tpl_acva_opt6_call_name(number)
 
     # Flow Logic
+    if state == "IDLE":
+        # Do not reply if state is IDLE and they didn't say "Hi"
+        logger.info("[ACVA] Ignored message because state is IDLE and message is not 'Hi'")
+        return
+
     if state == "INIT":
         tpl_acva_main_menu(number)
         session.state = "MENU_SELECTION"
