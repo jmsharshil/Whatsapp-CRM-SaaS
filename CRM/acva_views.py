@@ -4,7 +4,7 @@ import re
 from CRM.models import Customer, Conversation, Message, ClientAccount, ConversationState
 from CRM.acva_utils import (
     ACVA_PHONE_NUMBER_ID, send_acva_text, download_acva_media_from_whatsapp,
-    tpl_acva_main_menu, tpl_acva_opt1_learn, tpl_acva_opt2_eligibility,
+    tpl_acva_main_menu, tpl_acva_opt1_learn, tpl_acva_menu_learn, tpl_acva_opt2_eligibility,
     tpl_acva_opt2_eligibility_res, tpl_acva_opt3_admission, tpl_acva_opt4_fees,
     tpl_acva_opt5_curriculum, tpl_acva_opt7_support,
     tpl_acva_opt8_speak, tpl_acva_handoff, tpl_key_benefits,
@@ -46,6 +46,12 @@ class ConversationSession:
             self._conv.bot_metadata[key] = value
 
 def handle_acva_message(msg: dict):
+    try:
+        _handle_acva_message_internal(msg)
+    except Exception as e:
+        logger.exception("[ACVA] Error processing message: %s", e)
+
+def _handle_acva_message_internal(msg: dict):
     number = msg.get("from", "")
     msg_id = msg.get("id", "")
     msg_type = msg.get("type", "text")
@@ -71,20 +77,24 @@ def handle_acva_message(msg: dict):
         body = msg.get("button", {}).get("payload", "").strip()
         display_body = msg.get("button", {}).get("text", body).strip()
     elif msg_type in ["image", "video", "audio", "document", "sticker"]:
-        media_id = msg.get(msg_type, {}).get("id")
+        media_info = msg.get(msg_type, {})
+        media_id = media_info.get("id")
+        caption = media_info.get("caption", "").strip()
         if media_id:
             token = client_account_obj.access_token if client_account_obj and client_account_obj.access_token else getattr(settings, "META_PERMANENT_TOKEN", "")
             dl_url = download_acva_media_from_whatsapp(media_id, token)
             if dl_url:
                 prefix = f"[{msg_type.upper()}]"
                 body = f"{prefix} {dl_url}"
+                if caption:
+                    body += f"\n{caption}"
                 display_body = body
             else:
-                body = f"[{msg_type}]"
-                display_body = f"[{msg_type}]"
+                body = f"[{msg_type}]" + (f"\n{caption}" if caption else "")
+                display_body = body
         else:
-            body = f"[{msg_type}]"
-            display_body = f"[{msg_type}]"
+            body = f"[{msg_type}]" + (f"\n{caption}" if caption else "")
+            display_body = body
     elif msg_type == "location":
         lat = msg.get("location", {}).get("latitude")
         lng = msg.get("location", {}).get("longitude")
@@ -106,9 +116,9 @@ def handle_acva_message(msg: dict):
             c_list.append(f"{c_name} ({c_phone})" if c_phone else c_name)
         body = "👤 Contact: " + ", ".join(c_list)
         display_body = body
-    else:
-        body = f"[{msg_type}]"
-        display_body = f"[{msg_type}]"
+    if not display_body:
+        body = f"[{msg_type}] " + json.dumps(msg.get(msg_type, msg))
+        display_body = body
 
     logger.info("[ACVA] from=%s type=%s body=%r display=%r id=%s", number, msg_type, body, display_body, msg_id)
 
@@ -158,9 +168,9 @@ def handle_acva_message(msg: dict):
     elif state == "MENU_SELECTION":
         session.collected_info = {}
         if "1" in body_str or "learn" in display_str:
-            session.state = "OPT1_LEARN"
+            session.state = "MENU_SELECTION"
             session.save()
-            tpl_acva_opt1_learn(number)
+            tpl_acva_menu_learn(number)
         elif "2" in body_str or "eligibility" in display_str:
             session.state = "OPT2_ELIGIBILITY"
             session.save()
@@ -179,10 +189,14 @@ def handle_acva_message(msg: dict):
             tpl_acva_opt5_curriculum(number)
         elif "6" in body_str or "counselling" in display_str:
             goto_handoff()
-        elif "7" in body_str or "support" in display_str:
+        elif "7" in body_str or "support" in display_str or "existing" in display_str:
             session.state = "OPT7_SUPPORT"
             session.save()
             tpl_acva_opt7_support(number)
+        elif "all options" in display_str or "options" in display_str:
+            session.state = "OPT1_LEARN"
+            session.save()
+            tpl_acva_opt1_learn(number)
         elif "8" in body_str or "speak" in display_str:
             session.state = "OPT8_SPEAK"
             session.save()
@@ -247,7 +261,11 @@ def handle_acva_message(msg: dict):
             tpl_acva_main_menu(number)
 
     elif state == "OPT7_SUPPORT":
-        if "other" in display_str or "8" in body_str:
+        if "speak" in display_str or "team" in display_str:
+            session.state = "OPT8_SPEAK"
+            session.save()
+            tpl_acva_opt8_speak(number)
+        elif "other" in display_str or "8" in body_str:
             session.state = "OPT7_OTHER"
             session.save()
             tpl_acva_opt2_eligibility_other(number)
@@ -270,7 +288,16 @@ def handle_acva_message(msg: dict):
         send_acva_text(number, "Our team will verify your details and contact you shortly.")
 
     elif state == "OPT8_SPEAK":
-        goto_handoff()
+        if "email" in display_str:
+            send_acva_text(number, "You can reach us at admissions@acvaindia.com")
+            session.state = "DONE"
+            session.save()
+        elif "whatsapp" in display_str:
+            send_acva_text(number, "You can contact our support team on WhatsApp at +91 9016728639")
+            session.state = "DONE"
+            session.save()
+        else:
+            goto_handoff()
 
     # --- Lead Collection Flow ---
     elif state == "COLLECT_NAME":

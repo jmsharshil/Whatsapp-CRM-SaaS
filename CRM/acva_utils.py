@@ -9,7 +9,7 @@ from CRM.models import ClientAccount, Customer, Conversation, Message
 
 logger = logging.getLogger(__name__)
 
-ACVA_PHONE_NUMBER_ID = "1234567890" # TODO: Update with actual phone number ID
+ACVA_PHONE_NUMBER_ID = "104557535819026" # Actual ACVA phone number ID
 META_SEND_URL = "https://graph.facebook.com/v20.0/{phone_id}/messages"
 
 def _meta_post_acva(payload: dict) -> bool:
@@ -152,6 +152,9 @@ def download_acva_media_from_whatsapp(media_id: str, access_token: str) -> str:
 
 def tpl_acva_main_menu(to_number: str):
     return send_acva_template(to_number, "acva_main_menu")
+
+def tpl_acva_menu_learn(to_number: str):
+    return send_acva_template(to_number, "acva_menu_learn")
 
 def tpl_acva_opt1_learn(to_number: str):
     return send_acva_template(to_number, "acva_opt1_learn")

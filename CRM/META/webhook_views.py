@@ -88,6 +88,8 @@ from CRM.gkd_views import handle_gkd_message
 from CRM.gkd_utils import GKD_PHONE_NUMBER_ID
 from CRM.amritcement_views import handle_amritcement_message
 from CRM.amritcement_utils import AMRITCEMENT_PHONE_NUMBER_ID
+from CRM.acva_views import handle_acva_message
+from CRM.acva_utils import ACVA_PHONE_NUMBER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -513,6 +515,7 @@ class WhatsAppWebhookView(APIView):
                         gkd_phone_id = GKD_PHONE_NUMBER_ID
                         amritcement_phone_id = AMRITCEMENT_PHONE_NUMBER_ID
                         jaivik_phone_id = "1232951769906831"
+                        acva_phone_id = ACVA_PHONE_NUMBER_ID
                         
                         if gigatel_phone_id and phone_number_id == gigatel_phone_id:
                             logger.info("[Webhook] Routing message to Gigatel Bot")
@@ -556,6 +559,9 @@ class WhatsAppWebhookView(APIView):
                                 raw_phone = f"+{raw_phone}"
                             text = _extract_text_for_routing(msg) or ""
                             _handle_avantika_bot(raw_phone, text, phone_number_id)
+                        elif acva_phone_id and phone_number_id == acva_phone_id:
+                            logger.info("[Webhook] Routing message to ACVA Bot")
+                            handle_acva_message(msg)
                         elif phone_number_id == "1168578376348442":
                             logger.info(f"[Webhook] Saving message for disabled bot number {phone_number_id}")
                             
