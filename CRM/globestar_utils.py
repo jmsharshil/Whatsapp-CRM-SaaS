@@ -490,10 +490,19 @@ def tpl_gs_main_menu(to: str) -> bool:
                 {
                     "type": "button", "sub_type": "quick_reply", "index": "2",
                     "parameters": [{"type": "payload", "payload": "3"}],
+                },
+                {
+                    "type": "button", "sub_type": "quick_reply", "index": "3",
+                    "parameters": [{"type": "payload", "payload": "4"}],
                 }
             ],
         },
     })
+
+def tpl_gs_dealer_inquiry_thanks(to: str) -> bool:
+    text = "Thank you for contacting Globe Star Engineers.\n You will receive a call shortly."
+    return send_gs_text(to, text)
+
 
 def tpl_gs_product_list(to: str) -> bool:
     rows = []

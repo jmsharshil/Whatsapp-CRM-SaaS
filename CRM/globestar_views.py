@@ -24,6 +24,7 @@ from .globestar_utils import (
     send_gs_product_detail,
     send_gs_text,
     tpl_gs_talk_to_sales,
+    tpl_gs_dealer_inquiry_thanks,
     tpl_gs_ask_capacity,
     tpl_gs_ask_head,
     tpl_gs_ask_application,
@@ -271,6 +272,14 @@ def handle_globestar_message(msg: dict):
             logger.info("[GLOBESTAR] Lead generated: product=%s cap=%s head=%s app=%s type=%s sg=%s num=%s",
                         session.gs_selected_product, session.gs_capacity, session.gs_head, 
                         session.gs_application, session.gs_pump_type, session.gs_specific_gravity, number)
+        elif body in ["4", "dealer_inquiry"]:
+            tpl_gs_dealer_inquiry_thanks(number)
+            session.state = "GS_DONE"
+            session.gs_selected_product = "Dealer Inquiry"
+            session.save()
+            logger.info("[GLOBESTAR] Lead generated: product=%s cap=%s head=%s app=%s type=%s sg=%s num=%s",
+                        session.gs_selected_product, session.gs_capacity, session.gs_head, 
+                        session.gs_application, session.gs_pump_type, session.gs_specific_gravity, number)
         else:
             tpl_gs_main_menu(number)
 
@@ -353,6 +362,8 @@ def handle_globestar_message(msg: dict):
         # Map session state to meaningful stages for the frontend
         if session.gs_selected_product == "Talk to Sales":
             conv_state.stage = "Talk to Sales"
+        elif session.gs_selected_product == "Dealer Inquiry":
+            conv_state.stage = "Dealer Inquiry"
         elif session.gs_selected_product == "General Request":
             conv_state.stage = "Request Quotation"
         elif session.gs_selected_product:
