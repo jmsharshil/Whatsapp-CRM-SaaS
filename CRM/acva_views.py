@@ -13,7 +13,9 @@ from CRM.acva_utils import (
     tpl_acva_opt6_call_number, tpl_acva_opt6_call_profession,
     tpl_acva_opt6_call_city, tpl_acva_opt6_call_option,
     tpl_acva_opt6_call_time, tpl_acva_opt6_call_confirmtime,
-    tpl_acva_opt7_all
+    tpl_acva_opt7_all, fetch_member_data,
+    tpl_acva_res_membership, tpl_acva_res_exam, tpl_acva_res_case_study,
+    tpl_acva_res_due_date, tpl_acva_res_certificate
 )
 from django.conf import settings
 
@@ -274,27 +276,85 @@ def _handle_acva_message_internal(msg: dict):
             session.state = "OPT8_SPEAK"
             session.save()
             tpl_acva_opt8_speak(number)
-        elif "other" in display_str or "8" in body_str:
-            session.state = "OPT7_OTHER"
+        elif "lms" in display_str or "1" in body_str:
+            session.state = "OPT7_DETAILS"
+            session.collected_info = {**session.collected_info, "SupportType": "LMS Access"}
             session.save()
-            tpl_acva_opt2_eligibility_other(number)
+            tpl_acva_opt7_all(number)
+        elif "renewal" in display_str or "2" in body_str:
+            session.state = "OPT7_ASK_ID_RENEWAL"
+            session.save()
+            tpl_acva_opt7_all(number)
+        elif "exam" in display_str or "3" in body_str:
+            session.state = "OPT7_ASK_ID_EXAM"
+            session.save()
+            tpl_acva_opt7_all(number)
+        elif "case study" in display_str or "4" in body_str:
+            session.state = "OPT7_ASK_ID_CASE_STUDY"
+            session.save()
+            tpl_acva_opt7_all(number)
+        elif "due date" in display_str or "credential" in display_str or "5" in body_str:
+            session.state = "OPT7_ASK_ID_DUE_DATE"
+            session.save()
+            tpl_acva_opt7_all(number)
+        elif "certificate" in display_str or "6" in body_str:
+            session.state = "OPT7_ASK_ID_CERT"
+            session.save()
+            tpl_acva_opt7_all(number)
+        elif "technical" in display_str or "issue" in display_str or "7" in body_str:
+            session.state = "OPT7_ASK_DESC"
+            session.save()
+            send_acva_text(number, "Please provide a brief description of the technical issue:")
+        elif "other" in display_str or "8" in body_str:
+            session.state = "OPT7_ASK_DESC"
+            session.save()
+            send_acva_text(number, "Please provide a brief description of your request:")
         else:
             session.state = "OPT7_DETAILS"
             session.collected_info = {**session.collected_info, "SupportType": display_body}
             session.save()
             tpl_acva_opt7_all(number)
 
-    elif state == "OPT7_OTHER":
-        session.collected_info = {**session.collected_info, "SupportType": display_body}
-        session.state = "OPT7_DETAILS"
-        session.save()
-        tpl_acva_opt7_all(number)
-
     elif state == "OPT7_DETAILS":
         session.collected_info = {**session.collected_info, "SupportIdentifier": display_body}
         session.state = "DONE"
         session.save()
-        send_acva_text(number, "Our team will verify your details and contact you shortly.")
+        tpl_acva_opt6_call_confirmtime(number)
+
+    elif state == "OPT7_ASK_DESC":
+        session.collected_info = {**session.collected_info, "Description": display_body}
+        session.state = "DONE"
+        session.save()
+        tpl_acva_opt6_call_confirmtime(number)
+
+    elif state.startswith("OPT7_ASK_ID_"):
+        identifier = display_body.strip()
+        data = None
+        if state == "OPT7_ASK_ID_RENEWAL":
+            data = fetch_member_data(identifier, ["Affiliation Date", "Membership Expiration Date"])
+            if data:
+                tpl_acva_res_membership(number, str(data.get('Affiliation Date', 'NA')), str(data.get('Membership Expiration Date', 'NA')))
+        elif state == "OPT7_ASK_ID_EXAM":
+            data = fetch_member_data(identifier, ["Exam"])
+            if data:
+                tpl_acva_res_exam(number, str(data.get('Exam', 'NA')))
+        elif state == "OPT7_ASK_ID_CASE_STUDY":
+            data = fetch_member_data(identifier, ["Case Study"])
+            if data:
+                tpl_acva_res_case_study(number, str(data.get('Case Study', 'NA')))
+        elif state == "OPT7_ASK_ID_DUE_DATE":
+            data = fetch_member_data(identifier, ["Credentialing Due Date"])
+            if data:
+                tpl_acva_res_due_date(number, str(data.get('Credentialing Due Date', 'NA')))
+        elif state == "OPT7_ASK_ID_CERT":
+            data = fetch_member_data(identifier, ["Credential Type"])
+            if data:
+                tpl_acva_res_certificate(number, str(data.get('Credential Type', 'NA')))
+                
+        if not data:
+            send_acva_text(number, "Sorry, we couldn't find a record for this Member ID/Email. Please check and try again.")
+        session.state = "DONE"
+        session.save()
 
     elif state == "OPT8_SPEAK":
         if "email" in display_str:
@@ -325,30 +385,18 @@ def _handle_acva_message_internal(msg: dict):
         
     elif state == "COLLECT_MOBILE":
         session.collected_info = {**session.collected_info, "Mobile": display_body}
-        session.state = "COLLECT_PROFESSION"
-        session.save()
-        tpl_acva_opt6_call_profession(number)
-        
-    elif state == "COLLECT_PROFESSION":
-        session.collected_info = {**session.collected_info, "Profession": display_body}
-        session.state = "COLLECT_CITY"
-        session.save()
-        tpl_acva_opt6_call_city(number)
-        
-    elif state == "COLLECT_CITY":
-        session.collected_info = {**session.collected_info, "City": display_body}
-        session.state = "COLLECT_SOURCE"
-        session.save()
-        tpl_acva_opt6_call_option(number)
-        
-    elif state == "COLLECT_SOURCE":
-        session.collected_info = {**session.collected_info, "Source": display_body}
         session.state = "COLLECT_TIME"
         session.save()
         tpl_acva_opt6_call_time(number)
         
     elif state == "COLLECT_TIME":
         session.collected_info = {**session.collected_info, "PreferredTime": display_body}
+        session.state = "COLLECT_SOURCE"
+        session.save()
+        tpl_acva_opt6_call_option(number)
+        
+    elif state == "COLLECT_SOURCE":
+        session.collected_info = {**session.collected_info, "Source": display_body}
         session.state = "DONE"
         session.save()
         tpl_acva_opt6_call_confirmtime(number)

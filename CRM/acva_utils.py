@@ -2,6 +2,8 @@ import json
 import logging
 import requests
 import uuid
+import csv
+import io
 from django.conf import settings
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
@@ -148,6 +150,41 @@ def download_acva_media_from_whatsapp(media_id: str, access_token: str) -> str:
         logger.error("[ACVA] Error downloading media: %s", e)
         return ""
 
+def fetch_member_data(identifier: str, required_columns: list) -> dict:
+    url = "https://docs.google.com/spreadsheets/d/1Mu57Qlx9Bo1u2QOffSV7htLaUS29d6phr-WMxvgRo5Y/export?format=csv&gid=2028800605"
+    try:
+        r = requests.get(url, timeout=15)
+        if r.status_code != 200:
+            logger.error("[ACVA] Failed to fetch google sheet data")
+            return None
+        r.encoding = 'utf-8'
+        reader = csv.DictReader(io.StringIO(r.text))
+        if reader.fieldnames:
+            reader.fieldnames = [f.strip() for f in reader.fieldnames]
+        
+        is_email = "@" in identifier
+        for row in reader:
+            match = False
+            if is_email:
+                if row.get("Email ID", "").strip().lower() == identifier.lower().strip():
+                    match = True
+            else:
+                if row.get("Member ID", "").strip() == identifier.strip():
+                    match = True
+                    
+            if match:
+                res = {}
+                for col in required_columns:
+                    val = row.get(col)
+                    if not val or not str(val).strip():
+                        val = "NA"
+                    res[col] = str(val).strip()
+                return res
+        return None
+    except Exception as e:
+        logger.error(f"[ACVA] Error fetching member data: {e}")
+        return None
+
 # === Template Wrappers ===
 
 def tpl_acva_main_menu(to_number: str):
@@ -218,3 +255,29 @@ def tpl_acva_handoff(to_number: str):
 
 def tpl_key_benefits(to_number: str):
     return send_acva_template(to_number, "key_benefits")
+
+def tpl_acva_res_membership(to_number: str, aff_date: str, exp_date: str):
+    components = [{
+        "type": "body",
+        "parameters": [
+            {"type": "text", "text": aff_date},
+            {"type": "text", "text": exp_date}
+        ]
+    }]
+    return send_acva_template(to_number, "acva_res_membership", components)
+
+def tpl_acva_res_exam(to_number: str, status: str):
+    components = [{"type": "body", "parameters": [{"type": "text", "text": status}]}]
+    return send_acva_template(to_number, "acva_res_exam", components)
+
+def tpl_acva_res_case_study(to_number: str, status: str):
+    components = [{"type": "body", "parameters": [{"type": "text", "text": status}]}]
+    return send_acva_template(to_number, "acva_res_case_study", components)
+
+def tpl_acva_res_due_date(to_number: str, date: str):
+    components = [{"type": "body", "parameters": [{"type": "text", "text": date}]}]
+    return send_acva_template(to_number, "acva_res_due_date", components)
+
+def tpl_acva_res_certificate(to_number: str, status: str):
+    components = [{"type": "body", "parameters": [{"type": "text", "text": status}]}]
+    return send_acva_template(to_number, "acva_res_certificate", components)
