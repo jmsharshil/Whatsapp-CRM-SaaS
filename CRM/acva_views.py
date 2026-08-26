@@ -139,7 +139,7 @@ def _handle_acva_message_internal(msg: dict):
         status='delivered'
     )
 
-    if not conv_obj.bot_state:
+    if conv_created or not conv_obj.bot_state:
         conv_obj.bot_state = "IDLE"
         conv_obj.save()
 
