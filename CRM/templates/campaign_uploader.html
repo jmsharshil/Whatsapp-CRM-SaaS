@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JMS Campaign Uploader</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #f8fafc;
+            --panel-bg: rgba(255, 255, 255, 0.9);
+            --primary: #fec401;
+            --primary-hover: #dca800;
+            --accent: #e93222;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border: rgba(0, 0, 0, 0.1);
+            --success: #10b981;
+            --error: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image:
+                radial-gradient(at 0% 0%, rgba(254, 196, 1, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(233, 50, 34, 0.15) 0px, transparent 50%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            padding: 2rem;
+            line-height: 1.5;
+            gap: 2rem;
+        }
+
+        .main-wrapper {
+            display: flex;
+            gap: 2rem;
+            width: 100%;
+            max-width: 1200px;
+            align-items: flex-start;
+        }
+
+        .container,
+        .preview-container {
+            background: var(--panel-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 2.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .container {
+            flex: 1;
+            max-width: 600px;
+        }
+
+        .preview-container {
+            flex: 1;
+            max-width: 500px;
+            display: none;
+            /* hidden until image is uploaded and overlay is enabled */
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .preview-container.active {
+            display: flex;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(to right, #60a5fa, #c084fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+
+        label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-main);
+        }
+
+        input[type="text"],
+        input[type="number"],
+        input[type="color"] {
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 0.75rem 1rem;
+            color: var(--text-main);
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            outline: none;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        input[type="color"] {
+            padding: 0.25rem;
+            height: 48px;
+            width: 100%;
+            cursor: pointer;
+        }
+
+        input[type="text"]:focus,
+        input[type="number"]:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        .file-upload {
+            position: relative;
+            background: rgba(255, 255, 255, 0.8);
+            border: 2px dashed var(--border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .file-upload:hover {
+            border-color: var(--primary);
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        .file-upload input[type="file"] {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .file-upload p {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            margin-top: 0.5rem;
+        }
+
+        .file-upload-icon {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .switch-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 28px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.1);
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked+.slider {
+            background-color: var(--primary);
+        }
+
+        input:checked+.slider:before {
+            transform: translateX(22px);
+        }
+
+        .settings-panel {
+            background: rgba(0, 0, 0, 0.03);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-top: 1rem;
+            display: none;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+
+        .settings-panel.active {
+            display: grid;
+            animation: fadeIn 0.4s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .submit-btn {
+            grid-column: 1 / -1;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            color: white;
+            border: none;
+            border-radius: 12px;
+            padding: 1rem;
+            font-size: 1.125rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 1rem;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+        }
+
+        .submit-btn:active {
+            transform: translateY(0);
+        }
+
+        .submit-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .status-message {
+            grid-column: 1 / -1;
+            padding: 1rem;
+            border-radius: 12px;
+            text-align: center;
+            font-weight: 500;
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .status-message.success {
+            display: block;
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .status-message.error {
+            display: block;
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        /* Preview specific styles */
+        .preview-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-main);
+            text-align: center;
+        }
+
+        .preview-hint {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+
+        .canvas-wrapper {
+            position: relative;
+            width: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            cursor: crosshair;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+
+        @media (max-width: 900px) {
+            .main-wrapper {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .container,
+            .preview-container {
+                max-width: 100%;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .settings-panel {
+                grid-template-columns: 1fr;
+            }
+
+            .container,
+            .preview-container {
+                padding: 1.5rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="main-wrapper">
+        <div class="container">
+            <div class="header">
+                <img src="https://hrmsknowcraftstorage.blob.core.windows.net/media/JMS.png" alt="JMS Logo" style="max-width: 150px; margin-bottom: 1rem;">
+                <h1>Campaign Launcher</h1>
+                <p>Upload your creatives and audience data to launch personalized WhatsApp campaigns.</p>
+            </div>
+
+            <form id="campaignForm" class="form-grid">
+
+                <div class="form-group">
+                    <label>Base Image</label>
+                    <div class="file-upload">
+                        <div class="file-upload-icon">🖼️</div>
+                        <strong id="img_filename">Choose Image</strong>
+                        <p>JPG or PNG template</p>
+                        <input type="file" id="base_image" name="base_image" accept="image/*" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Contacts (CSV File)</label>
+                    <div class="file-upload">
+                        <div class="file-upload-icon">📄</div>
+                        <strong id="csv_filename">Choose CSV</strong>
+                        <p>Contains phone and name</p>
+                        <input type="file" id="csv_file" name="csv_file" accept=".csv" required>
+                    </div>
+                </div>
+
+
+
+                <div class="form-group full-width settings-panel active" id="settingsPanel">
+                    <div class="form-group">
+                        <label>Text X Coordinate</label>
+                        <input type="number" id="text_x" name="text_x" placeholder="Click on preview to set">
+                    </div>
+                    <div class="form-group">
+                        <label>Text Y Coordinate</label>
+                        <input type="number" id="text_y" name="text_y" placeholder="Click on preview to set">
+                    </div>
+                    <div class="form-group">
+                        <label>Font Size</label>
+                        <input type="number" id="font_size" name="font_size" value="40" placeholder="Default: 40">
+                    </div>
+                    <div class="form-group">
+                        <label>Text Color</label>
+                        <input type="color" id="text_color" name="text_color" value="#000000">
+                    </div>
+                    <!-- Language Code Removed -->
+                </div>
+
+                <div id="statusMsg" class="status-message"></div>
+
+                <button type="submit" class="submit-btn" id="submitBtn">
+                    <span>Launch Campaign</span>
+                    <div class="spinner" id="spinner"></div>
+                </button>
+            </form>
+        </div>
+
+        <div class="preview-container" id="previewContainer">
+            <h2 class="preview-title">Live Preview</h2>
+            <p class="preview-hint">Click anywhere on the image to set the X & Y coordinates automatically.</p>
+            <div class="canvas-wrapper">
+                <canvas id="previewCanvas"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- History Section -->
+    <div class="container" style="max-width: 1200px; width: 100%;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+            <h2 class="preview-title" style="color: var(--text-main); margin: 0; text-align: left;">Campaign History</h2>
+            <button type="button" class="submit-btn" style="margin-top: 0; padding: 0.75rem 1.5rem; width: auto;" id="loadHistoryBtn">Load History</button>
+        </div>
+        <div id="historyList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Click "Load History" to view past campaigns.</p>
+        </div>
+    </div>
+
+    <!-- Log Details Table Container -->
+    <div class="container" id="logDetailsContainer" style="max-width: 1200px; width: 100%; margin-top: 2rem; display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3 style="color: var(--text-main); margin: 0; font-size: 1.25rem;" id="logTitle">Campaign Logs</h3>
+            <button onclick="document.getElementById('logDetailsContainer').style.display='none'" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.5rem;">&times;</button>
+        </div>
+        <div style="overflow-x: auto; background: rgba(0,0,0,0.02); border-radius: 12px; border: 1px solid var(--border);">
+            <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                <thead>
+                    <tr style="border-bottom: 1px solid var(--border); color: var(--text-muted); background: rgba(0,0,0,0.03);">
+                        <th style="padding: 1rem; font-weight: 600;">Name</th>
+                        <th style="padding: 1rem; font-weight: 600;">Phone Number</th>
+                        <th style="padding: 1rem; font-weight: 600;">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="logTableBody" style="color: var(--text-main); font-size: 0.95rem;">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+
+    <script>
+        const baseImageInput = document.getElementById('base_image');
+
+        const textXInput = document.getElementById('text_x');
+        const textYInput = document.getElementById('text_y');
+        const fontSizeInput = document.getElementById('font_size');
+        const textColorInput = document.getElementById('text_color');
+        const previewContainer = document.getElementById('previewContainer');
+        const canvas = document.getElementById('previewCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let loadedImage = null;
+
+        document.getElementById('csv_file').addEventListener('change', function (e) {
+            document.getElementById('csv_filename').textContent = e.target.files[0] ? e.target.files[0].name.substring(0, 15) + '...' : 'Choose CSV';
+        });
+
+        baseImageInput.addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            document.getElementById('img_filename').textContent = file ? file.name.substring(0, 15) + '...' : 'Choose Image';
+
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function (event) {
+                    const img = new Image();
+                    img.onload = function () {
+                        loadedImage = img;
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        updatePreviewVisibility();
+                        updatePreview();
+                    }
+                    img.src = event.target.result;
+                }
+                reader.readAsDataURL(file);
+            } else {
+                loadedImage = null;
+                updatePreviewVisibility();
+            }
+        });
+
+
+
+        [textXInput, textYInput, fontSizeInput, textColorInput].forEach(input => {
+            input.addEventListener('input', updatePreview);
+        });
+
+        function updatePreviewVisibility() {
+            if (loadedImage) {
+                previewContainer.classList.add('active');
+            } else {
+                previewContainer.classList.remove('active');
+            }
+        }
+
+        function updatePreview() {
+            if (!loadedImage) return;
+
+            // Draw base image
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(loadedImage, 0, 0);
+
+            // Read values
+            let customX = parseInt(textXInput.value);
+            let customY = parseInt(textYInput.value);
+            let fontSize = parseInt(fontSizeInput.value) || 40;
+            let color = textColorInput.value || '#ffffff';
+
+            let x = isNaN(customX) ? canvas.width / 2 : customX;
+            let y = isNaN(customY) ? canvas.height - 150 : customY;
+
+            // Draw text exactly as backend PIL does (anchor mt = middle top)
+            ctx.fillStyle = color;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+
+            // Name
+            ctx.font = `${fontSize}px sans-serif`;
+            ctx.fillText("User", x, y);
+
+            // Phone (backend uses 0.75 * fontSize for phone)
+            let phoneFontSize = Math.floor(fontSize * 0.75);
+            ctx.font = `${phoneFontSize}px sans-serif`;
+            // backend roughly places phone right below name
+            ctx.fillText("+91 9999999999", x, y + fontSize + 5);
+        }
+
+        // Handle canvas click to set coordinates
+        canvas.addEventListener('click', function (e) {
+            const rect = canvas.getBoundingClientRect();
+            // Calculate scale between displayed size and actual canvas (original image) size
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+
+            const clickX = (e.clientX - rect.left) * scaleX;
+            const clickY = (e.clientY - rect.top) * scaleY;
+
+            textXInput.value = Math.round(clickX);
+            textYInput.value = Math.round(clickY);
+            updatePreview();
+        });
+
+        document.getElementById('campaignForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const btn = document.getElementById('submitBtn');
+            const spinner = document.getElementById('spinner');
+            const statusMsg = document.getElementById('statusMsg');
+
+            btn.disabled = true;
+            spinner.style.display = 'block';
+            statusMsg.className = 'status-message';
+
+            const formData = new FormData();
+            formData.append('csv_file', document.getElementById('csv_file').files[0]);
+            formData.append('base_image', document.getElementById('base_image').files[0]);
+            formData.append('overlay_enabled', 'true');
+
+            // Language code handled by backend
+
+            if (textXInput.value) formData.append('text_x', textXInput.value);
+            if (textYInput.value) formData.append('text_y', textYInput.value);
+            if (fontSizeInput.value) formData.append('font_size', fontSizeInput.value);
+            formData.append('text_color', textColorInput.value);
+
+            try {
+                const apiUrl = '/api/v1/jms/campaign/upload/';
+                const response = await fetch(apiUrl, { method: 'POST', body: formData, headers: {'Authorization': 'Bearer {{ jms_token }}'} });
+                const result = await response.json();
+
+                if (response.ok) {
+                    statusMsg.textContent = '⏳ Processing campaign... Please wait.';
+                    statusMsg.className = 'status-message';
+                    
+                    const cid = result.campaign_id;
+                    
+                    // Poll for completion
+                    const pollInterval = setInterval(async () => {
+                        try {
+                            const pollRes = await fetch('/api/v1/jms/campaign/history/' + cid + '/', { headers: {'Authorization': 'Bearer {{ jms_token }}'} });
+                            if (pollRes.ok) {
+                                const pollData = await pollRes.json();
+                                if (pollData.history) {
+                                    const isComplete = pollData.history.some(log => log.system_event === 'campaign_completed' || log.status === 'fatal_error');
+                                    if (isComplete) {
+                                        clearInterval(pollInterval);
+                                        statusMsg.textContent = '🎉 Campaign completed successfully! (ID: ' + cid + ')';
+                                        statusMsg.className = 'status-message success';
+                                        
+                                        document.getElementById('campaignForm').reset();
+                                        document.getElementById('csv_filename').textContent = 'Choose CSV';
+                                        document.getElementById('img_filename').textContent = 'Choose Image';
+                                        document.getElementById('settingsPanel').classList.remove('active');
+                                        loadedImage = null;
+                                        updatePreviewVisibility();
+                                        
+                                        document.getElementById('loadHistoryBtn').click();
+                                        
+                                        btn.disabled = false;
+                                        spinner.style.display = 'none';
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            console.error('Polling error', e);
+                        }
+                    }, 2000);
+                    
+                } else {
+                    statusMsg.textContent = '❌ Error: ' + (result.error || 'Failed to launch campaign.');
+                    statusMsg.className = 'status-message error';
+                    btn.disabled = false;
+                    spinner.style.display = 'none';
+                }
+            } catch (error) {
+                statusMsg.textContent = '❌ Network Error: Could not connect to the server.';
+                statusMsg.className = 'status-message error';
+                btn.disabled = false;
+                spinner.style.display = 'none';
+            }
+        });
+
+        // History Feature
+        document.getElementById('loadHistoryBtn').addEventListener('click', async () => {
+            const listDiv = document.getElementById('historyList');
+            listDiv.innerHTML = '<p style="color: var(--text-muted);">Loading...</p>';
+            try {
+                const res = await fetch('/api/v1/jms/campaign/history/', { headers: {'Authorization': 'Bearer {{ jms_token }}'} });
+                const data = await res.json();
+                
+                if (data.campaigns && data.campaigns.length > 0) {
+                    listDiv.innerHTML = data.campaigns.map(c => `
+                        <div style="background: rgba(255, 255, 255, 0.9); border: 1px solid var(--border); padding: 1.25rem; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); transition: transform 0.2s ease, box-shadow 0.2s ease; display: flex; flex-direction: column; justify-content: space-between;" onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='0 10px 15px -3px rgba(0,0,0,0.1)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 6px -1px rgba(0,0,0,0.1)';">
+                            <div style="display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 1rem;">
+                                <div style="font-size: 1.5rem;">📁</div>
+                                <div style="font-weight: 600; font-size: 0.95rem; color: var(--text-main); word-break: break-all; line-height: 1.4;">${c.campaign_id}</div>
+                            </div>
+                            <button onclick="viewCampaignDetails('${c.campaign_id}')" style="background: linear-gradient(135deg, var(--primary), var(--accent)); color: white; border: none; padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: 600; text-align: center; width: 100%; transition: opacity 0.2s ease;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">View Logs</button>
+                        </div>
+                    `).join('');
+                } else {
+                    listDiv.innerHTML = '<p style="color: var(--text-muted);">No history found.</p>';
+                }
+            } catch (err) {
+                listDiv.innerHTML = '<p style="color: var(--error);">Error loading history.</p>';
+            }
+        });
+        
+        async function viewCampaignDetails(id) {
+            try {
+                const res = await fetch('/api/v1/jms/campaign/history/' + id + '/', { headers: {'Authorization': 'Bearer {{ jms_token }}'} });
+                const data = await res.json();
+                
+                const container = document.getElementById('logDetailsContainer');
+                const tbody = document.getElementById('logTableBody');
+                const logTitle = document.getElementById('logTitle');
+                
+                logTitle.textContent = `Logs: ${id}`;
+                tbody.innerHTML = '';
+                
+                if (data.history && data.history.length > 0) {
+                    data.history.forEach(log => {
+                        if (log.system_event) return; // Skip internal system events
+                        
+                        const statusStr = log.result ? log.result.status : (log.status || 'unknown');
+                        const isSuccess = statusStr.toLowerCase() === 'success';
+                        const statusColor = isSuccess ? 'var(--success)' : 'var(--error)';
+                        const statusBadge = `<span style="background: ${isSuccess ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)'}; color: ${statusColor}; padding: 0.25rem 0.75rem; border-radius: 99px; font-size: 0.85rem; font-weight: 600;">${statusStr.toUpperCase()}</span>`;
+                        
+                        tbody.innerHTML += `
+                            <tr style="border-bottom: 1px solid var(--border);">
+                                <td style="padding: 1rem;">${log.name || '-'}</td>
+                                <td style="padding: 1rem;">${log.phone || '-'}</td>
+                                <td style="padding: 1rem;">${statusBadge}</td>
+                            </tr>
+                        `;
+                    });
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="3" style="padding: 2rem; text-align: center; color: var(--text-muted);">No logs found for this campaign.</td></tr>`;
+                }
+                
+                container.style.display = 'block';
+                container.scrollIntoView({ behavior: 'smooth' });
+                
+            } catch (e) {
+                alert('Failed to load details for this campaign.');
+            }
+        }
+    </script>
+</body>
+
+</html>
