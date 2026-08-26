@@ -566,6 +566,27 @@ class WhatsAppWebhookView(APIView):
                         elif phone_number_id == "1168578376348442":
                             logger.info(f"[Webhook] Saving message for disabled bot number {phone_number_id}")
                             
+                            # ── Forward webhook to Insights Institute URL ─────────────────
+                            try:
+                                import threading
+                                import requests
+                    
+                                def forward_payload_to_insights(data, sig):
+                                    try:
+                                        headers = {"Content-Type": "application/json"}
+                                        if sig:
+                                            headers["X-Hub-Signature-256"] = sig
+                                        res = requests.post("https://insightsinstitute-fcdqe4gjcfe5c6gn.centralindia-01.azurewebsites.net/api/v1/whatsapp/webhook/", json=data, headers=headers, timeout=5)
+                                        logger.info(f"[Webhook] Forwarded to insights institute. Status: {res.status_code}")
+                                    except Exception as e:
+                                        logger.error(f"[Webhook] Forwarding error to insights institute: {e}")
+                    
+                                sig = request.META.get("HTTP_X_HUB_SIGNATURE_256", "")
+                                threading.Thread(target=forward_payload_to_insights, args=(payload, sig), daemon=True).start()
+                            except Exception as e:
+                                logger.error(f"[Webhook] Failed to start forwarding thread for insights institute: {e}")
+                            
+
                             raw_phone = msg.get("from", "").strip()
                             if not raw_phone.startswith("+"):
                                 raw_phone = f"+{raw_phone}"
