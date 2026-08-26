@@ -248,7 +248,7 @@ def tpl_acva_opt7_all(to_number: str):
     return send_acva_template(to_number, "acva_opt7_all")
 
 def tpl_acva_opt8_speak(to_number: str):
-    return send_acva_template(to_number, "acva_opt8_speak")
+    return send_acva_template(to_number, "acva_opt8_speak_")
 
 def tpl_acva_handoff(to_number: str):
     return send_acva_template(to_number, "acva_handoff")
