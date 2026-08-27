@@ -11,7 +11,7 @@ from CRM.gigatel_views import GigatelDataExportView
 import CRM.gigatel_views
 from CRM.globestar_views import GlobestarDataAPIView
 from CRM.navratri_views import NavratriRegistrationAPIView
-from CRM.jms_campaign_views import JMSCampaignUploadView, JMSCampaignHistoryView, JMSCampaignListView, jms_campaign_ui_view
+from CRM.jms_campaign_views import JMSCampaignUploadView, JMSCampaignHistoryView, JMSCampaignListView, jms_campaign_ui_view, JMSCSVUploadView, JMSCSVListView
 
 urlpatterns = [
 
@@ -101,6 +101,8 @@ urlpatterns = [
     
     # ── JMS CSV Campaign ──────────────────────────────────────────────────────
     path("jmstechnova/", jms_campaign_ui_view, name="campaign-ui"),
+    path("api/v1/jms/csv/upload/", JMSCSVUploadView.as_view(), name="jms-csv-upload"),
+    path("api/v1/jms/csv/list/", JMSCSVListView.as_view(), name="jms-csv-list"),
     path("api/v1/jms/campaign/upload/", JMSCampaignUploadView.as_view(), name="jms-campaign-upload"),
     path("api/v1/jms/campaign/history/", JMSCampaignListView.as_view(), name="jms-campaign-history-list"),
     path("api/v1/jms/campaign/history/<str:campaign_id>/", JMSCampaignHistoryView.as_view(), name="jms-campaign-history-detail"),

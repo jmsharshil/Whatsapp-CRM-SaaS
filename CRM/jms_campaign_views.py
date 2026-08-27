@@ -24,6 +24,7 @@ from rest_framework.permissions import BasePermission
 # Constants for JMS
 JMS_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "1160424227149252")
 CAMPAIGN_HISTORY_DIR = "jms/campaigns/history/"
+CSV_STORAGE_DIR = "jms/campaigns/csvs/"
 
 class HasJMSPhoneToken(BasePermission):
     """
@@ -245,6 +246,7 @@ class JMSCampaignUploadView(APIView):
     
     def post(self, request, *args, **kwargs):
         csv_file = request.FILES.get('csv_file')
+        existing_csv = request.data.get('existing_csv')
         base_image = request.FILES.get('base_image')
         template_name = request.data.get('template_name', 'jms_image_campaign')
         overlay_enabled = str(request.data.get('overlay_enabled', 'false')).lower() == 'true'
@@ -261,15 +263,23 @@ class JMSCampaignUploadView(APIView):
         try: font_size = int(font_size) if font_size is not None else 40
         except ValueError: font_size = 40
         
-        if not csv_file or not base_image or not template_name:
-            return Response({"error": "csv_file, base_image, and template_name are required."}, status=status.HTTP_400_BAD_REQUEST)
+        if not base_image or not template_name:
+            return Response({"error": "base_image and template_name are required."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not csv_file and not existing_csv:
+            return Response({"error": "Either csv_file or existing_csv is required."}, status=status.HTTP_400_BAD_REQUEST)
         
         campaign_id = f"cmp_{int(time.time())}_{uuid.uuid4().hex[:6]}"
         
-        csv_path = f"jms/campaigns/uploads/{campaign_id}_{csv_file.name}"
+        if csv_file:
+            csv_path = f"jms/campaigns/uploads/{campaign_id}_{csv_file.name}"
+            default_storage.save(csv_path, csv_file)
+        else:
+            csv_path = f"{CSV_STORAGE_DIR}{existing_csv}"
+            if not default_storage.exists(csv_path):
+                return Response({"error": f"Existing CSV {existing_csv} not found."}, status=status.HTTP_404_NOT_FOUND)
+            
         image_path = f"jms/campaigns/uploads/{campaign_id}_{base_image.name}"
-        
-        default_storage.save(csv_path, csv_file)
         default_storage.save(image_path, base_image)
         
         threading.Thread(
@@ -328,5 +338,54 @@ class JMSCampaignListView(APIView):
             
             campaigns.sort(key=lambda x: x['campaign_id'], reverse=True)
             return Response({"campaigns": campaigns})
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class JMSCSVUploadView(APIView):
+    authentication_classes = []
+    permission_classes = [HasJMSPhoneToken]
+    
+    def post(self, request, *args, **kwargs):
+        csv_file = request.FILES.get('csv_file')
+        if not csv_file:
+            return Response({"error": "csv_file is required."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        file_name = csv_file.name
+        # Keep original name but add timestamp if it exists to avoid overwriting issues,
+        # actually for simplicity let's just use original name.
+        csv_path = f"{CSV_STORAGE_DIR}{file_name}"
+        
+        if default_storage.exists(csv_path):
+            default_storage.delete(csv_path)
+            
+        default_storage.save(csv_path, csv_file)
+        
+        return Response({
+            "status": "success",
+            "message": f"CSV {file_name} uploaded successfully.",
+            "file_name": file_name
+        }, status=status.HTTP_201_CREATED)
+
+class JMSCSVListView(APIView):
+    authentication_classes = []
+    permission_classes = [HasJMSPhoneToken]
+    
+    def get(self, request, *args, **kwargs):
+        try:
+            try:
+                dirs, files = default_storage.listdir(CSV_STORAGE_DIR)
+            except FileNotFoundError:
+                files = []
+            except Exception:
+                files = []
+                
+            csvs = []
+            for f in files:
+                if f.endswith('.csv'):
+                    base_name = os.path.basename(f)
+                    csvs.append({"file_name": base_name})
+            
+            csvs.sort(key=lambda x: x['file_name'])
+            return Response({"csvs": csvs})
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

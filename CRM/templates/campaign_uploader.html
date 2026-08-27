@@ -157,9 +157,24 @@
         }
 
         input[type="text"]:focus,
-        input[type="number"]:focus {
+        input[type="number"]:focus,
+        select:focus {
             border-color: var(--primary);
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        select {
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 0.75rem 1rem;
+            color: var(--text-main);
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            outline: none;
+            width: 100%;
+            box-sizing: border-box;
+            appearance: none;
         }
 
         .file-upload {
@@ -171,6 +186,11 @@
             text-align: center;
             transition: all 0.3s ease;
             cursor: pointer;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
         }
 
         .file-upload:hover {
@@ -411,15 +431,56 @@
                 padding: 1.5rem;
             }
         }
+
+        #toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+
+        .toast {
+            background: white;
+            color: var(--text-main);
+            padding: 1rem 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            transform: translateX(120%);
+            transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            border-left: 4px solid var(--primary);
+            font-weight: 500;
+            pointer-events: auto;
+        }
+
+        .toast.show {
+            transform: translateX(0);
+        }
+
+        .toast.success {
+            border-left-color: var(--success);
+        }
+
+        .toast.error {
+            border-left-color: var(--error);
+        }
     </style>
 </head>
 
 <body>
+    <div id="toast-container"></div>
 
     <div class="main-wrapper">
         <div class="container">
             <div class="header">
-                <img src="https://hrmsknowcraftstorage.blob.core.windows.net/media/JMS.png" alt="JMS Logo" style="max-width: 150px; margin-bottom: 1rem;">
+                <img src="https://hrmsknowcraftstorage.blob.core.windows.net/media/JMS.png" alt="JMS Logo"
+                    style="max-width: 150px; margin-bottom: 1rem;">
                 <h1>Campaign Launcher</h1>
                 <p>Upload your creatives and audience data to launch personalized WhatsApp campaigns.</p>
             </div>
@@ -436,13 +497,39 @@
                     </div>
                 </div>
 
-                <div class="form-group">
+                <div class="form-group" style="display: flex; flex-direction: column;">
                     <label>Contacts (CSV File)</label>
-                    <div class="file-upload">
-                        <div class="file-upload-icon">📄</div>
-                        <strong id="csv_filename">Choose CSV</strong>
-                        <p>Contains phone and name</p>
-                        <input type="file" id="csv_file" name="csv_file" accept=".csv" required>
+                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; background: rgba(255, 255, 255, 0.8); border: 2px dashed var(--border); border-radius: 16px; padding: 1.5rem; transition: all 0.3s ease;" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'">
+                        
+                        <div style="position: relative; margin-bottom: 1rem;">
+                            <!-- Custom Dropdown Trigger -->
+                            <div id="csv_dropdown_trigger" style="width: 100%; padding: 0.85rem 1rem; border: 1px solid var(--border); border-radius: 12px; font-size: 0.95rem; background: white; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;" onmouseover="this.style.boxShadow='0 0 0 3px rgba(59, 130, 246, 0.1)'" onmouseout="this.style.boxShadow='none'">
+                                <span id="csv_dropdown_text" style="color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 0.5rem;">
+                                    <span style="font-size: 1.1rem; opacity: 0.7;">📄</span> Select a CSV file...
+                                </span>
+                                <span style="color: var(--text-muted); font-size: 0.8rem;">▼</span>
+                            </div>
+                            
+                            <!-- Custom Dropdown Menu -->
+                            <div id="csv_dropdown_menu" style="display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 0.5rem; background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(10px); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); max-height: 200px; overflow-y: auto; z-index: 100;">
+                                <div style="padding: 1rem; text-align: center; color: var(--text-muted);">Loading...</div>
+                            </div>
+                            
+                            <!-- Hidden Input for Form Submission -->
+                            <input type="hidden" id="existing_csv" name="existing_csv" value="">
+                        </div>
+
+                        <div style="text-align: center;">
+                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.75rem; font-weight: 500;">OR</p>
+                            <button type="button" onclick="document.getElementById('direct_csv_upload').click()" 
+                                    style="background: linear-gradient(135deg, rgba(254, 196, 1, 0.15), rgba(233, 50, 34, 0.1)); color: var(--text-main); border: 1px dashed var(--border); border-radius: 12px; padding: 0.75rem 1rem; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.2s; width: 100%; display: flex; justify-content: center; align-items: center; gap: 0.5rem;"
+                                    onmouseover="this.style.background='linear-gradient(135deg, rgba(254, 196, 1, 0.25), rgba(233, 50, 34, 0.15))'; this.style.borderColor='var(--primary)'"
+                                    onmouseout="this.style.background='linear-gradient(135deg, rgba(254, 196, 1, 0.15), rgba(233, 50, 34, 0.1))'; this.style.borderColor='var(--border)'">
+                                <span>➕</span> Upload New CSV
+                            </button>
+                            <input type="file" id="direct_csv_upload" accept=".csv" style="display: none;" onchange="uploadDirectCsv(this)">
+                        </div>
+
                     </div>
                 </div>
 
@@ -488,25 +575,33 @@
 
     <!-- History Section -->
     <div class="container" style="max-width: 1200px; width: 100%;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
-            <h2 class="preview-title" style="color: var(--text-main); margin: 0; text-align: left;">Campaign History</h2>
-            <button type="button" class="submit-btn" style="margin-top: 0; padding: 0.75rem 1.5rem; width: auto;" id="loadHistoryBtn">Load History</button>
+        <div
+            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+            <h2 class="preview-title" style="color: var(--text-main); margin: 0; text-align: left;">Campaign History
+            </h2>
+            <button type="button" class="submit-btn" style="margin-top: 0; padding: 0.75rem 1.5rem; width: auto;"
+                id="loadHistoryBtn">Load History</button>
         </div>
-        <div id="historyList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
+        <div id="historyList"
+            style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
             <p style="color: var(--text-muted); font-size: 0.9rem;">Click "Load History" to view past campaigns.</p>
         </div>
     </div>
 
     <!-- Log Details Table Container -->
-    <div class="container" id="logDetailsContainer" style="max-width: 1200px; width: 100%; margin-top: 2rem; display: none;">
+    <div class="container" id="logDetailsContainer"
+        style="max-width: 1200px; width: 100%; margin-top: 2rem; display: none;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
             <h3 style="color: var(--text-main); margin: 0; font-size: 1.25rem;" id="logTitle">Campaign Logs</h3>
-            <button onclick="document.getElementById('logDetailsContainer').style.display='none'" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.5rem;">&times;</button>
+            <button onclick="document.getElementById('logDetailsContainer').style.display='none'"
+                style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.5rem;">&times;</button>
         </div>
-        <div style="overflow-x: auto; background: rgba(0,0,0,0.02); border-radius: 12px; border: 1px solid var(--border);">
+        <div
+            style="overflow-x: auto; background: rgba(0,0,0,0.02); border-radius: 12px; border: 1px solid var(--border);">
             <table style="width: 100%; border-collapse: collapse; text-align: left;">
                 <thead>
-                    <tr style="border-bottom: 1px solid var(--border); color: var(--text-muted); background: rgba(0,0,0,0.03);">
+                    <tr
+                        style="border-bottom: 1px solid var(--border); color: var(--text-muted); background: rgba(0,0,0,0.03);">
                         <th style="padding: 1rem; font-weight: 600;">Name</th>
                         <th style="padding: 1rem; font-weight: 600;">Phone Number</th>
                         <th style="padding: 1rem; font-weight: 600;">Status</th>
@@ -520,6 +615,29 @@
 
 
     <script>
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+
+            let icon = 'ℹ️';
+            if (type === 'success') icon = '✅';
+            if (type === 'error') icon = '❌';
+
+            toast.innerHTML = `<span style="font-size: 1.2rem;">${icon}</span> <span>${message}</span>`;
+
+            container.appendChild(toast);
+
+            // Trigger animation
+            setTimeout(() => toast.classList.add('show'), 10);
+
+            // Remove after 3 seconds
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
         const baseImageInput = document.getElementById('base_image');
 
         const textXInput = document.getElementById('text_x');
@@ -532,9 +650,7 @@
 
         let loadedImage = null;
 
-        document.getElementById('csv_file').addEventListener('change', function (e) {
-            document.getElementById('csv_filename').textContent = e.target.files[0] ? e.target.files[0].name.substring(0, 15) + '...' : 'Choose CSV';
-        });
+
 
         baseImageInput.addEventListener('change', function (e) {
             const file = e.target.files[0];
@@ -559,6 +675,99 @@
                 updatePreviewVisibility();
             }
         });
+
+        // Fetch CSV List on load
+        async function fetchCsvList() {
+            const menu = document.getElementById('csv_dropdown_menu');
+            const hiddenInput = document.getElementById('existing_csv');
+            const triggerText = document.getElementById('csv_dropdown_text');
+
+            try {
+                menu.innerHTML = '<div style="padding: 1rem; text-align: center; color: var(--text-muted);">Loading...</div>';
+                const res = await fetch('/api/v1/jms/csv/list/', { headers: { 'Authorization': 'Bearer {{ jms_token }}' } });
+                const data = await res.json();
+
+                menu.innerHTML = '';
+                if (data.csvs && data.csvs.length > 0) {
+                    data.csvs.forEach(c => {
+                        const item = document.createElement('div');
+                        item.innerHTML = `<span style="font-size: 1.1rem; opacity: 0.7;">📄</span> <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;">${c.file_name}</span>`;
+                        item.style.cssText = 'padding: 0.8rem 1rem; cursor: pointer; transition: background 0.2s; border-bottom: 1px solid rgba(0,0,0,0.05); color: var(--text-main); font-size: 0.95rem; display: flex; align-items: center; gap: 0.75rem;';
+
+                        item.onmouseover = () => item.style.background = 'rgba(59, 130, 246, 0.1)';
+                        item.onmouseout = () => item.style.background = 'transparent';
+
+                        item.onclick = (e) => {
+                            e.stopPropagation();
+                            hiddenInput.value = c.file_name;
+                            triggerText.textContent = c.file_name;
+                            triggerText.style.color = 'var(--text-main)';
+                            menu.style.display = 'none';
+                        };
+                        menu.appendChild(item);
+                    });
+                } else {
+                    menu.innerHTML = '<div style="padding: 1rem; text-align: center; color: var(--text-muted);">No CSVs found. Upload new.</div>';
+                }
+            } catch (err) {
+                menu.innerHTML = '<div style="padding: 1rem; text-align: center; color: var(--error);">Error loading list</div>';
+            }
+        }
+
+        // Custom dropdown interactions
+        document.getElementById('csv_dropdown_trigger').addEventListener('click', function (e) {
+            e.stopPropagation();
+            const menu = document.getElementById('csv_dropdown_menu');
+            menu.style.display = menu.style.display === 'none' || menu.style.display === '' ? 'block' : 'none';
+        });
+
+        document.addEventListener('click', function (e) {
+            const menu = document.getElementById('csv_dropdown_menu');
+            if (menu && menu.style.display === 'block') {
+                menu.style.display = 'none';
+            }
+        });
+
+        // Call on page load
+        fetchCsvList();
+
+        // Removed toggleCsvOptions since we simplified UI
+
+
+        async function uploadDirectCsv(inputElement) {
+            const file = inputElement.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('csv_file', file);
+
+            const btn = inputElement.previousElementSibling.previousElementSibling.querySelector('button');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = 'Uploading...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/v1/jms/csv/upload/', {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'Authorization': 'Bearer {{ jms_token }}' }
+                });
+
+                if (res.ok) {
+                    showToast(`CSV ${file.name} added to library successfully!`, 'success');
+                    fetchCsvList(); // Refresh the list
+                } else {
+                    const data = await res.json();
+                    showToast(`Error: ${data.error || 'Failed to upload CSV'}`, 'error');
+                }
+            } catch (err) {
+                showToast('Network error while uploading CSV.', 'error');
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                inputElement.value = ''; // Reset input
+            }
+        }
 
 
 
@@ -632,8 +841,25 @@
             statusMsg.className = 'status-message';
 
             const formData = new FormData();
-            formData.append('csv_file', document.getElementById('csv_file').files[0]);
-            formData.append('base_image', document.getElementById('base_image').files[0]);
+
+            const existingCsv = document.getElementById('existing_csv').value;
+            if (!existingCsv) {
+                showToast("Please select a CSV file from the list or upload a new one.", 'error');
+                btn.disabled = false;
+                spinner.style.display = 'none';
+                return;
+            }
+            formData.append('existing_csv', existingCsv);
+
+            const baseImg = document.getElementById('base_image').files[0];
+            if (!baseImg) {
+                showToast("Please upload a base image.", 'error');
+                btn.disabled = false;
+                spinner.style.display = 'none';
+                return;
+            }
+            formData.append('base_image', baseImg);
+
             formData.append('overlay_enabled', 'true');
 
             // Language code handled by backend
@@ -645,19 +871,19 @@
 
             try {
                 const apiUrl = '/api/v1/jms/campaign/upload/';
-                const response = await fetch(apiUrl, { method: 'POST', body: formData, headers: {'Authorization': 'Bearer {{ jms_token }}'} });
+                const response = await fetch(apiUrl, { method: 'POST', body: formData, headers: { 'Authorization': 'Bearer {{ jms_token }}' } });
                 const result = await response.json();
 
                 if (response.ok) {
                     statusMsg.textContent = '⏳ Processing campaign... Please wait.';
                     statusMsg.className = 'status-message';
-                    
+
                     const cid = result.campaign_id;
-                    
+
                     // Poll for completion
                     const pollInterval = setInterval(async () => {
                         try {
-                            const pollRes = await fetch('/api/v1/jms/campaign/history/' + cid + '/', { headers: {'Authorization': 'Bearer {{ jms_token }}'} });
+                            const pollRes = await fetch('/api/v1/jms/campaign/history/' + cid + '/', { headers: { 'Authorization': 'Bearer {{ jms_token }}' } });
                             if (pollRes.ok) {
                                 const pollData = await pollRes.json();
                                 if (pollData.history) {
@@ -666,16 +892,21 @@
                                         clearInterval(pollInterval);
                                         statusMsg.textContent = '🎉 Campaign completed successfully! (ID: ' + cid + ')';
                                         statusMsg.className = 'status-message success';
-                                        
+
                                         document.getElementById('campaignForm').reset();
-                                        document.getElementById('csv_filename').textContent = 'Choose CSV';
+                                        document.getElementById('existing_csv').value = '';
+                                        document.getElementById('csv_dropdown_text').textContent = 'Select a CSV file...';
+                                        document.getElementById('csv_dropdown_text').style.color = 'var(--text-muted)';
                                         document.getElementById('img_filename').textContent = 'Choose Image';
                                         document.getElementById('settingsPanel').classList.remove('active');
                                         loadedImage = null;
                                         updatePreviewVisibility();
-                                        
+
+                                        // Refresh CSV list in case a new one was uploaded
+                                        fetchCsvList();
+
                                         document.getElementById('loadHistoryBtn').click();
-                                        
+
                                         btn.disabled = false;
                                         spinner.style.display = 'none';
                                     }
@@ -685,7 +916,7 @@
                             console.error('Polling error', e);
                         }
                     }, 2000);
-                    
+
                 } else {
                     statusMsg.textContent = '❌ Error: ' + (result.error || 'Failed to launch campaign.');
                     statusMsg.className = 'status-message error';
@@ -705,9 +936,9 @@
             const listDiv = document.getElementById('historyList');
             listDiv.innerHTML = '<p style="color: var(--text-muted);">Loading...</p>';
             try {
-                const res = await fetch('/api/v1/jms/campaign/history/', { headers: {'Authorization': 'Bearer {{ jms_token }}'} });
+                const res = await fetch('/api/v1/jms/campaign/history/', { headers: { 'Authorization': 'Bearer {{ jms_token }}' } });
                 const data = await res.json();
-                
+
                 if (data.campaigns && data.campaigns.length > 0) {
                     listDiv.innerHTML = data.campaigns.map(c => `
                         <div style="background: rgba(255, 255, 255, 0.9); border: 1px solid var(--border); padding: 1.25rem; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); transition: transform 0.2s ease, box-shadow 0.2s ease; display: flex; flex-direction: column; justify-content: space-between;" onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='0 10px 15px -3px rgba(0,0,0,0.1)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 6px -1px rgba(0,0,0,0.1)';">
@@ -725,28 +956,28 @@
                 listDiv.innerHTML = '<p style="color: var(--error);">Error loading history.</p>';
             }
         });
-        
+
         async function viewCampaignDetails(id) {
             try {
-                const res = await fetch('/api/v1/jms/campaign/history/' + id + '/', { headers: {'Authorization': 'Bearer {{ jms_token }}'} });
+                const res = await fetch('/api/v1/jms/campaign/history/' + id + '/', { headers: { 'Authorization': 'Bearer {{ jms_token }}' } });
                 const data = await res.json();
-                
+
                 const container = document.getElementById('logDetailsContainer');
                 const tbody = document.getElementById('logTableBody');
                 const logTitle = document.getElementById('logTitle');
-                
+
                 logTitle.textContent = `Logs: ${id}`;
                 tbody.innerHTML = '';
-                
+
                 if (data.history && data.history.length > 0) {
                     data.history.forEach(log => {
                         if (log.system_event) return; // Skip internal system events
-                        
+
                         const statusStr = log.result ? log.result.status : (log.status || 'unknown');
                         const isSuccess = statusStr.toLowerCase() === 'success';
                         const statusColor = isSuccess ? 'var(--success)' : 'var(--error)';
                         const statusBadge = `<span style="background: ${isSuccess ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)'}; color: ${statusColor}; padding: 0.25rem 0.75rem; border-radius: 99px; font-size: 0.85rem; font-weight: 600;">${statusStr.toUpperCase()}</span>`;
-                        
+
                         tbody.innerHTML += `
                             <tr style="border-bottom: 1px solid var(--border);">
                                 <td style="padding: 1rem;">${log.name || '-'}</td>
@@ -758,12 +989,12 @@
                 } else {
                     tbody.innerHTML = `<tr><td colspan="3" style="padding: 2rem; text-align: center; color: var(--text-muted);">No logs found for this campaign.</td></tr>`;
                 }
-                
+
                 container.style.display = 'block';
                 container.scrollIntoView({ behavior: 'smooth' });
-                
+
             } catch (e) {
-                alert('Failed to load details for this campaign.');
+                showToast('Failed to load details for this campaign.', 'error');
             }
         }
     </script>
