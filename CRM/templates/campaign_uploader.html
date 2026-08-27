@@ -741,7 +741,7 @@
             const formData = new FormData();
             formData.append('csv_file', file);
 
-            const btn = inputElement.previousElementSibling.previousElementSibling.querySelector('button');
+            const btn = inputElement.previousElementSibling;
             const originalText = btn.innerHTML;
             btn.innerHTML = 'Uploading...';
             btn.disabled = true;
@@ -755,6 +755,9 @@
 
                 if (res.ok) {
                     showToast(`CSV ${file.name} added to library successfully!`, 'success');
+                    document.getElementById('existing_csv').value = file.name;
+                    document.getElementById('csv_dropdown_text').textContent = file.name;
+                    document.getElementById('csv_dropdown_text').style.color = 'var(--text-main)';
                     fetchCsvList(); // Refresh the list
                 } else {
                     const data = await res.json();
