@@ -480,14 +480,50 @@ class WhatsAppWebhookView(APIView):
 
     # ── POST: All inbound messages + status updates ───────────────────────
     def post(self, request):
-        if not _verify_meta_signature(request):
-            logger.error("[Webhook] Bad signature")
-            return HttpResponse("Forbidden", status=403)
-
         try:
             payload = json.loads(request.body)
         except json.JSONDecodeError:
             return HttpResponse("OK", status=200)
+
+        # ── Handle Insight Log Intercept ──────────────────────────────────
+        if payload.get("is_insight_log"):
+            try:
+                raw_phone = payload.get("phone", "").strip()
+                content = payload.get("content", "").strip()
+                bot_name = payload.get("bot_name", "Insights")
+                phone_number_id = payload.get("phone_number_id", "1168578376348442")
+                message_id = payload.get("message_id", "")
+
+                if not raw_phone or not content:
+                    return HttpResponse("Missing phone or content", status=400)
+                if not raw_phone.startswith("+"):
+                    raw_phone = f"+{raw_phone}"
+
+                client_acc = ClientAccount.objects.filter(phone_number_id=phone_number_id).first()
+                db_msg = save_message(
+                    phone=raw_phone,
+                    content=content,
+                    reply_of=None,
+                    client_name="", 
+                    client_obj=client_acc,
+                    phone_number_id=phone_number_id,
+                )
+                if db_msg:
+                    db_msg.message_type = "text"
+                    db_msg.direction = "outbound"
+                    if message_id:
+                        db_msg.meta_message_id = message_id
+                    db_msg.status = "sent"
+                    db_msg.save(update_fields=["message_type", "direction", "meta_message_id", "status"])
+                logger.info(f"[InsightsLog] Saved outbound message for {raw_phone} via existing webhook")
+                return HttpResponse("OK", status=200)
+            except Exception as e:
+                logger.exception("[InsightsLog] Error saving outbound message")
+                return HttpResponse("Error", status=500)
+
+        if not _verify_meta_signature(request):
+            logger.error("[Webhook] Bad signature")
+            return HttpResponse("Forbidden", status=403)
 
 
         if payload.get("object") != "whatsapp_business_account":
