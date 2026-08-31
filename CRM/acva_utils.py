@@ -256,28 +256,80 @@ def tpl_acva_handoff(to_number: str):
 def tpl_key_benefits(to_number: str):
     return send_acva_template(to_number, "key_benefits")
 
-def tpl_acva_res_membership(to_number: str, aff_date: str, exp_date: str):
+def tpl_acva_res_membership(to_number: str, name: str, member_id: str, email: str, aff_date: str, exp_date: str):
     components = [{
         "type": "body",
         "parameters": [
+            {"type": "text", "text": name},
+            {"type": "text", "text": member_id},
+            {"type": "text", "text": email},
             {"type": "text", "text": aff_date},
             {"type": "text", "text": exp_date}
         ]
     }]
     return send_acva_template(to_number, "acva_res_membership", components)
 
-def tpl_acva_res_exam(to_number: str, status: str):
-    components = [{"type": "body", "parameters": [{"type": "text", "text": status}]}]
+def tpl_acva_res_lms(to_number: str, name: str, member_id: str, email: str, aff_date: str, status: str):
+    components = [{
+        "type": "body",
+        "parameters": [
+            {"type": "text", "text": name},
+            {"type": "text", "text": member_id},
+            {"type": "text", "text": email},
+            {"type": "text", "text": aff_date},
+            {"type": "text", "text": status}
+        ]
+    }]
+    return send_acva_template(to_number, "acva_res_lms", components)
+
+def tpl_acva_res_exam(to_number: str, name: str, member_id: str, email: str, aff_date: str, status: str):
+    components = [{
+        "type": "body",
+        "parameters": [
+            {"type": "text", "text": name},
+            {"type": "text", "text": member_id},
+            {"type": "text", "text": email},
+            {"type": "text", "text": aff_date},
+            {"type": "text", "text": status}
+        ]
+    }]
     return send_acva_template(to_number, "acva_res_exam", components)
 
-def tpl_acva_res_case_study(to_number: str, status: str):
-    components = [{"type": "body", "parameters": [{"type": "text", "text": status}]}]
+def tpl_acva_res_case_study(to_number: str, name: str, member_id: str, email: str, aff_date: str, status: str):
+    components = [{
+        "type": "body",
+        "parameters": [
+            {"type": "text", "text": name},
+            {"type": "text", "text": member_id},
+            {"type": "text", "text": email},
+            {"type": "text", "text": aff_date},
+            {"type": "text", "text": status}
+        ]
+    }]
     return send_acva_template(to_number, "acva_res_case_study", components)
 
-def tpl_acva_res_due_date(to_number: str, date: str):
-    components = [{"type": "body", "parameters": [{"type": "text", "text": date}]}]
+def tpl_acva_res_due_date(to_number: str, name: str, member_id: str, email: str, aff_date: str, date: str):
+    components = [{
+        "type": "body",
+        "parameters": [
+            {"type": "text", "text": name},
+            {"type": "text", "text": member_id},
+            {"type": "text", "text": email},
+            {"type": "text", "text": aff_date},
+            {"type": "text", "text": date}
+        ]
+    }]
     return send_acva_template(to_number, "acva_res_due_date", components)
 
-def tpl_acva_res_certificate(to_number: str, status: str):
-    components = [{"type": "body", "parameters": [{"type": "text", "text": status}]}]
+def tpl_acva_res_certificate(to_number: str, name: str, member_id: str, email: str, aff_date: str, status: str):
+    components = [{
+        "type": "body",
+        "parameters": [
+            {"type": "text", "text": name},
+            {"type": "text", "text": member_id},
+            {"type": "text", "text": email},
+            {"type": "text", "text": aff_date},
+            {"type": "text", "text": status}
+        ]
+    }]
     return send_acva_template(to_number, "acva_res_certificate", components)

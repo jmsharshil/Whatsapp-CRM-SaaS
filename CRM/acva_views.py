@@ -14,7 +14,7 @@ from CRM.acva_utils import (
     tpl_acva_opt6_call_city, tpl_acva_opt6_call_option,
     tpl_acva_opt6_call_time, tpl_acva_opt6_call_confirmtime,
     tpl_acva_opt7_all, fetch_member_data,
-    tpl_acva_res_membership, tpl_acva_res_exam, tpl_acva_res_case_study,
+    tpl_acva_res_membership, tpl_acva_res_lms, tpl_acva_res_exam, tpl_acva_res_case_study,
     tpl_acva_res_due_date, tpl_acva_res_certificate
 )
 from django.conf import settings
@@ -163,12 +163,18 @@ def _handle_acva_message_internal(msg: dict):
         tpl_acva_opt6_call_name(number)
 
     # Flow Logic
-    if state == "IDLE":
+    if "back to main menu" in display_str or "main menu" in display_str:
+        session.state = "MENU_SELECTION"
+        session.collected_info = {}
+        session.save()
+        tpl_acva_main_menu(number)
+
+    elif state == "IDLE":
         # Do not reply if state is IDLE and they didn't say "ACVA"
         logger.info("[ACVA] Ignored message because state is IDLE and message is not 'ACVA'")
         return
 
-    if state == "INIT":
+    elif state == "INIT":
         tpl_acva_main_menu(number)
         session.state = "MENU_SELECTION"
         session.save()
@@ -210,8 +216,8 @@ def _handle_acva_message_internal(msg: dict):
             session.save()
             tpl_acva_opt8_speak(number)
         else:
-            session.state = "IDLE"
-            session.save()
+            send_acva_text(number, "Please select a valid option from the menu.")
+            tpl_acva_main_menu(number)
             return
 
     elif state == "OPT1_LEARN":
@@ -224,8 +230,8 @@ def _handle_acva_message_internal(msg: dict):
             session.save()
             tpl_acva_main_menu(number)
         else:
-            session.state = "IDLE"
-            session.save()
+            send_acva_text(number, "Please select a valid option.")
+            tpl_acva_opt1_learn(number)
             return
 
     elif state == "OPT2_ELIGIBILITY":
@@ -233,11 +239,15 @@ def _handle_acva_message_internal(msg: dict):
             session.state = "OPT2_ELIGIBILITY_OTHER"
             session.save()
             tpl_acva_opt2_eligibility_other(number)
-        else:
+        elif msg_type in ["interactive", "button"] or body_str in ["1", "2", "3", "4", "5", "6", "7"]:
             session.collected_info = {**session.collected_info, "Profession": display_body}
             session.state = "OPT2_ELIGIBILITY_RES"
             session.save()
             tpl_acva_opt2_eligibility_res(number)
+        else:
+            send_acva_text(number, "Please select a valid option.")
+            tpl_acva_opt2_eligibility(number)
+            return
 
     elif state == "OPT2_ELIGIBILITY_OTHER":
         session.collected_info = {**session.collected_info, "Profession": display_body}
@@ -249,8 +259,13 @@ def _handle_acva_message_internal(msg: dict):
         if "counsellor" in display_str or "team" in display_str:
             goto_handoff()
         else:
-            session.state = "IDLE"
-            session.save()
+            send_acva_text(number, "Please select a valid option.")
+            if state == "OPT2_ELIGIBILITY_RES":
+                tpl_acva_opt2_eligibility_res(number)
+            elif state == "OPT3_ADMISSION":
+                tpl_acva_opt3_admission(number)
+            elif state == "OPT4_FEES":
+                tpl_acva_opt4_fees(number)
             return
 
     elif state == "OPT5_CURRICULUM":
@@ -259,16 +274,16 @@ def _handle_acva_message_internal(msg: dict):
             session.save()
             tpl_acva_opt5_all(number)
         else:
-            session.state = "IDLE"
-            session.save()
+            send_acva_text(number, "Please select a valid option.")
+            tpl_acva_opt5_curriculum(number)
             return
 
     elif state == "OPT5_EXAM":
         if "team" in display_str:
             goto_handoff()
         else:
-            session.state = "IDLE"
-            session.save()
+            send_acva_text(number, "Please select a valid option.")
+            tpl_acva_opt5_all(number)
             return
 
     elif state == "OPT7_SUPPORT":
@@ -277,8 +292,7 @@ def _handle_acva_message_internal(msg: dict):
             session.save()
             tpl_acva_opt8_speak(number)
         elif "lms" in display_str or "1" in body_str:
-            session.state = "OPT7_DETAILS"
-            session.collected_info = {**session.collected_info, "SupportType": "LMS Access"}
+            session.state = "OPT7_ASK_ID_LMS"
             session.save()
             tpl_acva_opt7_all(number)
         elif "renewal" in display_str or "2" in body_str:
@@ -310,10 +324,9 @@ def _handle_acva_message_internal(msg: dict):
             session.save()
             send_acva_text(number, "Please provide a brief description of your request:")
         else:
-            session.state = "OPT7_DETAILS"
-            session.collected_info = {**session.collected_info, "SupportType": display_body}
-            session.save()
-            tpl_acva_opt7_all(number)
+            send_acva_text(number, "Please select a valid option from the support menu.")
+            tpl_acva_opt7_support(number)
+            return
 
     elif state == "OPT7_DETAILS":
         session.collected_info = {**session.collected_info, "SupportIdentifier": display_body}
@@ -329,32 +342,49 @@ def _handle_acva_message_internal(msg: dict):
 
     elif state.startswith("OPT7_ASK_ID_"):
         identifier = display_body.strip()
-        data = None
-        if state == "OPT7_ASK_ID_RENEWAL":
-            data = fetch_member_data(identifier, ["Affiliation Date", "Membership Expiration Date"])
-            if data:
-                tpl_acva_res_membership(number, str(data.get('Affiliation Date', 'NA')), str(data.get('Membership Expiration Date', 'NA')))
-        elif state == "OPT7_ASK_ID_EXAM":
-            data = fetch_member_data(identifier, ["Exam"])
-            if data:
-                tpl_acva_res_exam(number, str(data.get('Exam', 'NA')))
-        elif state == "OPT7_ASK_ID_CASE_STUDY":
-            data = fetch_member_data(identifier, ["Case Study"])
-            if data:
-                tpl_acva_res_case_study(number, str(data.get('Case Study', 'NA')))
-        elif state == "OPT7_ASK_ID_DUE_DATE":
-            data = fetch_member_data(identifier, ["Credentialing Due Date"])
-            if data:
-                tpl_acva_res_due_date(number, str(data.get('Credentialing Due Date', 'NA')))
-        elif state == "OPT7_ASK_ID_CERT":
-            data = fetch_member_data(identifier, ["Credential Type"])
-            if data:
-                tpl_acva_res_certificate(number, str(data.get('Credential Type', 'NA')))
-                
-        if not data:
-            send_acva_text(number, "Sorry, we couldn't find a record for this Member ID/Email. Please check and try again.")
-        session.state = "DONE"
-        session.save()
+        is_email = bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", identifier))
+        is_member_id = identifier.isdigit() and len(identifier) == 7
+        
+        if not is_email and not is_member_id:
+            send_acva_text(number, "Invalid format. Please enter a valid 7-digit numeric Membership ID or your registered Email ID.")
+        else:
+            data = None
+            if state == "OPT7_ASK_ID_RENEWAL":
+                data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "Membership Expiration Date"])
+                if data:
+                    full_name = f"{data.get('First Name', '')} {data.get('Last Name', '')}".strip() or 'NA'
+                    tpl_acva_res_membership(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), str(data.get('Membership Expiration Date', 'NA')))
+            elif state == "OPT7_ASK_ID_LMS":
+                data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "LMS"])
+                if data:
+                    full_name = f"{data.get('First Name', '')} {data.get('Last Name', '')}".strip() or 'NA'
+                    tpl_acva_res_lms(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), str(data.get('LMS', 'NA')))
+            elif state == "OPT7_ASK_ID_EXAM":
+                data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "Exam "])
+                if data:
+                    full_name = f"{data.get('First Name', '')} {data.get('Last Name', '')}".strip() or 'NA'
+                    tpl_acva_res_exam(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), str(data.get('Exam ', 'NA')))
+            elif state == "OPT7_ASK_ID_CASE_STUDY":
+                data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "Case Study"])
+                if data:
+                    full_name = f"{data.get('First Name', '')} {data.get('Last Name', '')}".strip() or 'NA'
+                    tpl_acva_res_case_study(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), str(data.get('Case Study', 'NA')))
+            elif state == "OPT7_ASK_ID_DUE_DATE":
+                data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "Credentialing Due Date"])
+                if data:
+                    full_name = f"{data.get('First Name', '')} {data.get('Last Name', '')}".strip() or 'NA'
+                    tpl_acva_res_due_date(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), str(data.get('Credentialing Due Date', 'NA')))
+            elif state == "OPT7_ASK_ID_CERT":
+                data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "Credential Type"])
+                if data:
+                    full_name = f"{data.get('First Name', '')} {data.get('Last Name', '')}".strip() or 'NA'
+                    tpl_acva_res_certificate(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), str(data.get('Credential Type', 'NA')))
+                    
+            if not data:
+                send_acva_text(number, "Sorry, we couldn't find a record for this Member ID/Email. Please check and try again.")
+            else:
+                session.state = "DONE"
+                session.save()
 
     elif state == "OPT8_SPEAK":
         if "email" in display_str:
@@ -365,8 +395,12 @@ def _handle_acva_message_internal(msg: dict):
             send_acva_text(number, "You can contact our support team on WhatsApp at +91 9016728639")
             session.state = "DONE"
             session.save()
-        else:
+        elif "call" in display_str or "team" in display_str or "counsellor" in display_str:
             goto_handoff()
+        else:
+            send_acva_text(number, "Please select a valid option.")
+            tpl_acva_opt8_speak(number)
+            return
 
     # --- Lead Collection Flow ---
     elif state == "COLLECT_NAME":
