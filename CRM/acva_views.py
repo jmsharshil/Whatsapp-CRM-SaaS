@@ -350,30 +350,30 @@ def _handle_acva_message_internal(msg: dict):
         else:
             data = None
             if state == "OPT7_ASK_ID_RENEWAL":
-                data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "Membership Expiration Date"])
+                data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "Membership Expiration"])
                 if data:
                     full_name = f"{data.get('First Name', '')} {data.get('Last Name', '')}".strip() or 'NA'
-                    tpl_acva_res_membership(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), str(data.get('Membership Expiration Date', 'NA')))
+                    tpl_acva_res_membership(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), str(data.get('Membership Expiration', 'NA')))
             elif state == "OPT7_ASK_ID_LMS":
                 data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "LMS"])
                 if data:
                     full_name = f"{data.get('First Name', '')} {data.get('Last Name', '')}".strip() or 'NA'
                     tpl_acva_res_lms(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), str(data.get('LMS', 'NA')))
             elif state == "OPT7_ASK_ID_EXAM":
-                data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "Exam "])
+                data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "Exam"])
                 if data:
                     full_name = f"{data.get('First Name', '')} {data.get('Last Name', '')}".strip() or 'NA'
-                    tpl_acva_res_exam(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), str(data.get('Exam ', 'NA')))
+                    tpl_acva_res_exam(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), str(data.get('Exam', 'NA')))
             elif state == "OPT7_ASK_ID_CASE_STUDY":
                 data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "Case Study"])
                 if data:
                     full_name = f"{data.get('First Name', '')} {data.get('Last Name', '')}".strip() or 'NA'
                     tpl_acva_res_case_study(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), str(data.get('Case Study', 'NA')))
             elif state == "OPT7_ASK_ID_DUE_DATE":
-                data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "Credentialing Due Date"])
+                data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "Credentialing Due"])
                 if data:
                     full_name = f"{data.get('First Name', '')} {data.get('Last Name', '')}".strip() or 'NA'
-                    tpl_acva_res_due_date(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), str(data.get('Credentialing Due Date', 'NA')))
+                    tpl_acva_res_due_date(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), str(data.get('Credentialing Due', 'NA')))
             elif state == "OPT7_ASK_ID_CERT":
                 data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "Credential Type"])
                 if data:
@@ -412,12 +412,22 @@ def _handle_acva_message_internal(msg: dict):
         tpl_acva_opt6_call_email(number)
         
     elif state == "COLLECT_EMAIL":
+        email_input = display_body.strip()
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email_input):
+            send_acva_text(number, "Please enter a valid email address.")
+            return
+
         session.collected_info = {**session.collected_info, "Email": display_body}
         session.state = "COLLECT_MOBILE"
         session.save()
         tpl_acva_opt6_call_number(number)
         
     elif state == "COLLECT_MOBILE":
+        mobile_input = display_body.strip().replace(" ", "").replace("+", "").replace("-", "")
+        if not (mobile_input.isdigit() and len(mobile_input) >= 10):
+            send_acva_text(number, "Please enter a valid mobile number.")
+            return
+
         session.collected_info = {**session.collected_info, "Mobile": display_body}
         session.state = "COLLECT_TIME"
         session.save()

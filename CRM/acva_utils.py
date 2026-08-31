@@ -175,7 +175,7 @@ def fetch_member_data(identifier: str, required_columns: list) -> dict:
             if match:
                 res = {}
                 for col in required_columns:
-                    val = row.get(col)
+                    val = row.get(col.strip())
                     if not val or not str(val).strip():
                         val = "NA"
                     res[col] = str(val).strip()
