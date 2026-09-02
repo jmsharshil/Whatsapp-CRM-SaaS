@@ -205,6 +205,30 @@ def tpl_acva_opt2_eligibility_other(to_number: str):
 def tpl_acva_opt2_eligibility_res(to_number: str):
     return send_acva_template(to_number, "acva_opt2_eligibility_res")
 
+def tpl_acva_eligibility_ca(to_number: str):
+    return send_acva_template(to_number, "acva_eligibility_ca")
+
+def tpl_acva_eligibility_accounting(to_number: str):
+    return send_acva_template(to_number, "acva_eligibility_accounting")
+
+def tpl_acva_eligibility_mba_finance(to_number: str):
+    return send_acva_template(to_number, "acva_eligibility_mba_finance")
+
+def tpl_acva_eligibility_cfa(to_number: str):
+    return send_acva_template(to_number, "acva_eligibility_cfa")
+
+def tpl_acva_eligibility_investment_banker(to_number: str):
+    return send_acva_template(to_number, "acva_eligibility_investment_banker")
+
+def tpl_acva_eligibility_valuation(to_number: str):
+    return send_acva_template(to_number, "acva_eligibility_valuation")
+
+def tpl_acva_eligibility_lawyer(to_number: str):
+    return send_acva_template(to_number, "acva_eligibility_lawyer")
+
+def tpl_acva_eligibility_other(to_number: str):
+    return send_acva_template(to_number, "acva_eligibility_other")
+
 def tpl_acva_opt3_admission(to_number: str):
     return send_acva_template(to_number, "acva_opt3_admission")
 
@@ -249,6 +273,9 @@ def tpl_acva_opt7_all(to_number: str):
 
 def tpl_acva_opt8_speak(to_number: str):
     return send_acva_template(to_number, "acva_opt8_speak_")
+
+def tpl_acva_emailus(to_number: str):
+    return send_acva_template(to_number, "acva_emailus")
 
 def tpl_acva_handoff(to_number: str):
     return send_acva_template(to_number, "acva_handoff")

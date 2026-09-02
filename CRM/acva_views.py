@@ -9,13 +9,16 @@ from CRM.acva_utils import (
     tpl_acva_opt5_curriculum, tpl_acva_opt7_support,
     tpl_acva_opt8_speak, tpl_acva_handoff, tpl_key_benefits,
     tpl_acva_opt2_eligibility_other, tpl_acva_opt5_all,
+    tpl_acva_eligibility_ca, tpl_acva_eligibility_accounting, tpl_acva_eligibility_mba_finance,
+    tpl_acva_eligibility_cfa, tpl_acva_eligibility_investment_banker, tpl_acva_eligibility_valuation,
+    tpl_acva_eligibility_lawyer, tpl_acva_eligibility_other,
     tpl_acva_opt6_call_name, tpl_acva_opt6_call_email,
     tpl_acva_opt6_call_number, tpl_acva_opt6_call_profession,
     tpl_acva_opt6_call_city, tpl_acva_opt6_call_option,
     tpl_acva_opt6_call_time, tpl_acva_opt6_call_confirmtime,
     tpl_acva_opt7_all, fetch_member_data,
     tpl_acva_res_membership, tpl_acva_res_lms, tpl_acva_res_exam, tpl_acva_res_case_study,
-    tpl_acva_res_due_date, tpl_acva_res_certificate
+    tpl_acva_res_due_date, tpl_acva_res_certificate, tpl_acva_emailus
 )
 from django.conf import settings
 
@@ -163,7 +166,7 @@ def _handle_acva_message_internal(msg: dict):
         tpl_acva_opt6_call_name(number)
 
     # Flow Logic
-    if "back to main menu" in display_str or "main menu" in display_str:
+    if "back to main menu" in display_str or "main menu" in display_str or body_str in ["main_menu", "back_to_main_menu"]:
         session.state = "MENU_SELECTION"
         session.collected_info = {}
         session.save()
@@ -243,7 +246,22 @@ def _handle_acva_message_internal(msg: dict):
             session.collected_info = {**session.collected_info, "Profession": display_body}
             session.state = "OPT2_ELIGIBILITY_RES"
             session.save()
-            tpl_acva_opt2_eligibility_res(number)
+            if "ca" in display_str or "chartered accountant" in display_str or body_str == "1":
+                tpl_acva_eligibility_ca(number)
+            elif "cpa" in display_str or "acca" in display_str or "cma" in display_str or body_str == "2":
+                tpl_acva_eligibility_accounting(number)
+            elif "mba" in display_str or body_str == "3":
+                tpl_acva_eligibility_mba_finance(number)
+            elif "cfa" in display_str or body_str == "4":
+                tpl_acva_eligibility_cfa(number)
+            elif "investment" in display_str or "banker" in display_str or body_str == "5":
+                tpl_acva_eligibility_investment_banker(number)
+            elif "valuation" in display_str or body_str == "6":
+                tpl_acva_eligibility_valuation(number)
+            elif "lawyer" in display_str or body_str == "7":
+                tpl_acva_eligibility_lawyer(number)
+            else:
+                tpl_acva_eligibility_other(number)
         else:
             send_acva_text(number, "Please select a valid option.")
             tpl_acva_opt2_eligibility(number)
@@ -253,7 +271,7 @@ def _handle_acva_message_internal(msg: dict):
         session.collected_info = {**session.collected_info, "Profession": display_body}
         session.state = "OPT2_ELIGIBILITY_RES"
         session.save()
-        tpl_acva_opt2_eligibility_res(number)
+        tpl_acva_eligibility_other(number)
 
     elif state == "OPT2_ELIGIBILITY_RES" or state == "OPT3_ADMISSION" or state == "OPT4_FEES":
         if "counsellor" in display_str or "team" in display_str:
@@ -388,7 +406,7 @@ def _handle_acva_message_internal(msg: dict):
 
     elif state == "OPT8_SPEAK":
         if "email" in display_str:
-            send_acva_text(number, "You can reach us at admissions@acvaindia.com")
+            tpl_acva_emailus(number)
             session.state = "DONE"
             session.save()
         elif "whatsapp" in display_str:
@@ -401,6 +419,10 @@ def _handle_acva_message_internal(msg: dict):
             send_acva_text(number, "Please select a valid option.")
             tpl_acva_opt8_speak(number)
             return
+
+    elif state == "DONE":
+        send_acva_text(number, "Your request is completed. Please click 'Back To Main Menu' or type 'menu' to return to the main menu.")
+        return
 
     # --- Lead Collection Flow ---
     elif state == "COLLECT_NAME":
