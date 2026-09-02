@@ -102,10 +102,12 @@ def generate_avantika_image(contact, active_template) -> str:
         img = Image.open(f).convert("RGB")
         draw = ImageDraw.Draw(img)
         
-        def get_font(size):
+        def get_specific_font(font_filename, size):
             from django.conf import settings
             import os
+            primary_path = os.path.join(settings.BASE_DIR, 'CRM', 'fonts', font_filename)
             font_paths = [
+                primary_path,
                 os.path.join(settings.BASE_DIR, 'CRM', 'fonts', 'Roboto-Regular.ttf'),
                 r"C:\Windows\Fonts\segoeuib.ttf",
                 r"C:\Windows\Fonts\segoeui.ttf",
@@ -126,15 +128,21 @@ def generate_avantika_image(contact, active_template) -> str:
                     continue
             return ImageFont.load_default()
             
-        font = get_font(active_template.font_size)
+        name_font = get_specific_font('Montserrat-ExtraBold.ttf', active_template.font_size)
+        
+        # Fallback to calculated defaults if DB doesn't have the new fields yet
+        p_font_size = getattr(active_template, 'phone_font_size', max(12, int(active_template.font_size * 0.75)))
+        a_font_size = getattr(active_template, 'address_font_size', max(12, int(active_template.font_size * 0.75)))
+        
+        phone_font = get_specific_font('Montserrat-SemiBold.ttf', p_font_size)
+        address_font = get_specific_font('Montserrat-Medium.ttf', a_font_size)
+        
         display_name = contact.name.strip()
         
-        draw.text((active_template.name_x, active_template.name_y), display_name, fill=active_template.text_color, font=font, anchor="mt")
+        draw.text((active_template.name_x, active_template.name_y), display_name, fill=active_template.text_color, font=name_font, anchor="mt")
         
-        phone_font = get_font(max(12, int(active_template.font_size * 0.75)))
-        
-        name_bbox = draw.textbbox((active_template.name_x, active_template.name_y), display_name, font=font, anchor="mt")
-        phone_y = name_bbox[3] + 5 
+        name_bbox = draw.textbbox((active_template.name_x, active_template.name_y), display_name, font=name_font, anchor="mt")
+        phone_y = name_bbox[3] + 12
         
         if len(clean_phone) == 10:
             formatted_phone = f"+91 {clean_phone}"
@@ -148,8 +156,8 @@ def generate_avantika_image(contact, active_template) -> str:
         address = getattr(contact, "address", "")
         if address:
             phone_bbox = draw.textbbox((active_template.name_x, phone_y), formatted_phone, font=phone_font, anchor="mt")
-            address_y = phone_bbox[3] + 5
-            draw.text((active_template.name_x, address_y), address.strip(), fill=active_template.text_color, font=phone_font, anchor="mt")
+            address_y = phone_bbox[3] + 12
+            draw.text((active_template.name_x, address_y), address.strip(), fill=active_template.text_color, font=address_font, anchor="mt")
         
         buffer = BytesIO()
         img.save(buffer, format="JPEG")

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <title>Avantika Template Admin</title>
@@ -50,7 +51,7 @@
             border: 1px solid var(--border);
             transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
-        
+
         .card:hover {
             box-shadow: var(--shadow-lg);
         }
@@ -95,7 +96,9 @@
             display: block;
         }
 
-        input[type="number"], input[type="text"], input[type="file"] {
+        input[type="number"],
+        input[type="text"],
+        input[type="file"] {
             border: 1px solid var(--border);
             border-radius: var(--radius-md);
             padding: 10px 14px;
@@ -105,10 +108,14 @@
             transition: border-color 0.2s ease, box-shadow 0.2s ease;
             background-color: #F9FAFB;
         }
-        
-        input[type="number"] { width: 120px; }
 
-        input[type="number"]:focus, input[type="text"]:focus, input[type="file"]:focus {
+        input[type="number"] {
+            width: 120px;
+        }
+
+        input[type="number"]:focus,
+        input[type="text"]:focus,
+        input[type="file"]:focus {
             outline: none;
             border-color: var(--primary);
             box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2);
@@ -125,9 +132,11 @@
             padding: 2px;
             background: white;
         }
+
         input[type="color"]::-webkit-color-swatch-wrapper {
             padding: 0;
         }
+
         input[type="color"]::-webkit-color-swatch {
             border: none;
             border-radius: 4px;
@@ -161,7 +170,7 @@
             font-weight: bold;
             font-size: 24px;
             display: none;
-            text-shadow: 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 0px 2px 4px rgba(0,0,0,0.5);
+            text-shadow: 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 0px 2px 4px rgba(0, 0, 0, 0.5);
             pointer-events: none;
             white-space: nowrap;
             transform: translateX(-50%);
@@ -192,8 +201,10 @@
             color: white;
             box-shadow: 0 4px 6px rgba(79, 70, 229, 0.25);
         }
-        
-        .btn-primary:hover { background-color: var(--primary-hover); }
+
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+        }
 
         .btn-danger {
             background-color: var(--danger);
@@ -201,7 +212,9 @@
             box-shadow: 0 4px 6px rgba(239, 68, 68, 0.25);
         }
 
-        .btn-danger:hover { background-color: var(--danger-hover); }
+        .btn-danger:hover {
+            background-color: var(--danger-hover);
+        }
 
         .alert-success {
             background-color: #DEF7EC;
@@ -214,9 +227,14 @@
             list-style: none;
         }
 
-        .alert-success li { margin-bottom: 4px; }
-        .alert-success li:last-child { margin-bottom: 0; }
-        
+        .alert-success li {
+            margin-bottom: 4px;
+        }
+
+        .alert-success li:last-child {
+            margin-bottom: 0;
+        }
+
         hr {
             border: none;
             height: 1px;
@@ -228,7 +246,7 @@
 
 <body>
     <div class="container">
-        
+
         {% if messages %}
         <ul class="alert-success">
             {% for message in messages %}
@@ -241,7 +259,8 @@
             <h2>✨ Avantika Template Setup</h2>
             <p class="instructions">
                 <strong>Step 1:</strong> Upload your base image.<br>
-                <strong>Step 2:</strong> Click anywhere on the image below to set the precise starting position for the User's Name.<br>
+                <strong>Step 2:</strong> Click anywhere on the image below to set the precise starting position for the
+                User's Name.<br>
                 <strong>Step 3:</strong> Adjust the Font Size and Color to match your design!
             </p>
 
@@ -252,49 +271,70 @@
                     <label>Upload Base Image</label>
                     <input type="file" name="base_image" id="imageInput" accept="image/*" {% if not active_template %}required{% endif %}>
                     {% if active_template %}
-                    <small style="color: var(--text-muted); display: block; margin-top: 4px;">Leave empty to keep the currently active image.</small>
+                    <small style="color: var(--text-muted); display: block; margin-top: 4px;">Leave empty to keep the
+                        currently active image.</small>
                     {% endif %}
                 </div>
 
                 <div class="image-container">
                     {% if active_template and active_template.base_image %}
-                        <img id="preview" src="{{ active_template.base_image.url }}" alt="Image Preview" style="display: block;">
-                        <div id="nameMarker" class="marker" style="display: none; line-height: 1.2;">
-                            <div id="markerName">[Name]</div>
-                            <div id="markerNumber" style="font-size: 75%; opacity: 0.9;">[Number]</div>
-                            <div id="markerAddress" style="font-size: 75%; opacity: 0.9;">[Address]</div>
+                    <img id="preview" src="{{ active_template.base_image.url }}" alt="Image Preview"
+                        style="display: block;">
+                        <div id="nameMarker" class="marker" style="display: none; line-height: 1.2; font-family: 'Montserrat', sans-serif;">
+                            <div id="markerName" style="font-weight: 800;">[Name]</div>
+                            <div id="markerNumber" style="font-size: 75%; font-weight: 600; opacity: 1; margin-top: 4px;">[Number]</div>
+                            <div id="markerAddress" style="font-size: 75%; font-weight: 500; opacity: 1; margin-top: 4px;">[Address]</div>
                         </div>
-                        <div id="placeholderText" style="display: none; padding: 40px; color: #94A3B8; font-weight: 500;">Image Preview Area</div>
+                    <div id="placeholderText" style="display: none; padding: 40px; color: #94A3B8; font-weight: 500;">
+                        Image Preview Area</div>
                     {% else %}
-                        <img id="preview" src="#" alt="Image Preview">
-                        <div id="nameMarker" class="marker" style="line-height: 1.2;">
-                            <div id="markerName">[Name]</div>
-                            <div id="markerNumber" style="font-size: 75%; opacity: 0.9;">[Number]</div>
-                            <div id="markerAddress" style="font-size: 75%; opacity: 0.9;">[Address]</div>
-                        </div>
-                        <div id="placeholderText" style="padding: 40px; color: #94A3B8; font-weight: 500;">Image Preview Area</div>
+                    <img id="preview" src="#" alt="Image Preview">
+                    <div id="nameMarker" class="marker" style="line-height: 1.2; font-family: 'Montserrat', sans-serif;">
+                        <div id="markerName" style="font-weight: 800;">[Name]</div>
+                        <div id="markerNumber" style="font-size: 75%; font-weight: 600; opacity: 1; margin-top: 4px;">[Number]</div>
+                        <div id="markerAddress" style="font-size: 75%; font-weight: 500; opacity: 1; margin-top: 4px;">[Address]</div>
+                    </div>
+                    <div id="placeholderText" style="padding: 40px; color: #94A3B8; font-weight: 500;">Image Preview
+                        Area</div>
                     {% endif %}
                 </div>
 
                 <div class="form-row form-group">
                     <div>
                         <label>Name X Coordinate</label>
-                        <input type="number" name="name_x" id="nameX" value="{{ active_template.name_x|default:'100' }}" readonly required>
+                        <input type="number" name="name_x" id="nameX" value="{{ active_template.name_x|default:'100' }}"
+                            readonly required>
                     </div>
                     <div>
                         <label>Name Y Coordinate</label>
-                        <input type="number" name="name_y" id="nameY" value="{{ active_template.name_y|default:'100' }}" readonly required>
+                        <input type="number" name="name_y" id="nameY" value="{{ active_template.name_y|default:'100' }}"
+                            readonly required>
+                    </div>
+                    <div>
+                        <label>Name Font Size</label>
+                        <input type="number" name="font_size" id="fontSizeInput"
+                            value="{{ active_template.font_size|default:'60' }}" required>
                     </div>
                 </div>
 
                 <div class="form-row form-group">
                     <div>
-                        <label>Font Size</label>
-                        <input type="number" name="font_size" id="fontSizeInput" value="{{ active_template.font_size|default:'60' }}" required>
+                        <label>Phone Font Size</label>
+                        <input type="number" name="phone_font_size" id="phoneFontSizeInput"
+                            value="{{ active_template.phone_font_size|default:'45' }}" required>
                     </div>
                     <div>
+                        <label>Address Font Size</label>
+                        <input type="number" name="address_font_size" id="addressFontSizeInput"
+                            value="{{ active_template.address_font_size|default:'45' }}" required>
+                    </div>
+                </div>
+
+                <div class="form-row form-group">
+                    <div>
                         <label>Text Color</label>
-                        <input type="color" name="text_color" id="textColorInput" value="{{ active_template.text_color|default:'#000000' }}" required>
+                        <input type="color" name="text_color" id="textColorInput"
+                            value="{{ active_template.text_color|default:'#000000' }}" required>
                     </div>
                 </div>
 
@@ -307,7 +347,8 @@
         <div class="card" style="border-top: 4px solid var(--primary);">
             <h2>📁 Upload Contacts (CSV)</h2>
             <p style="color: var(--text-muted); margin-bottom: 24px;">
-                Upload a CSV file containing phone numbers and names to populate the AvantikaContact database. The bot will only generate images for these registered contacts.
+                Upload a CSV file containing phone numbers and names to populate the AvantikaContact database. The bot
+                will only generate images for these registered contacts.
             </p>
             <form action="/avantika-upload-csv/" method="POST" enctype="multipart/form-data">
                 {% csrf_token %}
@@ -315,7 +356,8 @@
                 <div class="form-group" style="margin-bottom: 16px;">
                     <label>CSV File</label>
                     <input type="file" name="csv_file" accept=".csv" required>
-                    <small style="display: block; color: var(--text-muted); margin-top: 4px;">Format: First column Phone Number, Second column Name.</small>
+                    <small style="display: block; color: var(--text-muted); margin-top: 4px;">Format: First column Phone
+                        Number, Second column Name.</small>
                 </div>
                 <button type="submit" class="btn-primary" style="width: 100%;">
                     Upload Contacts
@@ -326,7 +368,8 @@
         <div class="card" style="border-top: 4px solid var(--danger);">
             <h2>🚀 Outbound Campaign</h2>
             <p style="color: var(--text-muted); margin-bottom: 24px;">
-                Trigger the Meta Marketing API to generate and send personalized templates to ALL users in the <strong>AvantikaContact</strong> database instantly.
+                Trigger the Meta Marketing API to generate and send personalized templates to ALL users in the
+                <strong>AvantikaContact</strong> database instantly.
             </p>
             <form action="/avantika-campaign/" method="POST" onsubmit="return handleCampaignSubmit(this);">
                 {% csrf_token %}
@@ -355,15 +398,21 @@
             <p style="color: var(--text-muted); margin-bottom: 24px;">
                 View the status of your recent outbound campaigns.
             </p>
-            <button type="button" class="btn-primary" style="width: 100%; margin-bottom: 16px; background-color: #10B981; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.25);" onclick="loadHistory(this)">
+            <button type="button" class="btn-primary"
+                style="width: 100%; margin-bottom: 16px; background-color: #10B981; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.25);"
+                onclick="loadHistory(this)">
                 Load History
             </button>
             <div id="historyStats" style="display: none; margin-bottom: 16px; font-weight: 500;">
-                <span style="color: #03543F; background: #DEF7EC; padding: 4px 8px; border-radius: 4px;">Sent: <span id="sentCount">0</span></span>
-                <span style="color: #991B1B; background: #FEE2E2; padding: 4px 8px; border-radius: 4px; margin-left: 8px;">Failed: <span id="failedCount">0</span></span>
+                <span style="color: #03543F; background: #DEF7EC; padding: 4px 8px; border-radius: 4px;">Sent: <span
+                        id="sentCount">0</span></span>
+                <span
+                    style="color: #991B1B; background: #FEE2E2; padding: 4px 8px; border-radius: 4px; margin-left: 8px;">Failed:
+                    <span id="failedCount">0</span></span>
             </div>
             <div style="overflow-x: auto;">
-                <table id="historyTable" style="width: 100%; border-collapse: collapse; display: none; text-align: left; font-size: 0.9rem;">
+                <table id="historyTable"
+                    style="width: 100%; border-collapse: collapse; display: none; text-align: left; font-size: 0.9rem;">
                     <thead>
                         <tr style="border-bottom: 2px solid var(--border);">
                             <th style="padding: 12px 8px;">Run ID</th>
@@ -398,6 +447,12 @@
             const scaleY = preview.height / preview.naturalHeight;
             nameMarker.style.left = (parseInt(nameX.value) * scaleX) + 'px';
             nameMarker.style.top = (parseInt(nameY.value) * scaleY) + 'px';
+
+            const phoneMarker = document.getElementById('markerNumber');
+            const addressMarker = document.getElementById('markerAddress');
+
+            // Adjust relative positioning of phone and address if desired, though we'll just keep it simple here
+
             updateMarkerStyle();
             nameMarker.style.display = 'block';
         }
@@ -417,24 +472,35 @@
             const scale = preview.width / preview.naturalWidth;
             const baseSize = parseInt(fontSizeInput.value) || 60;
             const displaySize = Math.max(4, Math.round(baseSize * scale));
-            
+
             nameMarker.style.fontSize = displaySize + 'px';
             nameMarker.style.color = textColorInput.value;
+
+            const phoneSize = parseInt(document.getElementById('phoneFontSizeInput').value) || 45;
+            const addressSize = parseInt(document.getElementById('addressFontSizeInput').value) || 45;
+
+            const phoneDisplaySize = Math.max(4, Math.round(phoneSize * scale));
+            const addressDisplaySize = Math.max(4, Math.round(addressSize * scale));
+
+            document.getElementById('markerNumber').style.fontSize = phoneDisplaySize + 'px';
+            document.getElementById('markerAddress').style.fontSize = addressDisplaySize + 'px';
         }
 
         fontSizeInput.addEventListener('input', updateMarkerStyle);
+        document.getElementById('phoneFontSizeInput').addEventListener('input', updateMarkerStyle);
+        document.getElementById('addressFontSizeInput').addEventListener('input', updateMarkerStyle);
         textColorInput.addEventListener('input', updateMarkerStyle);
 
-        imageInput.addEventListener('change', function() {
+        imageInput.addEventListener('change', function () {
             const file = this.files[0];
             if (file) {
                 const reader = new FileReader();
-                reader.onload = function(e) {
+                reader.onload = function (e) {
                     preview.src = e.target.result;
                     preview.style.display = 'block';
                     placeholderText.style.display = 'none';
                     nameMarker.style.display = 'none';
-                    
+
                     // wait for image to load to get naturalWidth
                     preview.onload = updateMarkerStyle;
                 }
@@ -442,7 +508,7 @@
             }
         });
 
-        preview.addEventListener('click', function(e) {
+        preview.addEventListener('click', function (e) {
             const rect = preview.getBoundingClientRect();
             const displayX = e.clientX - rect.left;
             const displayY = e.clientY - rect.top;
@@ -463,24 +529,24 @@
         function loadHistory(btn) {
             btn.textContent = 'Loading...';
             btn.disabled = true;
-            
+
             fetch('/api/avantika/history/?auth={{ auth_token }}')
                 .then(response => response.json())
                 .then(data => {
                     document.getElementById('sentCount').textContent = data.total_sent;
                     document.getElementById('failedCount').textContent = data.total_failed;
                     document.getElementById('historyStats').style.display = 'block';
-                    
+
                     const tbody = document.getElementById('historyBody');
                     tbody.innerHTML = '';
-                    
+
                     if (data.history && data.history.length > 0) {
                         data.history.forEach(item => {
                             const tr = document.createElement('tr');
                             tr.style.borderBottom = '1px solid var(--border)';
-                            
+
                             const statusColor = item.status === 'Sent' ? '#10B981' : (item.status === 'Failed' ? '#EF4444' : 'var(--text-main)');
-                            
+
                             tr.innerHTML = `
                                 <td style="padding: 12px 8px;">${item.campaign_run_id || '-'}</td>
                                 <td style="padding: 12px 8px;">${item.name || '-'}</td>
@@ -509,4 +575,5 @@
         }
     </script>
 </body>
+
 </html>

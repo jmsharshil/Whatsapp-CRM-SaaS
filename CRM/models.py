@@ -603,6 +603,10 @@ class AvantikaTemplate(models.Model):
     name_x = models.IntegerField(default=100)
     name_y = models.IntegerField(default=100)
     font_size = models.IntegerField(default=60)
+    
+    phone_font_size = models.IntegerField(default=45)
+    address_font_size = models.IntegerField(default=45)
+    
     text_color = models.CharField(max_length=20, default="#000000")
     is_active = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)

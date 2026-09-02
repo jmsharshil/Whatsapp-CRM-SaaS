@@ -2141,6 +2141,8 @@ def avantika_template_view(request):
         name_x = request.POST.get("name_x", 100)
         name_y = request.POST.get("name_y", 100)
         font_size = request.POST.get("font_size", 60)
+        phone_font_size = request.POST.get("phone_font_size", 45)
+        address_font_size = request.POST.get("address_font_size", 45)
         text_color = request.POST.get("text_color", "#000000")
         
         active_template = AvantikaTemplate.objects.filter(is_active=True).first()
@@ -2152,6 +2154,8 @@ def avantika_template_view(request):
                 name_x=int(name_x),
                 name_y=int(name_y),
                 font_size=int(font_size),
+                phone_font_size=int(phone_font_size),
+                address_font_size=int(address_font_size),
                 text_color=text_color,
                 is_active=True
             )
@@ -2162,6 +2166,8 @@ def avantika_template_view(request):
             active_template.name_x = int(name_x)
             active_template.name_y = int(name_y)
             active_template.font_size = int(font_size)
+            active_template.phone_font_size = int(phone_font_size)
+            active_template.address_font_size = int(address_font_size)
             active_template.text_color = text_color
             active_template.save()
             if is_api:
