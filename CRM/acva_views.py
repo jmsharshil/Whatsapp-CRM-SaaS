@@ -167,7 +167,7 @@ def _handle_acva_message_internal(msg: dict):
         tpl_acva_opt6_call_name(number)
 
     # Flow Logic
-    if "back to main menu" in display_str or "main menu" in display_str or body_str in ["main_menu", "back_to_main_menu"]:
+    if "back to main menu" in display_str or "main menu" in display_str or display_str.strip() == "menu" or body_str in ["main_menu", "back_to_main_menu"]:
         session.state = "MENU_SELECTION"
         session.collected_info = {}
         session.save()
@@ -247,10 +247,10 @@ def _handle_acva_message_internal(msg: dict):
             session.collected_info = {**session.collected_info, "Profession": display_body}
             session.state = "OPT2_ELIGIBILITY_RES"
             session.save()
-            if "ca" in display_str or "chartered accountant" in display_str or body_str == "1":
-                tpl_acva_eligibility_ca(number)
-            elif "cpa" in display_str or "acca" in display_str or "cma" in display_str or body_str == "2":
+            if "cpa" in display_str or "acca" in display_str or "cma" in display_str or body_str == "2":
                 tpl_acva_eligibility_accounting(number)
+            elif "chartered accountant" in display_str or display_str.strip() == "ca" or body_str == "1":
+                tpl_acva_eligibility_ca(number)
             elif "mba" in display_str or body_str == "3":
                 tpl_acva_eligibility_mba_finance(number)
             elif "cfa" in display_str or body_str == "4":
@@ -369,10 +369,10 @@ def _handle_acva_message_internal(msg: dict):
         else:
             data = None
             if state == "OPT7_ASK_ID_RENEWAL":
-                data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "Membership Expiration"])
+                data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "Membership Expiration Date"])
                 if data:
                     full_name = f"{data.get('First Name', '')} {data.get('Last Name', '')}".strip() or 'NA'
-                    tpl_acva_res_membership(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), str(data.get('Membership Expiration', 'NA')))
+                    tpl_acva_res_membership(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), str(data.get('Membership Expiration Date', 'NA')))
             elif state == "OPT7_ASK_ID_LMS":
                 data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "LMS"])
                 if data:
@@ -397,10 +397,10 @@ def _handle_acva_message_internal(msg: dict):
                     else:
                         tpl_acva_res_case_study(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), status)
             elif state == "OPT7_ASK_ID_DUE_DATE":
-                data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "Credentialing Due"])
+                data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "Credentialing Due Date"])
                 if data:
                     full_name = f"{data.get('First Name', '')} {data.get('Last Name', '')}".strip() or 'NA'
-                    tpl_acva_res_due_date(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), str(data.get('Credentialing Due', 'NA')))
+                    tpl_acva_res_due_date(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), str(data.get('Credentialing Due Date', 'NA')))
             elif state == "OPT7_ASK_ID_CERT":
                 data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "Credential Type"])
                 if data:
