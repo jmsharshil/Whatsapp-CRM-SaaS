@@ -18,7 +18,8 @@ from CRM.acva_utils import (
     tpl_acva_opt6_call_time, tpl_acva_opt6_call_confirmtime,
     tpl_acva_opt7_all, fetch_member_data,
     tpl_acva_res_membership, tpl_acva_res_lms, tpl_acva_res_exam, tpl_acva_res_case_study,
-    tpl_acva_res_due_date, tpl_acva_res_certificate, tpl_acva_emailus
+    tpl_acva_res_due_date, tpl_acva_res_certificate, tpl_acva_emailus,
+    tpl_acva_res_exam_pending, tpl_acva_res_case_study_pending, tpl_acva_exam_booking, tpl_acva_case_study
 )
 from django.conf import settings
 
@@ -381,12 +382,20 @@ def _handle_acva_message_internal(msg: dict):
                 data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "Exam"])
                 if data:
                     full_name = f"{data.get('First Name', '')} {data.get('Last Name', '')}".strip() or 'NA'
-                    tpl_acva_res_exam(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), str(data.get('Exam', 'NA')))
+                    status = str(data.get('Exam', 'NA'))
+                    if status.lower() == 'pending':
+                        tpl_acva_res_exam_pending(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), status)
+                    else:
+                        tpl_acva_res_exam(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), status)
             elif state == "OPT7_ASK_ID_CASE_STUDY":
                 data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "Case Study"])
                 if data:
                     full_name = f"{data.get('First Name', '')} {data.get('Last Name', '')}".strip() or 'NA'
-                    tpl_acva_res_case_study(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), str(data.get('Case Study', 'NA')))
+                    status = str(data.get('Case Study', 'NA'))
+                    if status.lower() == 'pending':
+                        tpl_acva_res_case_study_pending(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), status)
+                    else:
+                        tpl_acva_res_case_study(number, full_name, str(data.get('Member ID', 'NA')), str(data.get('Email ID', 'NA')), str(data.get('Affiliation Date', 'NA')), status)
             elif state == "OPT7_ASK_ID_DUE_DATE":
                 data = fetch_member_data(identifier, ["First Name", "Last Name", "Member ID", "Email ID", "Affiliation Date", "Credentialing Due"])
                 if data:
@@ -421,7 +430,12 @@ def _handle_acva_message_internal(msg: dict):
             return
 
     elif state == "DONE":
-        send_acva_text(number, "Your request is completed. Please click 'Back To Main Menu' or type 'menu' to return to the main menu.")
+        if "book" in display_str or "exam" in display_str:
+            tpl_acva_exam_booking(number)
+        elif "case study" in display_str:
+            tpl_acva_case_study(number)
+        else:
+            send_acva_text(number, "Your request is completed. Please click 'Back To Main Menu' or type 'menu' to return to the main menu.")
         return
 
     # --- Lead Collection Flow ---

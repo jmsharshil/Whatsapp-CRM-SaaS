@@ -322,6 +322,22 @@ def tpl_acva_res_exam(to_number: str, name: str, member_id: str, email: str, aff
     }]
     return send_acva_template(to_number, "acva_res_exam", components)
 
+def tpl_acva_res_exam_pending(to_number: str, name: str, member_id: str, email: str, aff_date: str, status: str):
+    components = [{
+        "type": "body",
+        "parameters": [
+            {"type": "text", "text": name},
+            {"type": "text", "text": member_id},
+            {"type": "text", "text": email},
+            {"type": "text", "text": aff_date},
+            {"type": "text", "text": status}
+        ]
+    }]
+    return send_acva_template(to_number, "acva_res_exam_pending", components)
+
+def tpl_acva_exam_booking(to_number: str):
+    return send_acva_template(to_number, "acva_exam_booking")
+
 def tpl_acva_res_case_study(to_number: str, name: str, member_id: str, email: str, aff_date: str, status: str):
     components = [{
         "type": "body",
@@ -334,6 +350,22 @@ def tpl_acva_res_case_study(to_number: str, name: str, member_id: str, email: st
         ]
     }]
     return send_acva_template(to_number, "acva_res_case_study", components)
+
+def tpl_acva_res_case_study_pending(to_number: str, name: str, member_id: str, email: str, aff_date: str, status: str):
+    components = [{
+        "type": "body",
+        "parameters": [
+            {"type": "text", "text": name},
+            {"type": "text", "text": member_id},
+            {"type": "text", "text": email},
+            {"type": "text", "text": aff_date},
+            {"type": "text", "text": status}
+        ]
+    }]
+    return send_acva_template(to_number, "acva_res_case_study_pending", components)
+
+def tpl_acva_case_study(to_number: str):
+    return send_acva_template(to_number, "acva_case_study")
 
 def tpl_acva_res_due_date(to_number: str, name: str, member_id: str, email: str, aff_date: str, date: str):
     components = [{
