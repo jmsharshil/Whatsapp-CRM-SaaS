@@ -657,7 +657,7 @@ def send_gs_document(to: str, doc_url: str, filename: str) -> bool:
     })
 
 def tpl_gs_talk_to_sales(to: str) -> bool:
-    text = "Thank you for contacting Globe Star Engineers.\n\n You will receive a call shortly.\n\n Office Hours:\nMon–Sat | 10:00 AM – 6:30 PM"
+    text = "Thank you for contacting Globe Star Engineers.\n\n You will receive a call shortly.\n\n Office Hours:\nMon–Sat | 10:00 AM – 6:30 PM\nEither you can call to:- +91 95374 19590 or visit our website :- https://www.globepump.com"
     return send_gs_text(to, text)
 
 def tpl_gs_ask_capacity(to: str) -> bool:
