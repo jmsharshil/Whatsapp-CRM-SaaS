@@ -722,7 +722,7 @@ class MetaPricingAnalyticsAPIView(APIView):
         if client_user:
             # Client User - can ONLY see their own data
             if client_user.waba_connected():
-                results.append(self._fetch_analytics(client_user.waba_id, client_user.id, start, end, waba_name=client_user.waba_name or client_user.name))
+                results.append(self._fetch_analytics(client_user.waba_id, client_user.phone_number_id, start, end, waba_name=client_user.waba_name or client_user.name))
         elif org:
             # Tech Provider User
             # 1. Organization's own WABA
@@ -730,7 +730,7 @@ class MetaPricingAnalyticsAPIView(APIView):
                 try:
                     waba = org.waba_account
                     if waba.is_connected() and (not target_waba_id or waba.waba_id == target_waba_id):
-                        results.append(self._fetch_analytics(waba.waba_id, None, start, end, waba_name=waba.waba_name or "Organization WABA"))
+                        results.append(self._fetch_analytics(waba.waba_id, waba.phone_number_id, start, end, waba_name=waba.waba_name or "Organization WABA"))
                 except WABAAccount.DoesNotExist:
                     pass
 
@@ -749,11 +749,11 @@ class MetaPricingAnalyticsAPIView(APIView):
                 
             for client in clients:
                 if client.waba_connected():
-                    results.append(self._fetch_analytics(client.waba_id, client.id, start, end, waba_name=client.waba_name or client.name))
+                    results.append(self._fetch_analytics(client.waba_id, client.phone_number_id, start, end, waba_name=client.waba_name or client.name))
 
         return Response({"status": "success", "data": results})
 
-    def _fetch_analytics(self, waba_id, client_id, start, end, waba_name=""):
+    def _fetch_analytics(self, waba_id, phone_number_id, start, end, waba_name=""):
         from datetime import datetime
         from django.db.models import Count, Q
         from CRM.models import Message
@@ -771,17 +771,16 @@ class MetaPricingAnalyticsAPIView(APIView):
             }
             
             # Base query for delivered/read messages in time range
-            qs = Message.objects.filter(
-                timestamp__gte=start_date,
-                timestamp__lte=end_date,
-                status__in=['delivered', 'read'],
-                direction='outbound'
-            )
-            
-            if client_id:
-                qs = qs.filter(client_id=client_id)
+            if phone_number_id:
+                qs = Message.objects.filter(
+                    Q(conversation__client__phone_number_id=phone_number_id) | Q(conversation__phone_number_id=phone_number_id),
+                    timestamp__gte=start_date,
+                    timestamp__lte=end_date,
+                    status__in=['delivered', 'read'],
+                    direction='outbound'
+                )
             else:
-                qs = qs.filter(client__isnull=True)
+                qs = Message.objects.none()
                 
             marketing_count = qs.filter(template__category="MARKETING").count()
             utility_count = qs.filter(template__category="UTILITY").count()
