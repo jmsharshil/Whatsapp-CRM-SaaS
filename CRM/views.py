@@ -726,16 +726,16 @@ class MetaPricingAnalyticsAPIView(APIView):
         elif org:
             # Tech Provider User
             # 1. Organization's own WABA
-            if not target_client_id and not target_waba_id:
+            if not target_client_id:
                 try:
                     waba = org.waba_account
-                    if waba.is_connected():
+                    if waba.is_connected() and (not target_waba_id or waba.waba_id == target_waba_id):
                         results.append(self._fetch_analytics(waba.waba_id, None, start, end, waba_name=waba.waba_name or "Organization WABA"))
                 except WABAAccount.DoesNotExist:
                     pass
 
             # 2. Clients under this Organization
-            clients = ClientAccount.objects.filter(tech_provider=org, status="active")
+            clients = ClientAccount.objects.filter(tech_provider=org)
             
             # Apply filters if requested
             if target_client_id:
