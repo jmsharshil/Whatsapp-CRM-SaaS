@@ -677,6 +677,146 @@ class MetaDashboardAPIView(APIView):
         })
 
 
+class MetaPricingAnalyticsAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        
+        # Check if it's a direct Client logging in
+        client_user = None
+        if hasattr(user, "client_membership") and user.client_membership is not None:
+            client_user = user.client_membership.client
+
+        # Otherwise it's a Tech Provider
+        org = getattr(user, "organization", None)
+        if not org and hasattr(user, "membership") and user.membership is not None:
+            org = user.membership.organization
+
+        if not org and not client_user:
+            return Response({"status": "no_org"}, status=400)
+
+        import time
+        from datetime import datetime, timedelta
+        
+        # Default to last 7 days
+        end_date = request.query_params.get("end")
+        start_date = request.query_params.get("start")
+        
+        # Optional filter for specific client or waba
+        target_client_id = request.query_params.get("client_id")
+        target_waba_id = request.query_params.get("waba_id")
+        
+        if not end_date or not start_date:
+            end = int(time.time())
+            start = end - (7 * 24 * 60 * 60)
+        else:
+            try:
+                start = int(start_date)
+                end = int(end_date)
+            except ValueError:
+                return Response({"error": "Invalid start or end timestamp"}, status=400)
+
+        results = []
+        
+        if client_user:
+            # Client User - can ONLY see their own data
+            if client_user.waba_connected():
+                results.append(self._fetch_analytics(client_user.waba_id, client_user.id, start, end, waba_name=client_user.waba_name or client_user.name))
+        elif org:
+            # Tech Provider User
+            # 1. Organization's own WABA
+            if not target_client_id and not target_waba_id:
+                try:
+                    waba = org.waba_account
+                    if waba.is_connected():
+                        results.append(self._fetch_analytics(waba.waba_id, None, start, end, waba_name=waba.waba_name or "Organization WABA"))
+                except WABAAccount.DoesNotExist:
+                    pass
+
+            # 2. Clients under this Organization
+            clients = ClientAccount.objects.filter(tech_provider=org, status="active")
+            
+            # Apply filters if requested
+            if target_client_id:
+                try:
+                    clients = clients.filter(id=int(target_client_id))
+                except ValueError:
+                    return Response({"error": "Invalid client_id format"}, status=400)
+                    
+            if target_waba_id:
+                clients = clients.filter(waba_id=target_waba_id)
+                
+            for client in clients:
+                if client.waba_connected():
+                    results.append(self._fetch_analytics(client.waba_id, client.id, start, end, waba_name=client.waba_name or client.name))
+
+        return Response({"status": "success", "data": results})
+
+    def _fetch_analytics(self, waba_id, client_id, start, end, waba_name=""):
+        from datetime import datetime
+        from django.db.models import Count, Q
+        from CRM.models import Message
+        
+        try:
+            start_date = datetime.fromtimestamp(start)
+            end_date = datetime.fromtimestamp(end)
+            
+            # Approximate Pricing rates in INR 
+            RATES = {
+                "MARKETING": 0.86,
+                "UTILITY": 0.11,
+                "AUTHENTICATION": 0.11,
+                "SERVICE": 0.0, 
+            }
+            
+            # Base query for delivered/read messages in time range
+            qs = Message.objects.filter(
+                timestamp__gte=start_date,
+                timestamp__lte=end_date,
+                status__in=['delivered', 'read'],
+                direction='outbound'
+            )
+            
+            if client_id:
+                qs = qs.filter(client_id=client_id)
+            else:
+                qs = qs.filter(client__isnull=True)
+                
+            marketing_count = qs.filter(template__category="MARKETING").count()
+            utility_count = qs.filter(template__category="UTILITY").count()
+            auth_count = qs.filter(template__category="AUTHENTICATION").count()
+            service_count = qs.filter(template__isnull=True).count()
+            
+            total_charges = (
+                marketing_count * RATES["MARKETING"] +
+                utility_count * RATES["UTILITY"] +
+                auth_count * RATES["AUTHENTICATION"]
+            )
+            
+            data = {
+                "metrics": {
+                    "Marketing": {"count": marketing_count, "cost": round(marketing_count * RATES["MARKETING"], 2)},
+                    "Utility": {"count": utility_count, "cost": round(utility_count * RATES["UTILITY"], 2)},
+                    "Authentication": {"count": auth_count, "cost": round(auth_count * RATES["AUTHENTICATION"], 2)},
+                    "Service": {"count": service_count, "cost": 0.0},
+                },
+                "approximate_total_charges_inr": round(total_charges, 2)
+            }
+            
+            return {
+                "waba_id": waba_id,
+                "waba_name": waba_name,
+                "analytics": [data],
+                "error": None
+            }
+        except Exception as e:
+            return {
+                "waba_id": waba_id,
+                "waba_name": waba_name,
+                "analytics": [],
+                "error": str(e)
+            }
 
 """
 Template Management

@@ -62,6 +62,7 @@ urlpatterns = [
 
     # ── Analytics ─────────────────────────────────────────────────────────────
     path("api/analytics/", MetaDashboardAPIView.as_view()),
+    path("api/analytics/pricing/", MetaPricingAnalyticsAPIView.as_view(), name="analytics-pricing"),
 
     # ── Templates ─────────────────────────────────────────────────────────────
     path("api/templates/",               TemplateListCreateView.as_view(), name="template-list-create"),
