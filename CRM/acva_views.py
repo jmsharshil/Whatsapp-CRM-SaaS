@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import time
 from CRM.models import Customer, Conversation, Message, ClientAccount, ConversationState
 from CRM.acva_utils import (
     ACVA_PHONE_NUMBER_ID, send_acva_text, download_acva_media_from_whatsapp,
@@ -150,6 +151,18 @@ def _handle_acva_message_internal(msg: dict):
         conv_obj.save()
 
     session = ConversationSession(conv_obj)
+    
+    # 30 minute timeout check
+    current_time = time.time()
+    last_interaction = session.last_interaction
+    
+    if last_interaction and (current_time - last_interaction) > 30 * 60:
+        if session.state not in ["IDLE", "INIT", "DONE"]:
+            session.state = "IDLE"
+            session.collected_info = {}
+            
+    session.last_interaction = current_time
+    session.save()
     
     is_trigger = (body.lower().strip() == "acva")
     if is_trigger:
