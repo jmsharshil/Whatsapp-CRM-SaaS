@@ -500,7 +500,7 @@ def tpl_gs_main_menu(to: str) -> bool:
     })
 
 def tpl_gs_dealer_inquiry_thanks(to: str) -> bool:
-    text = "Thank you for contacting Globe Star Engineers.\n You will receive a call shortly."
+    text = "Thank you for contacting Globe Star Engineers.\n\nYou will receive a call shortly.\n\nOffice Hours:\n Mon–Sat | 10:00 AM – 6:30 PM\n\nEither you can call to:- +91 95374 19590 or visit our website :- https://www.globepump.com"
     return send_gs_text(to, text)
 
 

@@ -770,22 +770,50 @@ class MetaPricingAnalyticsAPIView(APIView):
                 "SERVICE": 0.0, 
             }
             
-            # Base query for delivered/read messages in time range
+            # Base query for delivered/read/sent messages in time range
             if phone_number_id:
                 qs = Message.objects.filter(
                     Q(conversation__client__phone_number_id=phone_number_id) | Q(conversation__phone_number_id=phone_number_id),
                     timestamp__gte=start_date,
                     timestamp__lte=end_date,
-                    status__in=['delivered', 'read'],
+                    status__in=['sent', 'delivered', 'read'],
                     direction='outbound'
                 )
             else:
                 qs = Message.objects.none()
                 
-            marketing_count = qs.filter(template__category="MARKETING").count()
-            utility_count = qs.filter(template__category="UTILITY").count()
-            auth_count = qs.filter(template__category="AUTHENTICATION").count()
-            service_count = qs.filter(template__isnull=True).count()
+            # Get template names by category to use as fallback since FK is often null
+            from CRM.models import Template
+            marketing_templates = list(Template.objects.filter(category="MARKETING").values_list('name', flat=True))
+            utility_templates = list(Template.objects.filter(category="UTILITY").values_list('name', flat=True))
+            auth_templates = list(Template.objects.filter(category="AUTHENTICATION").values_list('name', flat=True))
+
+            marketing_count = qs.filter(
+                Q(template__category="MARKETING") | Q(template_name__in=marketing_templates)
+            ).count()
+            
+            utility_count = qs.filter(
+                Q(template__category="UTILITY") | Q(template_name__in=utility_templates)
+            ).count()
+            
+            auth_count = qs.filter(
+                Q(template__category="AUTHENTICATION") | Q(template_name__in=auth_templates)
+            ).count()
+            
+            # Service messages don't use templates
+            service_count = qs.filter(
+                template__isnull=True
+            ).exclude(
+                template_name__in=marketing_templates + utility_templates + auth_templates
+            ).exclude(
+                template_name__isnull=False
+            ).count()
+            
+            # Alternatively, for service count, if it has a template_name but isn't matched, it might be an issue.
+            # To be safe, just count everything that isn't matched above.
+            total_matched = marketing_count + utility_count + auth_count
+            service_count = qs.count() - total_matched
+            if service_count < 0: service_count = 0
             
             total_charges = (
                 marketing_count * RATES["MARKETING"] +
@@ -2543,4 +2571,4 @@ def avantika_history_api(request):
         "total_sent": sent_count,
         "total_failed": failed_count,
         "history": data
-    })
+    })
