@@ -546,32 +546,6 @@ class WhatsAppWebhookView(APIView):
                 # ── Process messages ──────────────────────────────────────
                 for msg in value.get("messages", []):
                     try:
-                        # ── Detect Echo Messages ────────────────────────────────
-                        if not contacts and "context" in msg:
-                            logger.info("[Webhook] Echo message detected. Saving as outbound and skipping bot routing.")
-                            raw_phone = msg.get("from", "").strip()
-                            if not raw_phone.startswith("+"):
-                                raw_phone = f"+{raw_phone}"
-                            text = _extract_text_for_routing(msg) or ""
-                            client_acc = client if client else ClientAccount.objects.filter(phone_number_id=phone_number_id).first()
-                            
-                            from CRM.jmschatagents_views import save_message
-                            db_msg = save_message(
-                                phone=raw_phone,
-                                content=text,
-                                reply_of=None,
-                                client_name="",
-                                client_obj=client_acc,
-                                phone_number_id=phone_number_id,
-                                direction="outbound"
-                            )
-                            if db_msg:
-                                db_msg.message_type = msg.get("type", "text")
-                                db_msg.meta_message_id = msg.get("id", "")
-                                db_msg.status = "sent"
-                                db_msg.save(update_fields=["message_type", "meta_message_id", "status"])
-                            continue
-                            
                         gigatel_phone_id = os.environ.get("META_PHONE_NUMBER_ID", "").strip()
                         globestar_phone_id = GLOBESTAR_PHONE_NUMBER_ID
                         gkd_phone_id = GKD_PHONE_NUMBER_ID

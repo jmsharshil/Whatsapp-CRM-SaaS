@@ -216,7 +216,7 @@ SHOPIFY_BOT_TRIGGER = "shopify"
 # SHARED DB HELPERS
 # ═════════════════════════════════════════════════════════════════════════════
 
-def save_message(phone, content, reply_of=None, client_name=None, client_obj=None, phone_number_id=None, direction='inbound'):
+def save_message(phone, content, reply_of=None, client_name=None, client_obj=None, phone_number_id=None):
     """Create or update Customer + Conversation + Message rows."""
     try:
         name_value = (client_name or "").strip() or "Unknown"
@@ -247,7 +247,7 @@ def save_message(phone, content, reply_of=None, client_name=None, client_obj=Non
                 content=content,
                 reply_of=reply_of,
                 client_name=client_name,
-                direction=direction,
+                direction='inbound',
             )
         return msg
     except Exception as e:
