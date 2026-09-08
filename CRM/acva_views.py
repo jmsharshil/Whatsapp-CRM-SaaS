@@ -183,12 +183,13 @@ def _handle_acva_message_internal(msg: dict):
         session.save()
         tpl_acva_opt6_call_name(number)
 
-    # Flow Logic
     if "back to main menu" in display_str or "main menu" in display_str or display_str.strip() == "menu" or body_str in ["main_menu", "back_to_main_menu"]:
         session.state = "MENU_SELECTION"
         session.collected_info = {}
         session.save()
         tpl_acva_main_menu(number)
+        return
+
 
     elif state == "IDLE":
         # Do not reply if state is IDLE and they didn't say "ACVA"
@@ -291,18 +292,7 @@ def _handle_acva_message_internal(msg: dict):
         session.save()
         tpl_acva_eligibility_other(number)
 
-    elif state == "OPT2_ELIGIBILITY_RES" or state == "OPT3_ADMISSION" or state == "OPT4_FEES":
-        if "counsellor" in display_str or "team" in display_str:
-            goto_handoff()
-        else:
-            send_acva_text(number, "Please select a valid option.")
-            if state == "OPT2_ELIGIBILITY_RES":
-                tpl_acva_opt2_eligibility_res(number)
-            elif state == "OPT3_ADMISSION":
-                tpl_acva_opt3_admission(number)
-            elif state == "OPT4_FEES":
-                tpl_acva_opt4_fees(number)
-            return
+
 
     elif state == "OPT5_CURRICULUM":
         if "1" in body_str or "pattern" in display_str:
@@ -314,13 +304,7 @@ def _handle_acva_message_internal(msg: dict):
             tpl_acva_opt5_curriculum(number)
             return
 
-    elif state == "OPT5_EXAM":
-        if "team" in display_str:
-            goto_handoff()
-        else:
-            send_acva_text(number, "Please select a valid option.")
-            tpl_acva_opt5_all(number)
-            return
+
 
     elif state == "OPT7_SUPPORT":
         if "speak" in display_str or "team" in display_str:
@@ -446,13 +430,29 @@ def _handle_acva_message_internal(msg: dict):
             tpl_acva_opt8_speak(number)
             return
 
+    elif state in ["OPT2_ELIGIBILITY_RES", "OPT3_ADMISSION", "OPT4_FEES", "OPT5_EXAM"]:
+        clean_msg = body_str.strip(".!?, ")
+        if "counsellor" in display_str or "team" in display_str or "call" in display_str:
+            goto_handoff()
+        elif clean_msg in ["thanks", "thank you", "thankyou", "thx", "ok", "okay", "k", "dhanyawad", "shukriya"]:
+            send_acva_text(number, "You're welcome!")
+        else:
+            pass
+        return
+
     elif state == "DONE":
+        clean_msg = body_str.strip(".!?, ")
         if "book" in display_str or "exam" in display_str:
             tpl_acva_exam_booking(number)
         elif "case study" in display_str:
             tpl_acva_case_study(number)
+        elif "counsellor" in display_str or "team" in display_str or "call" in display_str:
+            goto_handoff()
+        elif clean_msg in ["thanks", "thank you", "thankyou", "thx", "ok", "okay", "k", "dhanyawad", "shukriya"]:
+            send_acva_text(number, "You're welcome!")
         else:
-            send_acva_text(number, "Your request is completed. Please click 'Back To Main Menu' or type 'menu' to return to the main menu.")
+            # Do nothing (bot stops), so human agent can take over if needed
+            pass
         return
 
     # --- Lead Collection Flow ---
