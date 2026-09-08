@@ -48,9 +48,13 @@ class ConversationSession:
         if key in ['_conv', 'state']:
             super().__setattr__(key, value)
         else:
-            if not isinstance(self._conv.bot_metadata, dict):
-                self._conv.bot_metadata = {}
-            self._conv.bot_metadata[key] = value
+            meta = self._conv.bot_metadata
+            if not isinstance(meta, dict):
+                meta = {}
+            else:
+                meta = meta.copy()
+            meta[key] = value
+            self._conv.bot_metadata = meta
 
 def handle_acva_message(msg: dict):
     try:
