@@ -203,37 +203,37 @@ def _handle_acva_message_internal(msg: dict):
 
     elif state == "MENU_SELECTION":
         session.collected_info = {}
-        if "1" in body_str or "learn" in display_str:
+        if "1" in body_str or (msg_type != "text" and "learn" in display_str):
             session.state = "MENU_SELECTION"
             session.save()
             tpl_acva_menu_learn(number)
-        elif "2" in body_str or "eligibility" in display_str:
+        elif "2" in body_str or (msg_type != "text" and "eligibility" in display_str):
             session.state = "OPT2_ELIGIBILITY"
             session.save()
             tpl_acva_opt2_eligibility(number)
-        elif "3" in body_str or "admission" in display_str:
+        elif "3" in body_str or (msg_type != "text" and "admission" in display_str):
             session.state = "OPT3_ADMISSION"
             session.save()
             tpl_acva_opt3_admission(number)
-        elif "4" in body_str or "fees" in display_str:
+        elif "4" in body_str or (msg_type != "text" and "fees" in display_str):
             session.state = "OPT4_FEES"
             session.save()
             tpl_acva_opt4_fees(number)
-        elif "5" in body_str or "curriculum" in display_str:
+        elif "5" in body_str or (msg_type != "text" and "curriculum" in display_str):
             session.state = "OPT5_CURRICULUM"
             session.save()
             tpl_acva_opt5_curriculum(number)
-        elif "6" in body_str or "counselling" in display_str:
+        elif "6" in body_str or (msg_type != "text" and "counselling" in display_str):
             goto_handoff()
-        elif "7" in body_str or "support" in display_str or "existing" in display_str:
+        elif "7" in body_str or (msg_type != "text" and ("support" in display_str or "existing" in display_str)):
             session.state = "OPT7_SUPPORT"
             session.save()
             tpl_acva_opt7_support(number)
-        elif "all options" in display_str or "options" in display_str:
+        elif msg_type != "text" and ("all options" in display_str or "options" in display_str):
             session.state = "OPT1_LEARN"
             session.save()
             tpl_acva_opt1_learn(number)
-        elif "8" in body_str or "speak" in display_str:
+        elif "8" in body_str or (msg_type != "text" and "speak" in display_str):
             session.state = "OPT8_SPEAK"
             session.save()
             tpl_acva_opt8_speak(number)
@@ -243,11 +243,11 @@ def _handle_acva_message_internal(msg: dict):
             return
 
     elif state == "OPT1_LEARN":
-        if "benefits" in display_str or "1" in body_str:
+        if "1" in body_str or (msg_type != "text" and "benefits" in display_str):
             session.state = "OPT1_LEARN"
             session.save()
             tpl_key_benefits(number)
-        elif "menu" in display_str or "back" in display_str or "3" in body_str:
+        elif "3" in body_str or "menu" in display_str or "back" in display_str:
             session.state = "MENU_SELECTION"
             session.save()
             tpl_acva_main_menu(number)
