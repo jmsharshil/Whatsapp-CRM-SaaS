@@ -152,6 +152,58 @@ def _get_client_by_phone_number_id(phone_number_id: str):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Media download for Insight
+# ─────────────────────────────────────────────────────────────────────────────
+
+def download_insight_media_from_whatsapp(media_id: str, access_token: str) -> str:
+    import uuid
+    import requests
+    from django.core.files.storage import default_storage
+    from django.core.files.base import ContentFile
+    
+    try:
+        url = f"https://graph.facebook.com/v20.0/{media_id}"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        res = requests.get(url, headers=headers, timeout=10)
+        if res.status_code != 200:
+            logger.error("[INSIGHT] Failed to get media URL for %s: %s", media_id, res.text)
+            return ""
+        media_url = res.json().get("url")
+        if not media_url:
+            return ""
+        
+        file_res = requests.get(media_url, headers=headers, timeout=15)
+        if file_res.status_code != 200:
+            logger.error("[INSIGHT] Failed to download media %s", media_id)
+            return ""
+            
+        content_type = file_res.headers.get("Content-Type", "").split(";")[0].strip()
+        ext_map = {
+            "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp",
+            "image/gif": "gif", "video/mp4": "mp4", "video/3gpp": "3gp", "video/quicktime": "mov",
+            "audio/mp4": "m4a", "audio/aac": "aac", "audio/amr": "amr", "audio/ogg": "ogg",
+            "audio/opus": "opus", "audio/mpeg": "mp3", "application/pdf": "pdf",
+            "application/msword": "doc", "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+            "application/vnd.ms-excel": "xls", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+            "application/vnd.ms-powerpoint": "ppt", "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+            "text/plain": "txt",
+        }
+        
+        ext = ext_map.get(content_type)
+        if not ext:
+            ext = content_type.split("/")[-1]
+            if not ext or len(ext) > 6 or not ext.isalnum():
+                ext = "bin"
+            
+        file_name = f"insightmedia/{uuid.uuid4().hex}.{ext}"
+        saved_path = default_storage.save(file_name, ContentFile(file_res.content))
+        return default_storage.url(saved_path)
+    except Exception as e:
+        logger.error("[INSIGHT] Error downloading media: %s", e)
+        return ""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # JMS internal 3-bot router (moved from jmschatagents_views.webhook)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -635,10 +687,9 @@ class WhatsAppWebhookView(APIView):
                             if msg_type in ["image", "video", "audio", "document", "sticker"]:
                                 media_id = msg.get(msg_type, {}).get("id")
                                 if media_id:
-                                    from CRM.globestar_views import download_media_from_whatsapp
                                     token = client_acc.access_token if client_acc and client_acc.access_token else getattr(settings, "META_PERMANENT_TOKEN", getattr(settings, "META_ACCESS_TOKEN", ""))
                                     
-                                    dl_url = download_media_from_whatsapp(media_id, token)
+                                    dl_url = download_insight_media_from_whatsapp(media_id, token)
                                     if dl_url:
                                         prefix = f"[{msg_type.upper()}]"
                                         media_text = f"{prefix} {dl_url}"
