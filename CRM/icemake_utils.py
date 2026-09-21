@@ -138,6 +138,23 @@ def tpl_ice_support_ask_number(to: str):
 def tpl_ice_support_ask_product(to: str):
     return _meta_post_icemake(_icemake_template_payload(to, "ice_support_ask_product"))
 
+def tpl_registered_number_confirmation(to: str, number: str):
+    components = [
+        {
+            "type": "body",
+            "parameters": [
+                {"type": "text", "text": number}
+            ]
+        }
+    ]
+    return _meta_post_icemake(_icemake_template_payload(to, "registered_number_confirmation", components))
+
+def tpl_icemake_complaint(to: str):
+    return _meta_post_icemake(_icemake_template_payload(to, "icemake_complaint"))
+
+def tpl_other_complaint_type(to: str):
+    return _meta_post_icemake(_icemake_template_payload(to, "other_complaint_type"))
+
 def tpl_ice_support_ask_issue(to: str):
     return _meta_post_icemake(_icemake_template_payload(to, "ice_support_ask_issue"))
 

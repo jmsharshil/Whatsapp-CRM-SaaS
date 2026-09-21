@@ -17,13 +17,15 @@ from .icemake_utils import (
     tpl_ice_support_ask_city,
     tpl_ice_support_ask_state,
     tpl_ice_support_ask_pincode,
-    tpl_ice_ask_address,
     tpl_ice_support_ask_number,
     tpl_ice_support_ask_product,
     tpl_ice_support_ask_issue,
     tpl_icemake_customer,
     tpl_icemake_serviceengineer,
-    STATE_ENGINEER_MAPPING
+    STATE_ENGINEER_MAPPING,
+    tpl_registered_number_confirmation,
+    tpl_icemake_complaint,
+    tpl_other_complaint_type
 )
 
 
@@ -223,21 +225,21 @@ def handle_icemake_message(msg: dict):
 
     if state == "AWAITING_NAME":
         session.ticket_data = {"name": text}
-        session.state = "AWAITING_CITY"
-        session.save()
-        tpl_ice_support_ask_city(number)
-    
-    elif state == "AWAITING_CITY":
-        td = session.ticket_data or {}
-        td["city"] = text
-        session.ticket_data = td
         session.state = "AWAITING_STATE"
         session.save()
         tpl_ice_support_ask_state(number)
-        
+    
     elif state == "AWAITING_STATE":
         td = session.ticket_data or {}
         td["state"] = text
+        session.ticket_data = td
+        session.state = "AWAITING_CITY"
+        session.save()
+        tpl_ice_support_ask_city(number)
+        
+    elif state == "AWAITING_CITY":
+        td = session.ticket_data or {}
+        td["city"] = text
         session.ticket_data = td
         session.state = "AWAITING_PINCODE"
         session.save()
@@ -247,27 +249,46 @@ def handle_icemake_message(msg: dict):
         td = session.ticket_data or {}
         td["pincode"] = text
         session.ticket_data = td
-        session.state = "AWAITING_ADDRESS"
-        session.save()
-        tpl_ice_ask_address(number)
-
-    elif state == "AWAITING_ADDRESS":
-        td = session.ticket_data or {}
-        td["address"] = text
-        session.ticket_data = td
-        session.state = "AWAITING_NUMBER"
+        session.state = "AWAITING_NUMBER_INPUT"
         session.save()
         tpl_ice_support_ask_number(number)
 
-    elif state == "AWAITING_NUMBER":
+    elif state == "AWAITING_NUMBER_INPUT":
         td = session.ticket_data or {}
         td["mobile"] = text
         session.ticket_data = td
-        session.state = "AWAITING_PRODUCT"
+        session.state = "AWAITING_CONFIRM_NUMBER"
         session.save()
-        tpl_ice_support_ask_product(number)
+        tpl_registered_number_confirmation(number, text)
 
-    elif state == "AWAITING_PRODUCT":
+    elif state == "AWAITING_CONFIRM_NUMBER":
+        td = session.ticket_data or {}
+        user_choice = display_body.strip().lower()
+        if user_choice == "yes":
+            session.state = "AWAITING_COMPLAINT"
+            session.save()
+            tpl_icemake_complaint(number)
+        else:
+            session.state = "AWAITING_NUMBER_INPUT"
+            session.save()
+            tpl_ice_support_ask_number(number)
+
+    elif state == "AWAITING_COMPLAINT":
+        td = session.ticket_data or {}
+        selected_product = display_body.strip()
+        
+        if selected_product.lower() == "other":
+            session.state = "AWAITING_OTHER_PRODUCT"
+            session.save()
+            tpl_other_complaint_type(number)
+        else:
+            td["product"] = selected_product
+            session.ticket_data = td
+            session.state = "AWAITING_ISSUE"
+            session.save()
+            tpl_ice_support_ask_issue(number)
+            
+    elif state == "AWAITING_OTHER_PRODUCT":
         td = session.ticket_data or {}
         td["product"] = text
         session.ticket_data = td
