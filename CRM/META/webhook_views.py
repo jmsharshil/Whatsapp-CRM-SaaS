@@ -90,6 +90,8 @@ from CRM.amritcement_views import handle_amritcement_message
 from CRM.amritcement_utils import AMRITCEMENT_PHONE_NUMBER_ID
 from CRM.acva_views import handle_acva_message
 from CRM.acva_utils import ACVA_PHONE_NUMBER_ID
+from CRM.icemake_views import handle_icemake_message
+from CRM.icemake_utils import ICEMAKE_PHONE_NUMBER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -604,6 +606,7 @@ class WhatsAppWebhookView(APIView):
                         amritcement_phone_id = AMRITCEMENT_PHONE_NUMBER_ID
                         jaivik_phone_id = "1232951769906831"
                         acva_phone_id = ACVA_PHONE_NUMBER_ID
+                        icemake_phone_id = ICEMAKE_PHONE_NUMBER_ID
                         
                         if gigatel_phone_id and phone_number_id == gigatel_phone_id:
                             logger.info("[Webhook] Routing message to Gigatel Bot")
@@ -651,6 +654,9 @@ class WhatsAppWebhookView(APIView):
                             print(f"========== WEBHOOK MATCHED ACVA PHONE ID: {acva_phone_id} ==========")
                             logger.info("[Webhook] Routing message to ACVA Bot")
                             handle_acva_message(msg)
+                        elif icemake_phone_id and phone_number_id == icemake_phone_id:
+                            logger.info("[Webhook] Routing message to IceMake Bot")
+                            handle_icemake_message(msg)
                         elif phone_number_id == "1168578376348442":
                             logger.info(f"[Webhook] Saving message for disabled bot number {phone_number_id}")
                             
