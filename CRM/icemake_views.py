@@ -265,32 +265,40 @@ def handle_icemake_message(msg: dict):
         td = session.ticket_data or {}
         user_choice = display_body.strip().lower()
         if user_choice == "yes":
-            session.state = "AWAITING_COMPLAINT"
+            session.state = "AWAITING_PRODUCT"
             session.save()
-            tpl_icemake_complaint(number)
+            tpl_ice_support_ask_product(number)
         else:
             session.state = "AWAITING_NUMBER_INPUT"
             session.save()
             tpl_ice_support_ask_number(number)
 
+    elif state == "AWAITING_PRODUCT":
+        td = session.ticket_data or {}
+        td["product"] = text
+        session.ticket_data = td
+        session.state = "AWAITING_COMPLAINT"
+        session.save()
+        tpl_icemake_complaint(number)
+
     elif state == "AWAITING_COMPLAINT":
         td = session.ticket_data or {}
-        selected_product = display_body.strip()
+        selected_complaint = display_body.strip()
         
-        if selected_product.lower() == "other":
-            session.state = "AWAITING_OTHER_PRODUCT"
+        if selected_complaint.lower() == "other":
+            session.state = "AWAITING_OTHER_COMPLAINT_TYPE"
             session.save()
             tpl_other_complaint_type(number)
         else:
-            td["product"] = selected_product
+            td["complaint_type"] = selected_complaint
             session.ticket_data = td
             session.state = "AWAITING_ISSUE"
             session.save()
             tpl_ice_support_ask_issue(number)
             
-    elif state == "AWAITING_OTHER_PRODUCT":
+    elif state == "AWAITING_OTHER_COMPLAINT_TYPE":
         td = session.ticket_data or {}
-        td["product"] = text
+        td["complaint_type"] = text
         session.ticket_data = td
         session.state = "AWAITING_ISSUE"
         session.save()
@@ -321,7 +329,7 @@ def handle_icemake_message(msg: dict):
         # Notify engineer
         city_state = f"{td.get('city', '')} / {td.get('state', '')}".strip(" /")
         address_str = f"{td.get('address', '')}, Pincode: {td.get('pincode', '')}".strip(" ,")
-        issue_type = "General Issue"
+        issue_type = td.get("complaint_type", "General Issue")
         
         tpl_icemake_serviceengineer(
             to=engineer_info["phone"],
