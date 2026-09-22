@@ -294,16 +294,27 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         # Generate ticket
         ticket_no = f"C{datetime.now().strftime('%m%d%H%M%S')}"
         
-        # Find engineer
+        # Find engineer (with fuzzy match to handle spelling mistakes)
         user_state = td.get("state", "").lower().strip()
         
-        # Default engineer if not found
-        engineer_info = {"name": "Support Team", "phone": "919662933977"} # Fallback to Rutvik/Gujarat
+        # Default engineer → Gujarat (Mr Rutvik) as fallback
+        engineer_info = STATE_ENGINEER_MAPPING.get("gujarat")
         
-        for state_key, e_info in STATE_ENGINEER_MAPPING.items():
-            if state_key in user_state:
-                engineer_info = e_info
-                break
+        if user_state:
+            # Step 1: exact substring match
+            for state_key, e_info in STATE_ENGINEER_MAPPING.items():
+                if state_key in user_state or user_state in state_key:
+                    engineer_info = e_info
+                    break
+            else:
+                # Step 2: fuzzy match for spelling mistakes (cutoff=0.7 → 70% similarity)
+                from difflib import get_close_matches
+                all_keys = list(STATE_ENGINEER_MAPPING.keys())
+                matches = get_close_matches(user_state, all_keys, n=1, cutoff=0.7)
+                if matches:
+                    engineer_info = STATE_ENGINEER_MAPPING[matches[0]]
+                    logger.info("[IceMake] Fuzzy matched state '%s' → '%s'", user_state, matches[0])
+
         
         # Notify customer (Meta doesn't allow empty strings for template params)
         tpl_icemake_customer(number, ticket_no or "-")
@@ -385,4 +396,122 @@ def handle_icemake_message(msg: dict, contact: dict = None):
             conv_state.save()
         except Exception as e:
             logger.error("[IceMake] ConversationState sync error: %s", e)
+
+from rest_framework.views import APIView
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+
+class IceMakeDataAPIView(APIView):
+    """
+    GET /api/icemake/data/?token=<token>
+
+    Returns all Ice Make conversation data:
+    - Customer details (name, phone)
+    - Bot state + ticket_data (name, mobile, city, state, pincode, complaint, issue)
+    - Ticket number, assigned engineer
+    - Full message history (inbound + outbound)
+    - Conversation status (prospect/confirmed/lead)
+    """
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        from django.conf import settings
+        from django.core.paginator import Paginator
+        token = request.GET.get("token")
+
+        if not token:
+            return Response({"error": "token is required"}, status=400)
+
+        if token != ICEMAKE_PHONE_NUMBER_ID:
+            return Response({"error": "Invalid token"}, status=401)
+
+        # Pagination params
+        page_num  = int(request.GET.get("page", 1))
+        page_size = int(request.GET.get("page_size", 20))
+
+        client_account = ClientAccount.objects.filter(phone_number_id=ICEMAKE_PHONE_NUMBER_ID).first()
+
+        conversations = Conversation.objects.filter(
+            phone_number_id=ICEMAKE_PHONE_NUMBER_ID
+        ).select_related("customer").prefetch_related("messages").order_by("-created_at")
+
+        total = conversations.count()
+        paginator = Paginator(conversations, page_size)
+        page = paginator.get_page(page_num)
+
+        base_url = request.build_absolute_uri(request.path)
+        def make_url(p):
+            if p is None:
+                return None
+            params = request.GET.copy()
+            params["page"] = p
+            return f"{base_url}?{params.urlencode()}"
+
+        conversations_data = []
+        for conv in page.object_list:
+            bot_meta = conv.bot_metadata if isinstance(conv.bot_metadata, dict) else {}
+            td = bot_meta.get("ticket_data", {}) or {}
+
+            # Try ConversationState for stage
+            stage = conv.bot_state
+            try:
+                conv_state = conv.chatbot_state
+                stage = conv_state.stage
+            except Exception:
+                pass
+
+            conv_data = {
+                "id": conv.id,
+                "status": conv.status,
+                "bot_state": conv.bot_state,
+                "stage": stage,
+                "created_at": conv.created_at.isoformat() if conv.created_at else None,
+                "customer": {
+                    "name": conv.customer.name,
+                    "whatsapp_number": conv.customer.phone,
+                },
+                "ticket_data": {
+                    "ticket_no": td.get("ticket_no", ""),
+                    "name": td.get("name", ""),
+                    "registered_mobile": td.get("mobile", ""),
+                    "address": td.get("address", ""),
+                    "city": td.get("city", ""),
+                    "state": td.get("state", ""),
+                    "pincode": td.get("pincode", ""),
+                    "complaint_type": td.get("complaint_type", ""),
+                    "issue_desc": td.get("issue_desc", ""),
+                    "assigned_engineer": td.get("engineer_name", ""),
+                    "engineer_phone": td.get("engineer_phone", ""),
+                },
+                "messages": []
+            }
+
+            for msg in conv.messages.order_by("timestamp"):
+                conv_data["messages"].append({
+                    "id": msg.id,
+                    "direction": msg.direction,
+                    "type": msg.message_type,
+                    "content": msg.content,
+                    "status": msg.status,
+                    "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
+                    "meta_message_id": msg.meta_message_id,
+                })
+
+            conversations_data.append(conv_data)
+
+        return Response({
+            "client": {
+                "name": client_account.name if client_account else "Ice Make Refrigeration",
+                "phone_number_id": ICEMAKE_PHONE_NUMBER_ID,
+                "waba_id": client_account.waba_id if client_account else "",
+            },
+            "total": total,
+            "page": page_num,
+            "page_size": page_size,
+            "total_pages": paginator.num_pages,
+            "next": make_url(page.next_page_number() if page.has_next() else None),
+            "previous": make_url(page.previous_page_number() if page.has_previous() else None),
+            "conversations": conversations_data,
+        })
 
