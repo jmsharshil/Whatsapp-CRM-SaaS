@@ -103,7 +103,23 @@ def _meta_post_icemake(payload: dict) -> bool:
                         content = payload.get("text", {}).get("body", "")
                     elif msg_type == "template":
                         tpl_name = payload.get("template", {}).get("name", "")
+                        components = payload.get("template", {}).get("components", [])
                         content = f"[Template: {tpl_name}]"
+                        try:
+                            from CRM.models import Template
+                            template_obj = Template.objects.filter(name=tpl_name).first()
+                            if template_obj and template_obj.body_text:
+                                text = template_obj.body_text
+                                for comp in components:
+                                    if comp.get("type") == "body":
+                                        params = comp.get("parameters", [])
+                                        for i, param in enumerate(params, start=1):
+                                            val = param.get("text", "")
+                                            text = text.replace(f"{{{{{i}}}}}", str(val))
+                                header = template_obj.header_text + "\n" if template_obj.header_text else ""
+                                content = f"{header}{text}\n\nTEMPLATE: {tpl_name.upper()}".strip()
+                        except Exception as e:
+                            logger.error("[IceMake] Template resolution error: %s", e)
                     elif msg_type == "image":
                         content = f"[Image] {payload.get('image', {}).get('link', '')}"
                     
@@ -180,8 +196,6 @@ def tpl_ice_ask_address(to: str):
 def tpl_ice_support_ask_number(to: str):
     return _meta_post_icemake(_icemake_template_payload(to, "ice_support_ask_number"))
 
-def tpl_ice_support_ask_product(to: str):
-    return _meta_post_icemake(_icemake_template_payload(to, "ice_support_ask_product"))
 
 def tpl_registered_number_confirmation(to: str, number: str):
     components = [
@@ -197,8 +211,8 @@ def tpl_registered_number_confirmation(to: str, number: str):
 def tpl_icemake_complaint(to: str):
     return _meta_post_icemake(_icemake_template_payload(to, "icemake_complaint"))
 
-def tpl_other_complaint_type(to: str):
-    return _meta_post_icemake(_icemake_template_payload(to, "other_complaint_type"))
+def tpl_other_complaint_type_(to: str):
+    return _meta_post_icemake(_icemake_template_payload(to, "other_complaint_type_"))
 
 def tpl_ice_support_ask_issue(to: str):
     return _meta_post_icemake(_icemake_template_payload(to, "ice_support_ask_issue"))
@@ -214,7 +228,7 @@ def tpl_icemake_customer(to: str, ticket_no: str):
     ]
     return _meta_post_icemake(_icemake_template_payload(to, "icemake_customer", components))
 
-def tpl_icemake_serviceengineer(to: str, ticket: str, customer_name: str, customer_mobile: str, city_state: str, address: str, product_name: str, issue_type: str, description: str, assigned_engineer: str):
+def tpl_icemake_serviceengineer(to: str, ticket: str, customer_name: str, customer_mobile: str, city_state: str, issue_type: str, description: str, assigned_engineer: str):
     components = [
         {
             "type": "body",
@@ -223,8 +237,6 @@ def tpl_icemake_serviceengineer(to: str, ticket: str, customer_name: str, custom
                 {"type": "text", "text": customer_name},
                 {"type": "text", "text": customer_mobile},
                 {"type": "text", "text": city_state},
-                {"type": "text", "text": address},
-                {"type": "text", "text": product_name},
                 {"type": "text", "text": issue_type},
                 {"type": "text", "text": description},
                 {"type": "text", "text": assigned_engineer},

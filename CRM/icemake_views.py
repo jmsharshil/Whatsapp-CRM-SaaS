@@ -18,14 +18,13 @@ from .icemake_utils import (
     tpl_ice_support_ask_state,
     tpl_ice_support_ask_pincode,
     tpl_ice_support_ask_number,
-    tpl_ice_support_ask_product,
     tpl_ice_support_ask_issue,
     tpl_icemake_customer,
     tpl_icemake_serviceengineer,
     STATE_ENGINEER_MAPPING,
     tpl_registered_number_confirmation,
     tpl_icemake_complaint,
-    tpl_other_complaint_type
+    tpl_other_complaint_type_
 )
 
 
@@ -271,21 +270,13 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         td = session.ticket_data or {}
         user_choice = display_body.strip().lower()
         if user_choice == "yes":
-            session.state = "AWAITING_PRODUCT"
+            session.state = "AWAITING_COMPLAINT"
             session.save()
-            tpl_ice_support_ask_product(number)
+            tpl_icemake_complaint(number)
         else:
             session.state = "AWAITING_NUMBER_INPUT"
             session.save()
             tpl_ice_support_ask_number(number)
-
-    elif state == "AWAITING_PRODUCT":
-        td = session.ticket_data or {}
-        td["product"] = text
-        session.ticket_data = td
-        session.state = "AWAITING_COMPLAINT"
-        session.save()
-        tpl_icemake_complaint(number)
 
     elif state == "AWAITING_COMPLAINT":
         td = session.ticket_data or {}
@@ -294,7 +285,7 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         if selected_complaint.lower() == "other":
             session.state = "AWAITING_OTHER_COMPLAINT_TYPE"
             session.save()
-            tpl_other_complaint_type(number)
+            tpl_other_complaint_type_(number)
         else:
             td["complaint_type"] = selected_complaint
             session.ticket_data = td
@@ -343,8 +334,6 @@ def handle_icemake_message(msg: dict, contact: dict = None):
             customer_name=td.get("name", "Customer") or "Customer",
             customer_mobile=td.get("mobile", number) or number,
             city_state=city_state or "-",
-            address=address_str or "-",
-            product_name=td.get("product", "N/A") or "N/A",
             issue_type=issue_type,
             description=td.get("issue_desc", "No description provided") or "No description provided",
             assigned_engineer=engineer_info["name"] or "Support Team"
