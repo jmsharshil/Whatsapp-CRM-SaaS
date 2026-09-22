@@ -354,6 +354,11 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         session.state = "TICKET_GENERATED"
         session.save()
         
+        # Mark conversation as confirmed → CRM shows as Lead
+        conv_obj.status = "confirmed"
+        conv_obj.save(update_fields=["status", "bot_state", "bot_metadata"])
+
+        
     else:
         # Fallback
         pass
@@ -370,7 +375,7 @@ def handle_icemake_message(msg: dict, contact: dict = None):
 
     if org_obj:
         try:
-            td = session.ticket_data or {}
+            td = conv_obj.bot_metadata.get("ticket_data", {}) if isinstance(conv_obj.bot_metadata, dict) else {}
             conv_state, created = ConversationState.objects.get_or_create(
                 conversation=conv_obj,
                 defaults={
