@@ -348,6 +348,12 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         )
         
         session.state = "TICKET_GENERATED"
+        # Save ticket and engineer details back into the session data
+        td["ticket_no"] = ticket_no
+        td["engineer_name"] = engineer_info["name"] if engineer_info else ""
+        td["engineer_phone"] = engineer_info["phone"] if engineer_info else ""
+        session.ticket_data = td
+        
         # Mark conversation as confirmed → CRM shows as Lead
         conv_obj.status = "confirmed"
         session.save()  # saves bot_state, bot_metadata, AND status together
@@ -475,7 +481,6 @@ class IceMakeDataAPIView(APIView):
                     "ticket_no": td.get("ticket_no", ""),
                     "name": td.get("name", ""),
                     "registered_mobile": td.get("mobile", ""),
-                    "address": td.get("address", ""),
                     "city": td.get("city", ""),
                     "state": td.get("state", ""),
                     "pincode": td.get("pincode", ""),
