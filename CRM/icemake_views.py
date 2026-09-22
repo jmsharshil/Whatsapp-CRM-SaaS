@@ -323,6 +323,18 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         # Notify customer (Meta doesn't allow empty strings for template params)
         tpl_icemake_customer(number, ticket_no or "-")
         
+        registered_mobile = td.get("mobile", "").strip()
+        if registered_mobile:
+            reg_num_clean = "".join(filter(str.isdigit, registered_mobile))
+            if len(reg_num_clean) == 10:
+                reg_num_clean = "91" + reg_num_clean
+            
+            if reg_num_clean and reg_num_clean != number:
+                try:
+                    tpl_icemake_customer(reg_num_clean, ticket_no or "-")
+                except Exception as e:
+                    pass
+        
         # Notify engineer
         city_state = f"{td.get('city', '')} / {td.get('state', '')}".strip(" /")
         address_str = f"{td.get('address', '')}, Pincode: {td.get('pincode', '')}".strip(" ,")
