@@ -656,7 +656,7 @@ class WhatsAppWebhookView(APIView):
                             handle_acva_message(msg)
                         elif icemake_phone_id and phone_number_id == icemake_phone_id:
                             logger.info("[Webhook] Routing message to IceMake Bot")
-                            handle_icemake_message(msg)
+                            handle_icemake_message(msg, contacts[0] if contacts else {})
                         elif phone_number_id == "1168578376348442":
                             logger.info(f"[Webhook] Saving message for disabled bot number {phone_number_id}")
                             

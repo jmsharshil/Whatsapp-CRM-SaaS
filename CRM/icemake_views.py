@@ -114,12 +114,18 @@ def download_media_from_whatsapp(media_id: str, access_token: str) -> str:
         return ""
 
 
-def handle_icemake_message(msg: dict):
+def handle_icemake_message(msg: dict, contact: dict = None):
     number = msg.get("from", "")
     msg_id = msg.get("id", "")
     msg_type = msg.get("type", "text")
+    
+    profile_name = contact.get("profile", {}).get("name", "") if contact else ""
 
-    customer_obj, _ = Customer.objects.get_or_create(phone=number, defaults={'name': number})
+    customer_obj, created = Customer.objects.get_or_create(phone=number, defaults={'name': profile_name or number})
+    if not created and profile_name and (customer_obj.name == number or not customer_obj.name or customer_obj.name.startswith("91")):
+        customer_obj.name = profile_name
+        customer_obj.save(update_fields=['name'])
+
     client_account_obj = ClientAccount.objects.filter(phone_number_id=ICEMAKE_PHONE_NUMBER_ID).first()
 
     body = ""

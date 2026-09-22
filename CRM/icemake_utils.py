@@ -61,6 +61,8 @@ logger = logging.getLogger(__name__)
 ICEMAKE_PHONE_NUMBER_ID = "1272077585997381"
 META_SEND_URL = "https://graph.facebook.com/v22.0/{phone_id}/messages"
 
+from CRM.models import Customer, Conversation, ClientAccount, Message
+
 def _meta_post_icemake(payload: dict) -> bool:
     token = getattr(settings, "META_PERMANENT_TOKEN", "")
     url = META_SEND_URL.format(phone_id=ICEMAKE_PHONE_NUMBER_ID)
@@ -74,7 +76,50 @@ def _meta_post_icemake(payload: dict) -> bool:
         if r.status_code not in (200, 201):
             logger.error("[IceMake] Meta API error: %s - %s", r.status_code, r.text)
             return False
+            
+        res_data = r.json()
+        meta_msg_id = ""
+        if "messages" in res_data and len(res_data["messages"]) > 0:
+            meta_msg_id = res_data["messages"][0].get("id", "")
+            
         logger.info("[IceMake] Meta API success")
+        
+        # Save outbound message to DB
+        try:
+            to_phone = payload.get("to")
+            if to_phone:
+                customer_obj = Customer.objects.filter(phone=to_phone).first()
+                if customer_obj:
+                    client_account_obj = ClientAccount.objects.filter(phone_number_id=ICEMAKE_PHONE_NUMBER_ID).first()
+                    conv_obj, _ = Conversation.objects.get_or_create(
+                        customer=customer_obj,
+                        phone_number_id=ICEMAKE_PHONE_NUMBER_ID,
+                        defaults={'client': client_account_obj}
+                    )
+                    
+                    msg_type = payload.get("type", "text")
+                    content = ""
+                    if msg_type == "text":
+                        content = payload.get("text", {}).get("body", "")
+                    elif msg_type == "template":
+                        tpl_name = payload.get("template", {}).get("name", "")
+                        content = f"[Template: {tpl_name}]"
+                    elif msg_type == "image":
+                        content = f"[Image] {payload.get('image', {}).get('link', '')}"
+                    
+                    Message.objects.create(
+                        conversation=conv_obj,
+                        client=client_account_obj,
+                        customer=customer_obj,
+                        meta_message_id=meta_msg_id,
+                        direction="outbound",
+                        message_type=msg_type,
+                        content=content,
+                        status="sent"
+                    )
+        except Exception as db_exc:
+            logger.error("[IceMake] Failed to save outbound message: %s", db_exc)
+
         return True
     except Exception as exc:
         logger.error("[IceMake] Meta API exception: %s", exc)
