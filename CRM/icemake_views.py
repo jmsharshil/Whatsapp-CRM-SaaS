@@ -24,7 +24,6 @@ from .icemake_utils import (
     STATE_ENGINEER_MAPPING,
     tpl_registered_number_confirmation,
     tpl_icemake_complaint,
-    tpl_other_complaint_type_
 )
 
 
@@ -281,21 +280,7 @@ def handle_icemake_message(msg: dict, contact: dict = None):
     elif state == "AWAITING_COMPLAINT":
         td = session.ticket_data or {}
         selected_complaint = display_body.strip()
-        
-        if selected_complaint.lower() == "other":
-            session.state = "AWAITING_OTHER_COMPLAINT_TYPE"
-            session.save()
-            tpl_other_complaint_type_(number)
-        else:
-            td["complaint_type"] = selected_complaint
-            session.ticket_data = td
-            session.state = "AWAITING_ISSUE"
-            session.save()
-            tpl_ice_support_ask_issue(number)
-            
-    elif state == "AWAITING_OTHER_COMPLAINT_TYPE":
-        td = session.ticket_data or {}
-        td["complaint_type"] = text
+        td["complaint_type"] = selected_complaint
         session.ticket_data = td
         session.state = "AWAITING_ISSUE"
         session.save()
@@ -352,11 +337,9 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         )
         
         session.state = "TICKET_GENERATED"
-        session.save()
-        
         # Mark conversation as confirmed → CRM shows as Lead
         conv_obj.status = "confirmed"
-        conv_obj.save(update_fields=["status", "bot_state", "bot_metadata"])
+        session.save()  # saves bot_state, bot_metadata, AND status together
 
         
     else:

@@ -211,8 +211,6 @@ def tpl_registered_number_confirmation(to: str, number: str):
 def tpl_icemake_complaint(to: str):
     return _meta_post_icemake(_icemake_template_payload(to, "icemake_complaint"))
 
-def tpl_other_complaint_type_(to: str):
-    return _meta_post_icemake(_icemake_template_payload(to, "other_complaint_type_"))
 
 def tpl_ice_support_ask_issue(to: str):
     return _meta_post_icemake(_icemake_template_payload(to, "ice_support_ask_issue"))
