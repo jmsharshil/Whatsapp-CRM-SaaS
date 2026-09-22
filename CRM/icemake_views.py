@@ -354,24 +354,47 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         session.state = "TICKET_GENERATED"
         session.save()
         
-        # Update ConversationState so CRM shows stage + Lead status
-        try:
-            from CRM.models import Organization
-            org = None
-            if client_account_obj:
-                org = client_account_obj.tech_provider
-            ConversationState.objects.update_or_create(
-                conversation=conv_obj,
-                defaults={
-                    "stage": "Ticket Generated",
-                    "is_complete": True,
-                    "collected_fields": session.ticket_data or {},
-                    "organization": org,
-                }
-            )
-        except Exception as e:
-            logger.error("[IceMake] Failed to update ConversationState: %s", e)
-        
     else:
         # Fallback
         pass
+
+    # --- Sync bot state to ConversationState for Leads/Prospects View (GKD pattern) ---
+    org_obj = None
+    if client_account_obj:
+        org_obj = client_account_obj.tech_provider
+    else:
+        from CRM.models import WABAAccount
+        waba = WABAAccount.objects.filter(phone_number_id=ICEMAKE_PHONE_NUMBER_ID).first()
+        if waba:
+            org_obj = waba.organization
+
+    if org_obj:
+        try:
+            td = session.ticket_data or {}
+            conv_state, created = ConversationState.objects.get_or_create(
+                conversation=conv_obj,
+                defaults={
+                    "organization": org_obj,
+                    "stage": "greeting",
+                    "is_complete": False,
+                    "collected_fields": {}
+                }
+            )
+            if not created and conv_state.organization != org_obj:
+                conv_state.organization = org_obj
+
+            conv_state.stage = session.state or "greeting"
+            conv_state.is_complete = (session.state == "TICKET_GENERATED")
+            conv_state.collected_fields = {
+                "Name": td.get("name", ""),
+                "Mobile": td.get("mobile", ""),
+                "City": td.get("city", ""),
+                "State": td.get("state", ""),
+                "Pincode": td.get("pincode", ""),
+                "Complaint Type": td.get("complaint_type", ""),
+                "Issue": td.get("issue_desc", ""),
+            }
+            conv_state.save()
+        except Exception as e:
+            logger.error("[IceMake] ConversationState sync error: %s", e)
+
