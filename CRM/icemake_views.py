@@ -354,6 +354,24 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         session.state = "TICKET_GENERATED"
         session.save()
         
+        # Update ConversationState so CRM shows stage + Lead status
+        try:
+            from CRM.models import Organization
+            org = None
+            if client_account_obj:
+                org = client_account_obj.tech_provider
+            ConversationState.objects.update_or_create(
+                conversation=conv_obj,
+                defaults={
+                    "stage": "Ticket Generated",
+                    "is_complete": True,
+                    "collected_fields": session.ticket_data or {},
+                    "organization": org,
+                }
+            )
+        except Exception as e:
+            logger.error("[IceMake] Failed to update ConversationState: %s", e)
+        
     else:
         # Fallback
         pass
