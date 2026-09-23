@@ -16,6 +16,9 @@ from .icemake_utils import (
     tpl_ice_support_welcome,
     tpl_ice_support_ask_city,
     tpl_ice_support_ask_state,
+    tpl_icemake_state_1,
+    tpl_icemake_state_2,
+    tpl_icemake_state_3,
     tpl_ice_support_ask_pincode,
     tpl_ice_support_ask_number,
     tpl_ice_support_ask_issue,
@@ -231,11 +234,28 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         session.ticket_data = {"name": text}
         session.state = "AWAITING_STATE"
         session.save()
-        tpl_ice_support_ask_state(number)
+        tpl_icemake_state_1(number)
     
     elif state == "AWAITING_STATE":
+        selected_state_text = display_body.strip()
+        if selected_state_text.lower() == "next":
+            td = session.ticket_data or {}
+            current_page = td.get("state_page", 1)
+            if current_page == 1:
+                td["state_page"] = 2
+                session.ticket_data = td
+                session.save()
+                tpl_icemake_state_2(number)
+            elif current_page == 2:
+                td["state_page"] = 3
+                session.ticket_data = td
+                session.save()
+                tpl_icemake_state_3(number)
+            return
+
         td = session.ticket_data or {}
-        td["state"] = text
+        td["state"] = selected_state_text
+        td.pop("state_page", None)
         session.ticket_data = td
         session.state = "AWAITING_CITY"
         session.save()

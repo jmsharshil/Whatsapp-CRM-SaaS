@@ -30,6 +30,8 @@ STATE_ENGINEER_MAPPING = {
     "orissa": {"name": "Mr Mahesh", "phone": "918460332759"},
     "odisha": {"name": "Mr Mahesh", "phone": "918460332759"},
     "jharkhand": {"name": "Mr Mahesh", "phone": "918460332759"},
+    "west bengal": {"name": "Mr Mahesh", "phone": "918460332759"},
+        
     
     # West
     "maharashtra": {"name": "Mr Ashok", "phone": "918733004773"},
@@ -186,6 +188,15 @@ def tpl_ice_support_ask_city(to: str):
 
 def tpl_ice_support_ask_state(to: str):
     return _meta_post_icemake(_icemake_template_payload(to, "ice_support_ask_state"))
+
+def tpl_icemake_state_1(to: str):
+    return _meta_post_icemake(_icemake_template_payload(to, "icemake_state_1"))
+
+def tpl_icemake_state_2(to: str):
+    return _meta_post_icemake(_icemake_template_payload(to, "icemake_state_2"))
+
+def tpl_icemake_state_3(to: str):
+    return _meta_post_icemake(_icemake_template_payload(to, "icemake_state_3"))
 
 def tpl_ice_support_ask_pincode(to: str):
     return _meta_post_icemake(_icemake_template_payload(to, "ice_support_ask_pincode"))
