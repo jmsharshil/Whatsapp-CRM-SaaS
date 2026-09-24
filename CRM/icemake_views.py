@@ -297,28 +297,28 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         tpl_ice_support_ask_pincode(number)
         
     elif state == "AWAITING_PINCODE":
-        pincode_clean = re.sub(r'\D', '', text)
-        if msg_type != "text" or len(pincode_clean) != 6:
-            send_icemake_text(number, "Please enter a valid 6-digit pincode.")
+        text_clean = text.replace(" ", "").replace("-", "")
+        if msg_type != "text" or not text_clean.isdigit() or len(text_clean) != 6:
+            send_icemake_text(number, "Please enter a valid 6-digit pincode (numbers only).")
             return
         td = session.ticket_data or {}
-        td["pincode"] = text
+        td["pincode"] = text_clean
         session.ticket_data = td
         session.state = "AWAITING_NUMBER_INPUT"
         session.save()
         tpl_ice_support_ask_number(number)
 
     elif state == "AWAITING_NUMBER_INPUT":
-        mobile_clean = re.sub(r'\D', '', text)
-        if msg_type != "text" or len(mobile_clean) < 10:
-            send_icemake_text(number, "Please enter a valid mobile number with at least 10 digits.")
+        text_clean = text.replace(" ", "").replace("-", "").replace("+", "")
+        if msg_type != "text" or not text_clean.isdigit() or len(text_clean) < 10:
+            send_icemake_text(number, "Please enter a valid mobile number with at least 10 digits (numbers only).")
             return
         td = session.ticket_data or {}
-        td["mobile"] = text
+        td["mobile"] = text_clean
         session.ticket_data = td
         session.state = "AWAITING_CONFIRM_NUMBER"
         session.save()
-        tpl_registered_number_confirmation(number, text)
+        tpl_registered_number_confirmation(number, text_clean)
 
     elif state == "AWAITING_CONFIRM_NUMBER":
         if msg_type not in ["interactive", "button"]:
