@@ -2311,6 +2311,9 @@ def avantika_template_view(request):
         phone_font_size = request.POST.get("phone_font_size", 45)
         address_font_size = request.POST.get("address_font_size", 45)
         text_color = request.POST.get("text_color", "#000000")
+        name_font = request.POST.get("name_font", "Montserrat-ExtraBold.ttf")
+        address_font = request.POST.get("address_font", "Montserrat-Medium.ttf")
+        phone_font = request.POST.get("phone_font", "Montserrat-SemiBold.ttf")
         
         active_template = AvantikaTemplate.objects.filter(is_active=True).first()
         
@@ -2324,6 +2327,9 @@ def avantika_template_view(request):
                 phone_font_size=int(phone_font_size),
                 address_font_size=int(address_font_size),
                 text_color=text_color,
+                name_font=name_font,
+                address_font=address_font,
+                phone_font=phone_font,
                 is_active=True
             )
             if is_api:
@@ -2336,6 +2342,9 @@ def avantika_template_view(request):
             active_template.phone_font_size = int(phone_font_size)
             active_template.address_font_size = int(address_font_size)
             active_template.text_color = text_color
+            active_template.name_font = name_font
+            active_template.address_font = address_font
+            active_template.phone_font = phone_font
             active_template.save()
             if is_api:
                 return JsonResponse({"success": True, "message": "Active template updated successfully"})

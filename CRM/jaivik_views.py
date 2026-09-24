@@ -105,22 +105,21 @@ def generate_avantika_image(contact, active_template) -> str:
         def get_specific_font(font_filename, size):
             from django.conf import settings
             import os
+            
             primary_path = os.path.join(settings.BASE_DIR, 'CRM', 'fonts', font_filename)
-            font_paths = [
-                primary_path,
-                os.path.join(settings.BASE_DIR, 'CRM', 'fonts', 'Roboto-Regular.ttf'),
-                r"C:\Windows\Fonts\segoeuib.ttf",
-                r"C:\Windows\Fonts\segoeui.ttf",
-                r"C:\Windows\Fonts\calibrib.ttf",
-                r"C:\Windows\Fonts\calibri.ttf",
-                r"C:\Windows\Fonts\arialbd.ttf",
-                r"C:\Windows\Fonts\arial.ttf",
-                "arial.ttf",
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
-                "/usr/share/fonts/truetype/freefont/FreeSans.ttf"
-            ]
+            font_paths = [primary_path, font_filename]
+            
+            if 'BoldItalic' in font_filename or 'bi.ttf' in font_filename:
+                font_paths.extend([r"C:\Windows\Fonts\arialbi.ttf", r"C:\Windows\Fonts\segoeuiz.ttf"])
+            elif 'Bold' in font_filename or 'bd.ttf' in font_filename:
+                font_paths.extend([r"C:\Windows\Fonts\arialbd.ttf", r"C:\Windows\Fonts\segoeuib.ttf"])
+            elif 'Italic' in font_filename or 'i.ttf' in font_filename:
+                font_paths.extend([r"C:\Windows\Fonts\ariali.ttf", r"C:\Windows\Fonts\segoeuii.ttf"])
+            else:
+                font_paths.extend([r"C:\Windows\Fonts\arial.ttf", r"C:\Windows\Fonts\segoeui.ttf"])
+                
+            font_paths.append(os.path.join(settings.BASE_DIR, 'CRM', 'fonts', 'Roboto-Regular.ttf'))
+            
             for path in font_paths:
                 try:
                     return ImageFont.truetype(path, size)
@@ -128,14 +127,18 @@ def generate_avantika_image(contact, active_template) -> str:
                     continue
             return ImageFont.load_default()
             
-        name_font = get_specific_font('Montserrat-ExtraBold.ttf', active_template.font_size)
+        n_font_file = getattr(active_template, 'name_font', 'Montserrat-ExtraBold.ttf')
+        a_font_file = getattr(active_template, 'address_font', 'Montserrat-Medium.ttf')
+        p_font_file = getattr(active_template, 'phone_font', 'Montserrat-SemiBold.ttf')
+        
+        name_font = get_specific_font(n_font_file, active_template.font_size)
         
         # Fallback to calculated defaults if DB doesn't have the new fields yet
         p_font_size = getattr(active_template, 'phone_font_size', max(12, int(active_template.font_size * 0.75)))
         a_font_size = getattr(active_template, 'address_font_size', max(12, int(active_template.font_size * 0.75)))
         
-        phone_font = get_specific_font('Montserrat-SemiBold.ttf', p_font_size)
-        address_font = get_specific_font('Montserrat-Medium.ttf', a_font_size)
+        phone_font = get_specific_font(p_font_file, p_font_size)
+        address_font = get_specific_font(a_font_file, a_font_size)
         
         display_name = contact.name.strip()
         

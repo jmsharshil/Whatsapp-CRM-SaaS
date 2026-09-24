@@ -607,6 +607,10 @@ class AvantikaTemplate(models.Model):
     phone_font_size = models.IntegerField(default=45)
     address_font_size = models.IntegerField(default=45)
     
+    name_font = models.CharField(max_length=255, default="Montserrat-ExtraBold.ttf")
+    address_font = models.CharField(max_length=255, default="Montserrat-Medium.ttf")
+    phone_font = models.CharField(max_length=255, default="Montserrat-SemiBold.ttf")
+    
     text_color = models.CharField(max_length=20, default="#000000")
     is_active = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)

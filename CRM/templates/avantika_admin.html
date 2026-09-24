@@ -7,7 +7,9 @@
     <!-- Import Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@500;600;800&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,700&family=EB+Garamond:ital,wght@0,400..800;1,400..800&display=swap"
+        rel="stylesheet">
     <style>
         :root {
             --primary: #4F46E5;
@@ -280,19 +282,25 @@
                     {% if active_template and active_template.base_image %}
                     <img id="preview" src="{{ active_template.base_image.url }}" alt="Image Preview"
                         style="display: block;">
-                        <div id="nameMarker" class="marker" style="display: none; line-height: 1.2; font-family: 'Montserrat', sans-serif;">
-                            <div id="markerName" style="font-weight: 800;">[Name]</div>
-                            <div id="markerAddress" style="font-size: 75%; font-weight: 500; opacity: 1; margin-top: 4px;">[Address]</div>
-                            <div id="markerNumber" style="font-size: 75%; font-weight: 600; opacity: 1; margin-top: 4px;">[Number]</div>
-                        </div>
+                    <div id="nameMarker" class="marker"
+                        style="display: none; line-height: 1.2; font-family: 'Montserrat', sans-serif;">
+                        <div id="markerName" style="font-weight: 800;">[Name]</div>
+                        <div id="markerAddress" style="font-size: 75%; font-weight: 500; opacity: 1; margin-top: 4px;">
+                            [Address]</div>
+                        <div id="markerNumber" style="font-size: 75%; font-weight: 600; opacity: 1; margin-top: 4px;">
+                            [Number]</div>
+                    </div>
                     <div id="placeholderText" style="display: none; padding: 40px; color: #94A3B8; font-weight: 500;">
                         Image Preview Area</div>
                     {% else %}
                     <img id="preview" src="#" alt="Image Preview">
-                    <div id="nameMarker" class="marker" style="line-height: 1.2; font-family: 'Montserrat', sans-serif;">
+                    <div id="nameMarker" class="marker"
+                        style="line-height: 1.2; font-family: 'Montserrat', sans-serif;">
                         <div id="markerName" style="font-weight: 800;">[Name]</div>
-                        <div id="markerAddress" style="font-size: 75%; font-weight: 500; opacity: 1; margin-top: 4px;">[Address]</div>
-                        <div id="markerNumber" style="font-size: 75%; font-weight: 600; opacity: 1; margin-top: 4px;">[Number]</div>
+                        <div id="markerAddress" style="font-size: 75%; font-weight: 500; opacity: 1; margin-top: 4px;">
+                            [Address]</div>
+                        <div id="markerNumber" style="font-size: 75%; font-weight: 600; opacity: 1; margin-top: 4px;">
+                            [Number]</div>
                     </div>
                     <div id="placeholderText" style="padding: 40px; color: #94A3B8; font-weight: 500;">Image Preview
                         Area</div>
@@ -336,6 +344,90 @@
                         <input type="color" name="text_color" id="textColorInput"
                             value="{{ active_template.text_color|default:'#000000' }}" required>
                     </div>
+                </div>
+
+                <hr style="margin: 16px 0;">
+                <h3 style="margin-top:0; margin-bottom:12px; font-size: 1.1rem;">Name Styling</h3>
+                <div class="form-row form-group">
+                    <div>
+                        <label>Font Family</label>
+                        <select id="nameFontFamily" class="font-select">
+                            <option value="Montserrat">Montserrat</option>
+                            <option value="Calibri">Calibri</option>
+                            <option value="Arial">Arial</option>
+                            <option value="Times New Roman">Times New Roman</option>
+                            <option value="EB Garamond">EB Garamond</option>
+                            <option value="Impact">Impact</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; gap: 24px; align-items: center; margin-top: 28px;">
+                        <label for="nameBold" style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; letter-spacing: normal; cursor: pointer; color: var(--text-main); font-weight: 500; font-size: 0.95rem;">
+                            <input type="checkbox" id="nameBold">
+                            Bold
+                        </label>
+                        <label for="nameItalic" style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; letter-spacing: normal; cursor: pointer; color: var(--text-main); font-weight: 500; font-size: 0.95rem;">
+                            <input type="checkbox" id="nameItalic">
+                            Italic
+                        </label>
+                    </div>
+                    <input type="hidden" name="name_font" id="nameFontInput"
+                        value="{{ active_template.name_font|default:'Montserrat-ExtraBold.ttf' }}">
+                </div>
+
+                <hr style="margin: 16px 0;">
+                <h3 style="margin-top:0; margin-bottom:12px; font-size: 1.1rem;">Phone Styling</h3>
+                <div class="form-row form-group">
+                    <div>
+                        <label>Font Family</label>
+                        <select id="phoneFontFamily" class="font-select">
+                            <option value="Montserrat">Montserrat</option>
+                            <option value="Calibri">Calibri</option>
+                            <option value="Arial">Arial</option>
+                            <option value="Times New Roman">Times New Roman</option>
+                            <option value="EB Garamond">EB Garamond</option>
+                            <option value="Impact">Impact</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; gap: 24px; align-items: center; margin-top: 28px;">
+                        <label for="phoneBold" style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; letter-spacing: normal; cursor: pointer; color: var(--text-main); font-weight: 500; font-size: 0.95rem;">
+                            <input type="checkbox" id="phoneBold">
+                            Bold
+                        </label>
+                        <label for="phoneItalic" style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; letter-spacing: normal; cursor: pointer; color: var(--text-main); font-weight: 500; font-size: 0.95rem;">
+                            <input type="checkbox" id="phoneItalic">
+                            Italic
+                        </label>
+                    </div>
+                    <input type="hidden" name="phone_font" id="phoneFontInput"
+                        value="{{ active_template.phone_font|default:'Montserrat-SemiBold.ttf' }}">
+                </div>
+
+                <hr style="margin: 16px 0;">
+                <h3 style="margin-top:0; margin-bottom:12px; font-size: 1.1rem;">Address Styling</h3>
+                <div class="form-row form-group">
+                    <div>
+                        <label>Font Family</label>
+                        <select id="addressFontFamily" class="font-select">
+                            <option value="Montserrat">Montserrat</option>
+                            <option value="Calibri">Calibri</option>
+                            <option value="Arial">Arial</option>
+                            <option value="Times New Roman">Times New Roman</option>
+                            <option value="EB Garamond">EB Garamond</option>
+                            <option value="Impact">Impact</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; gap: 24px; align-items: center; margin-top: 28px;">
+                        <label for="addressBold" style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; letter-spacing: normal; cursor: pointer; color: var(--text-main); font-weight: 500; font-size: 0.95rem;">
+                            <input type="checkbox" id="addressBold">
+                            Bold
+                        </label>
+                        <label for="addressItalic" style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; letter-spacing: normal; cursor: pointer; color: var(--text-main); font-weight: 500; font-size: 0.95rem;">
+                            <input type="checkbox" id="addressItalic">
+                            Italic
+                        </label>
+                    </div>
+                    <input type="hidden" name="address_font" id="addressFontInput"
+                        value="{{ active_template.address_font|default:'Montserrat-Medium.ttf' }}">
                 </div>
 
                 <button type="submit" class="btn-primary" style="width: 100%; margin-top: 10px;">
@@ -525,6 +617,116 @@
             nameMarker.style.display = 'block';
             updateMarkerStyle();
         });
+
+        // Font Style Logic
+        const prefixes = ['name', 'phone', 'address'];
+
+        function parseFontFilename(filename, prefix) {
+            let family = 'Montserrat';
+            let isBold = false;
+            let isItalic = false;
+
+            if (filename.includes('Roboto')) family = 'Roboto';
+            if (filename.includes('Arial') || filename.includes('arial')) family = 'Arial';
+            if (filename.includes('Calibri') || filename.includes('calibri')) family = 'Calibri';
+            if (filename.includes('Times') || filename.includes('times')) family = 'Times New Roman';
+            if (filename.includes('Garamond')) family = 'EB Garamond';
+            if (filename.includes('Impact') || filename.includes('impact')) family = 'Impact';
+
+            if (filename.includes('Bold') || filename.includes('bd') || filename.includes('b.ttf') || filename.includes('z.ttf') || filename.includes('bi.ttf')) isBold = true;
+            if (filename.includes('Italic') || filename.includes('i.ttf') || filename.includes('z.ttf') || filename.includes('bi.ttf')) isItalic = true;
+
+            // Explicitly map SemiBold/ExtraBold/Medium to bold for simplicity in UI, though in DB they are specific
+            if (filename.includes('SemiBold') || filename.includes('ExtraBold') || filename.includes('Medium')) {
+                // If it's the default, we map it to checked.
+                isBold = true;
+            }
+
+            document.getElementById(prefix + 'FontFamily').value = family;
+            document.getElementById(prefix + 'Bold').checked = isBold;
+            document.getElementById(prefix + 'Italic').checked = isItalic;
+        }
+
+        function generateFontFilename(prefix) {
+            const family = document.getElementById(prefix + 'FontFamily').value;
+            const isBold = document.getElementById(prefix + 'Bold').checked;
+            const isItalic = document.getElementById(prefix + 'Italic').checked;
+
+            let suffix = '-Regular';
+            if (isBold && isItalic) suffix = '-BoldItalic';
+            else if (isBold) suffix = '-Bold';
+            else if (isItalic) suffix = '-Italic';
+
+            if (family === 'Arial') {
+                if (isBold && isItalic) return 'arialbi.ttf';
+                if (isBold) return 'arialbd.ttf';
+                if (isItalic) return 'ariali.ttf';
+                return 'arial.ttf';
+            }
+            if (family === 'Times New Roman') {
+                if (isBold && isItalic) return 'timesbi.ttf';
+                if (isBold) return 'timesbd.ttf';
+                if (isItalic) return 'timesi.ttf';
+                return 'times.ttf';
+            }
+            if (family === 'Calibri') {
+                if (isBold && isItalic) return 'calibriz.ttf';
+                if (isBold) return 'calibrib.ttf';
+                if (isItalic) return 'calibrii.ttf';
+                return 'calibri.ttf';
+            }
+            if (family === 'Impact') {
+                return 'impact.ttf';
+            }
+            if (family === 'EB Garamond') {
+                return `EBGaramond${suffix}.ttf`;
+            }
+
+            return `${family}${suffix}.ttf`;
+        }
+
+        prefixes.forEach(prefix => {
+            const input = document.getElementById(prefix + 'FontInput');
+            if (input && input.value) {
+                parseFontFilename(input.value, prefix);
+            }
+
+            const updateField = () => {
+                const newFont = generateFontFilename(prefix);
+                document.getElementById(prefix + 'FontInput').value = newFont;
+                updateMarkerStyle();
+            };
+
+            document.getElementById(prefix + 'FontFamily').addEventListener('change', updateField);
+            document.getElementById(prefix + 'Bold').addEventListener('change', updateField);
+            document.getElementById(prefix + 'Italic').addEventListener('change', updateField);
+        });
+
+        // Override updateMarkerStyle to also apply font-family, weight, and style
+        const originalUpdateMarkerStyle = updateMarkerStyle;
+        updateMarkerStyle = function () {
+            originalUpdateMarkerStyle();
+
+            prefixes.forEach(prefix => {
+                const family = document.getElementById(prefix + 'FontFamily').value;
+                const isBold = document.getElementById(prefix + 'Bold').checked;
+                const isItalic = document.getElementById(prefix + 'Italic').checked;
+
+                let targetEl = null;
+                if (prefix === 'name') targetEl = document.getElementById('markerName');
+                if (prefix === 'phone') targetEl = document.getElementById('markerNumber');
+                if (prefix === 'address') targetEl = document.getElementById('markerAddress');
+
+                if (targetEl) {
+                    targetEl.style.fontFamily = `"${family}", sans-serif`;
+                    targetEl.style.fontWeight = isBold ? 'bold' : 'normal';
+                    targetEl.style.fontStyle = isItalic ? 'italic' : 'normal';
+                }
+            });
+        };
+
+        // Apply initial parsed styles
+        setTimeout(updateMarkerStyle, 100);
 
         function loadHistory(btn) {
             btn.textContent = 'Loading...';
