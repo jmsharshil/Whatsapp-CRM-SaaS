@@ -231,12 +231,18 @@ def handle_icemake_message(msg: dict, contact: dict = None):
     text = body.strip()
 
     if state == "AWAITING_NAME":
+        if msg_type != "text":
+            send_icemake_text(number, "Please enter a valid name.")
+            return
         session.ticket_data = {"name": text}
         session.state = "AWAITING_STATE"
         session.save()
         tpl_icemake_state_1(number)
     
     elif state == "AWAITING_STATE":
+        if msg_type not in ["interactive", "button"]:
+            send_icemake_text(number, "Please select a valid state from the list.")
+            return
         selected_state_text = display_body.strip()
         if selected_state_text.lower() == "next":
             td = session.ticket_data or {}
@@ -262,6 +268,9 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         tpl_ice_support_ask_city(number)
         
     elif state == "AWAITING_CITY":
+        if msg_type != "text":
+            send_icemake_text(number, "Please enter a valid city.")
+            return
         td = session.ticket_data or {}
         td["city"] = text
         session.ticket_data = td
@@ -270,6 +279,9 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         tpl_ice_support_ask_pincode(number)
         
     elif state == "AWAITING_PINCODE":
+        if msg_type != "text":
+            send_icemake_text(number, "Please enter a valid pincode.")
+            return
         td = session.ticket_data or {}
         td["pincode"] = text
         session.ticket_data = td
@@ -278,6 +290,9 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         tpl_ice_support_ask_number(number)
 
     elif state == "AWAITING_NUMBER_INPUT":
+        if msg_type != "text":
+            send_icemake_text(number, "Please enter a valid mobile number.")
+            return
         td = session.ticket_data or {}
         td["mobile"] = text
         session.ticket_data = td
@@ -286,6 +301,9 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         tpl_registered_number_confirmation(number, text)
 
     elif state == "AWAITING_CONFIRM_NUMBER":
+        if msg_type not in ["interactive", "button"]:
+            send_icemake_text(number, "Please select a valid option from the buttons.")
+            return
         td = session.ticket_data or {}
         user_choice = display_body.strip().lower()
         if user_choice == "yes":
@@ -298,6 +316,9 @@ def handle_icemake_message(msg: dict, contact: dict = None):
             tpl_ice_support_ask_number(number)
 
     elif state == "AWAITING_COMPLAINT":
+        if msg_type not in ["interactive", "button"]:
+            send_icemake_text(number, "Please select a valid complaint type from the list.")
+            return
         td = session.ticket_data or {}
         selected_complaint = display_body.strip()
         td["complaint_type"] = selected_complaint
@@ -307,6 +328,9 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         tpl_ice_support_ask_issue(number)
 
     elif state == "AWAITING_ISSUE":
+        if msg_type != "text":
+            send_icemake_text(number, "Please enter a valid issue description.")
+            return
         td = session.ticket_data or {}
         td["issue_desc"] = text
         session.ticket_data = td
