@@ -235,7 +235,7 @@ def tpl_icemake_customer(to: str, ticket_no: str):
             ]
         }
     ]
-    return _meta_post_icemake(_icemake_template_payload(to, "icemake_customer", components))
+    return _meta_post_icemake(_icemake_template_payload(to, "icemake_customer_", components))
 
 def tpl_icemake_serviceengineer(to: str, ticket: str, customer_name: str, customer_mobile: str, city_state: str, issue_type: str, description: str, assigned_engineer: str):
     components = [
