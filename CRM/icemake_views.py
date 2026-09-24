@@ -14,6 +14,7 @@ from .icemake_utils import (
     send_icemake_text, 
     send_icemake_image,
     tpl_ice_support_welcome,
+    tpl_icemake_ask_name,
     tpl_ice_support_ask_city,
     tpl_ice_support_ask_state,
     tpl_icemake_state_1,
@@ -221,7 +222,7 @@ def handle_icemake_message(msg: dict, contact: dict = None):
     
     is_trigger = (session.state == "INIT") or bool(re.search(r'^(hi|hello|hey|menu)$', body.lower()))
     if is_trigger:
-        session.state = "AWAITING_NAME"
+        session.state = "AWAITING_WELCOME_CONTINUE"
         session.ticket_data = {}
         session.save()
         tpl_ice_support_welcome(number)
@@ -230,7 +231,16 @@ def handle_icemake_message(msg: dict, contact: dict = None):
     state = session.state
     text = body.strip()
 
-    if state == "AWAITING_NAME":
+    if state == "AWAITING_WELCOME_CONTINUE":
+        if msg_type not in ["interactive", "button"]:
+            send_icemake_text(number, "Please click the Continue button.")
+            return
+        session.state = "AWAITING_NAME"
+        session.save()
+        tpl_icemake_ask_name(number)
+        return
+
+    elif state == "AWAITING_NAME":
         if msg_type != "text":
             send_icemake_text(number, "Please enter a valid name.")
             return
@@ -242,6 +252,14 @@ def handle_icemake_message(msg: dict, contact: dict = None):
     elif state == "AWAITING_STATE":
         if msg_type not in ["interactive", "button"]:
             send_icemake_text(number, "Please select a valid state from the list.")
+            td = session.ticket_data or {}
+            current_page = td.get("state_page", 1)
+            if current_page == 1:
+                tpl_icemake_state_1(number)
+            elif current_page == 2:
+                tpl_icemake_state_2(number)
+            else:
+                tpl_icemake_state_3(number)
             return
         selected_state_text = display_body.strip()
         if selected_state_text.lower() == "next":
@@ -279,8 +297,9 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         tpl_ice_support_ask_pincode(number)
         
     elif state == "AWAITING_PINCODE":
-        if msg_type != "text":
-            send_icemake_text(number, "Please enter a valid pincode.")
+        pincode_clean = re.sub(r'\D', '', text)
+        if msg_type != "text" or len(pincode_clean) != 6:
+            send_icemake_text(number, "Please enter a valid 6-digit pincode.")
             return
         td = session.ticket_data or {}
         td["pincode"] = text
@@ -290,8 +309,9 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         tpl_ice_support_ask_number(number)
 
     elif state == "AWAITING_NUMBER_INPUT":
-        if msg_type != "text":
-            send_icemake_text(number, "Please enter a valid mobile number.")
+        mobile_clean = re.sub(r'\D', '', text)
+        if msg_type != "text" or len(mobile_clean) < 10:
+            send_icemake_text(number, "Please enter a valid mobile number with at least 10 digits.")
             return
         td = session.ticket_data or {}
         td["mobile"] = text
@@ -303,6 +323,8 @@ def handle_icemake_message(msg: dict, contact: dict = None):
     elif state == "AWAITING_CONFIRM_NUMBER":
         if msg_type not in ["interactive", "button"]:
             send_icemake_text(number, "Please select a valid option from the buttons.")
+            td = session.ticket_data or {}
+            tpl_registered_number_confirmation(number, td.get("mobile", ""))
             return
         td = session.ticket_data or {}
         user_choice = display_body.strip().lower()
@@ -318,6 +340,7 @@ def handle_icemake_message(msg: dict, contact: dict = None):
     elif state == "AWAITING_COMPLAINT":
         if msg_type not in ["interactive", "button"]:
             send_icemake_text(number, "Please select a valid complaint type from the list.")
+            tpl_icemake_complaint(number)
             return
         td = session.ticket_data or {}
         selected_complaint = display_body.strip()

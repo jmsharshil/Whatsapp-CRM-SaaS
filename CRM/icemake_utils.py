@@ -181,7 +181,23 @@ def _icemake_template_payload(to: str, name: str, components: list = None) -> di
     return payload
 
 def tpl_ice_support_welcome(to: str):
-    return _meta_post_icemake(_icemake_template_payload(to, "ice_support_welcome"))
+    components = [
+        {
+            "type": "header",
+            "parameters": [
+                {
+                    "type": "image",
+                    "image": {
+                        "link": "https://metacrm.blob.core.windows.net/media/icemake_media/icemake.jpeg"
+                    }
+                }
+            ]
+        }
+    ]
+    return _meta_post_icemake(_icemake_template_payload(to, "ice_support_welcome", components))
+
+def tpl_icemake_ask_name(to: str):
+    return _meta_post_icemake(_icemake_template_payload(to, "icemake_ask_name"))
 
 def tpl_ice_support_ask_city(to: str):
     return _meta_post_icemake(_icemake_template_payload(to, "ice_support_ask_city"))
