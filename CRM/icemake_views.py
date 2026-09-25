@@ -370,7 +370,7 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         if user_state:
             # Step 1: exact substring match
             for state_key, e_info in STATE_ENGINEER_MAPPING.items():
-                if state_key in user_state or user_state in state_key:
+                if state_key in user_state:
                     engineer_info = e_info
                     break
             else:

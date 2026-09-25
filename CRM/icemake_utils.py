@@ -10,16 +10,21 @@ from django.core.files.base import ContentFile
 STATE_ENGINEER_MAPPING = {
     # North
     "delhi": {"name": "Mr Manjit", "phone": "919998857391"},
+    "delhi ncr": {"name": "Mr Manjit", "phone": "919998857391"},
     "haryana": {"name": "Mr Manjit", "phone": "919998857391"},
     "uttar pradesh": {"name": "Mr Manjit", "phone": "919998857391"},
     "up": {"name": "Mr Manjit", "phone": "919998857391"},
     "uttarakhand": {"name": "Mr Manjit", "phone": "919998857391"},
     "hp": {"name": "Mr Manjit", "phone": "919998857391"},
     "himachal": {"name": "Mr Manjit", "phone": "919998857391"},
+    "himachal pradesh": {"name": "Mr Manjit", "phone": "919998857391"},
     "punjab": {"name": "Mr Manjit", "phone": "919998857391"},
     "j & k": {"name": "Mr Manjit", "phone": "919998857391"},
     "jammu": {"name": "Mr Manjit", "phone": "919998857391"},
     "kashmir": {"name": "Mr Manjit", "phone": "919998857391"},
+    "jammu & kashmir": {"name": "Mr Manjit", "phone": "919998857391"},
+    "jammu and kashmir": {"name": "Mr Manjit", "phone": "919998857391"},
+    "chandigarh": {"name": "Mr Manjit", "phone": "919998857391"},
     
     # East
     "kolkatta": {"name": "Mr Mahesh", "phone": "919512037115"},
@@ -27,10 +32,18 @@ STATE_ENGINEER_MAPPING = {
     "assam": {"name": "Mr Mahesh", "phone": "919512037115"},
     "bihar": {"name": "Mr Mahesh", "phone": "919512037115"},
     "chattisgarh": {"name": "Mr Mahesh", "phone": "919512037115"},
+    "chhattisgarh": {"name": "Mr Mahesh", "phone": "919512037115"},
     "orissa": {"name": "Mr Mahesh", "phone": "919512037115"},
     "odisha": {"name": "Mr Mahesh", "phone": "919512037115"},
     "jharkhand": {"name": "Mr Mahesh", "phone": "919512037115"},
     "west bengal": {"name": "Mr Mahesh", "phone": "919512037115"},
+    "arunachal pradesh": {"name": "Mr Mahesh", "phone": "919512037115"},
+    "manipur": {"name": "Mr Mahesh", "phone": "919512037115"},
+    "meghalaya": {"name": "Mr Mahesh", "phone": "919512037115"},
+    "mizoram": {"name": "Mr Mahesh", "phone": "919512037115"},
+    "nagaland": {"name": "Mr Mahesh", "phone": "919512037115"},
+    "sikkim": {"name": "Mr Mahesh", "phone": "919512037115"},
+    "tripura": {"name": "Mr Mahesh", "phone": "919512037115"},
         
     
     # West
