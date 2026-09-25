@@ -358,6 +358,10 @@
                             <option value="Times New Roman">Times New Roman</option>
                             <option value="EB Garamond">EB Garamond</option>
                             <option value="Impact">Impact</option>
+                            <option value="Franklin Gothic Medium Cond">Franklin Gothic Medium Cond</option>
+                            <option value="Microsoft Uighur">Microsoft Uighur</option>
+                            <option value="Sitla Heading Semi Bold">Sitla Heading Semi Bold</option>
+                            <option value="Sylfaen">Sylfaen</option>
                         </select>
                     </div>
                     <div style="display: flex; gap: 24px; align-items: center; margin-top: 28px;">
@@ -386,6 +390,10 @@
                             <option value="Times New Roman">Times New Roman</option>
                             <option value="EB Garamond">EB Garamond</option>
                             <option value="Impact">Impact</option>
+                            <option value="Franklin Gothic Medium Cond">Franklin Gothic Medium Cond</option>
+                            <option value="Microsoft Uighur">Microsoft Uighur</option>
+                            <option value="Sitla Heading Semi Bold">Sitla Heading Semi Bold</option>
+                            <option value="Sylfaen">Sylfaen</option>
                         </select>
                     </div>
                     <div style="display: flex; gap: 24px; align-items: center; margin-top: 28px;">
@@ -414,6 +422,10 @@
                             <option value="Times New Roman">Times New Roman</option>
                             <option value="EB Garamond">EB Garamond</option>
                             <option value="Impact">Impact</option>
+                            <option value="Franklin Gothic Medium Cond">Franklin Gothic Medium Cond</option>
+                            <option value="Microsoft Uighur">Microsoft Uighur</option>
+                            <option value="Sitla Heading Semi Bold">Sitla Heading Semi Bold</option>
+                            <option value="Sylfaen">Sylfaen</option>
                         </select>
                     </div>
                     <div style="display: flex; gap: 24px; align-items: center; margin-top: 28px;">
@@ -632,6 +644,10 @@
             if (filename.includes('Times') || filename.includes('times')) family = 'Times New Roman';
             if (filename.includes('Garamond')) family = 'EB Garamond';
             if (filename.includes('Impact') || filename.includes('impact')) family = 'Impact';
+            if (filename.includes('framdcn')) family = 'Franklin Gothic Medium Cond';
+            if (filename.includes('msuighur')) family = 'Microsoft Uighur';
+            if (filename.includes('SitkaVF')) family = 'Sitla Heading Semi Bold';
+            if (filename.includes('sylfaen')) family = 'Sylfaen';
 
             if (filename.includes('Bold') || filename.includes('bd') || filename.includes('b.ttf') || filename.includes('z.ttf') || filename.includes('bi.ttf')) isBold = true;
             if (filename.includes('Italic') || filename.includes('i.ttf') || filename.includes('z.ttf') || filename.includes('bi.ttf')) isItalic = true;
@@ -680,6 +696,18 @@
             }
             if (family === 'EB Garamond') {
                 return `EBGaramond${suffix}.ttf`;
+            }
+            if (family === 'Franklin Gothic Medium Cond') {
+                return 'framdcn.ttf';
+            }
+            if (family === 'Microsoft Uighur') {
+                return 'msuighur.ttf';
+            }
+            if (family === 'Sitla Heading Semi Bold') {
+                return 'SitkaVF.ttf';
+            }
+            if (family === 'Sylfaen') {
+                return 'sylfaen.ttf';
             }
 
             return `${family}${suffix}.ttf`;

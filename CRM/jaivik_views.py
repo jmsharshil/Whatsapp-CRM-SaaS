@@ -107,7 +107,23 @@ def generate_avantika_image(contact, active_template) -> str:
             import os
             
             primary_path = os.path.join(settings.BASE_DIR, 'CRM', 'fonts', font_filename)
-            font_paths = [primary_path, font_filename]
+            font_paths = [primary_path, font_filename, os.path.join(r"C:\Windows\Fonts", font_filename)]
+            
+            # Mapping for specific user requested fonts (now bundled in CRM/fonts for Azure)
+            font_map = {
+                'franklin gothic medium cond': 'framdcn.ttf',
+                'calibri': 'calibri.ttf',
+                'microsoft uighur': 'msuighur.ttf',
+                'sitla heading semi bold': 'SitkaVF.ttf',
+                'sitka heading semi bold': 'SitkaVF.ttf',
+                'sylfaen': 'sylfaen.ttf'
+            }
+            
+            clean_name = font_filename.lower().replace('.ttf', '').replace('.ttc', '').strip()
+            if clean_name in font_map:
+                mapped_font = font_map[clean_name]
+                font_paths.insert(0, os.path.join(settings.BASE_DIR, 'CRM', 'fonts', mapped_font))
+                font_paths.insert(1, os.path.join(r"C:\Windows\Fonts", mapped_font))
             
             if 'BoldItalic' in font_filename or 'bi.ttf' in font_filename:
                 font_paths.extend([r"C:\Windows\Fonts\arialbi.ttf", r"C:\Windows\Fonts\segoeuiz.ttf"])
