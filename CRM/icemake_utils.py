@@ -88,6 +88,15 @@ def _meta_post_icemake(payload: dict) -> bool:
     
     try:
         r = requests.post(url, json=payload, headers=headers, timeout=10)
+        
+        # DEBUG LOGGING FOR META API
+        try:
+            with open(os.path.join(settings.BASE_DIR, "meta_debug.log"), "a", encoding="utf-8") as f:
+                f.write(f"PAYLOAD: {json.dumps(payload)}\n")
+                f.write(f"RESPONSE [{r.status_code}]: {r.text}\n\n")
+        except Exception:
+            pass
+
         if r.status_code not in (200, 201):
             logger.error("[IceMake] Meta API error: %s - %s", r.status_code, r.text)
             return False
