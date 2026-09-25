@@ -405,13 +405,13 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         
         tpl_icemake_serviceengineer(
             to=engineer_info["phone"],
-            ticket=ticket_no or "-",
-            customer_name=td.get("name", "Customer") or "Customer",
-            customer_mobile=td.get("mobile", number) or number,
-            city_state=city_state or "-",
-            issue_type=issue_type,
-            description=td.get("issue_desc", "No description provided") or "No description provided",
-            assigned_engineer=engineer_info["name"] or "Support Team"
+            ticket=(ticket_no or "-").replace('\n', ' '),
+            customer_name=(td.get("name", "Customer") or "Customer").replace('\n', ' '),
+            customer_mobile=(td.get("mobile", number) or number).replace('\n', ' '),
+            city_state=(city_state or "-").replace('\n', ' '),
+            issue_type=(issue_type or "-").replace('\n', ' '),
+            description=(td.get("issue_desc", "No description provided") or "No description provided").replace('\n', ' '),
+            assigned_engineer=(engineer_info["name"] or "Support Team").replace('\n', ' ')
         )
         
         session.state = "TICKET_GENERATED"
