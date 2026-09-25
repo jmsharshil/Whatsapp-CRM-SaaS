@@ -112,51 +112,50 @@ def _meta_post_icemake(payload: dict) -> bool:
         try:
             to_phone = payload.get("to")
             if to_phone:
-                customer_obj = Customer.objects.filter(phone=to_phone).first()
-                if customer_obj:
-                    client_account_obj = ClientAccount.objects.filter(phone_number_id=ICEMAKE_PHONE_NUMBER_ID).first()
-                    conv_obj, _ = Conversation.objects.get_or_create(
-                        customer=customer_obj,
-                        phone_number_id=ICEMAKE_PHONE_NUMBER_ID,
-                        defaults={'client': client_account_obj}
-                    )
-                    
-                    msg_type = payload.get("type", "text")
-                    content = ""
-                    if msg_type == "text":
-                        content = payload.get("text", {}).get("body", "")
-                    elif msg_type == "template":
-                        tpl_name = payload.get("template", {}).get("name", "")
-                        components = payload.get("template", {}).get("components", [])
-                        content = f"[Template: {tpl_name}]"
-                        try:
-                            from CRM.models import Template
-                            template_obj = Template.objects.filter(name=tpl_name).first()
-                            if template_obj and template_obj.body_text:
-                                text = template_obj.body_text
-                                for comp in components:
-                                    if comp.get("type") == "body":
-                                        params = comp.get("parameters", [])
-                                        for i, param in enumerate(params, start=1):
-                                            val = param.get("text", "")
-                                            text = text.replace(f"{{{{{i}}}}}", str(val))
-                                header = template_obj.header_text + "\n" if template_obj.header_text else ""
-                                content = f"{header}{text}\n\nTEMPLATE: {tpl_name.upper()}".strip()
-                        except Exception as e:
-                            logger.error("[IceMake] Template resolution error: %s", e)
-                    elif msg_type == "image":
-                        content = f"[Image] {payload.get('image', {}).get('link', '')}"
-                    
-                    Message.objects.create(
-                        conversation=conv_obj,
-                        client=client_account_obj,
-                        customer=customer_obj,
-                        meta_message_id=meta_msg_id,
-                        direction="outbound",
-                        message_type=msg_type,
-                        content=content,
-                        status="sent"
-                    )
+                customer_obj, _ = Customer.objects.get_or_create(phone=to_phone, defaults={'name': to_phone})
+                client_account_obj = ClientAccount.objects.filter(phone_number_id=ICEMAKE_PHONE_NUMBER_ID).first()
+                conv_obj, _ = Conversation.objects.get_or_create(
+                    customer=customer_obj,
+                    phone_number_id=ICEMAKE_PHONE_NUMBER_ID,
+                    defaults={'client': client_account_obj}
+                )
+                
+                msg_type = payload.get("type", "text")
+                content = ""
+                if msg_type == "text":
+                    content = payload.get("text", {}).get("body", "")
+                elif msg_type == "template":
+                    tpl_name = payload.get("template", {}).get("name", "")
+                    components = payload.get("template", {}).get("components", [])
+                    content = f"[Template: {tpl_name}]"
+                    try:
+                        from CRM.models import Template
+                        template_obj = Template.objects.filter(name=tpl_name).first()
+                        if template_obj and template_obj.body_text:
+                            text = template_obj.body_text
+                            for comp in components:
+                                if comp.get("type") == "body":
+                                    params = comp.get("parameters", [])
+                                    for i, param in enumerate(params, start=1):
+                                        val = param.get("text", "")
+                                        text = text.replace(f"{{{{{i}}}}}", str(val))
+                            header = template_obj.header_text + "\n" if template_obj.header_text else ""
+                            content = f"{header}{text}\n\nTEMPLATE: {tpl_name.upper()}".strip()
+                    except Exception as e:
+                        logger.error("[IceMake] Template resolution error: %s", e)
+                elif msg_type == "image":
+                    content = f"[Image] {payload.get('image', {}).get('link', '')}"
+                
+                Message.objects.create(
+                    conversation=conv_obj,
+                    client=client_account_obj,
+                    customer=customer_obj,
+                    meta_message_id=meta_msg_id,
+                    direction="outbound",
+                    message_type=msg_type,
+                    content=content,
+                    status="sent"
+                )
         except Exception as db_exc:
             logger.error("[IceMake] Failed to save outbound message: %s", db_exc)
 
