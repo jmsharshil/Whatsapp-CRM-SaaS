@@ -271,7 +271,8 @@
                 <input type="hidden" name="auth" value="{{ auth_token }}">
                 <div class="form-group">
                     <label>Upload Base Image</label>
-                    <input type="file" name="base_image" id="imageInput" accept="image/*" {% if not active_template %}required{% endif %}>
+                    <input type="file" name="base_image" id="imageInput" accept="image/*" {% if not active_template
+                        %}required{% endif %}>
                     {% if active_template %}
                     <small style="color: var(--text-muted); display: block; margin-top: 4px;">Leave empty to keep the
                         currently active image.</small>
@@ -352,30 +353,15 @@
                     <div>
                         <label>Font Family</label>
                         <select id="nameFontFamily" class="font-select">
-                            <option value="Montserrat">Montserrat</option>
-                            <option value="Calibri">Calibri</option>
-                            <option value="Arial">Arial</option>
-                            <option value="Times New Roman">Times New Roman</option>
-                            <option value="EB Garamond">EB Garamond</option>
-                            <option value="Impact">Impact</option>
                             <option value="Franklin Gothic Medium Cond">Franklin Gothic Medium Cond</option>
+                            <option value="Calibri">Calibri</option>
                             <option value="Microsoft Uighur">Microsoft Uighur</option>
                             <option value="Sitla Heading Semi Bold">Sitla Heading Semi Bold</option>
                             <option value="Sylfaen">Sylfaen</option>
                         </select>
                     </div>
-                    <div style="display: flex; gap: 24px; align-items: center; margin-top: 28px;">
-                        <label for="nameBold" style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; letter-spacing: normal; cursor: pointer; color: var(--text-main); font-weight: 500; font-size: 0.95rem;">
-                            <input type="checkbox" id="nameBold">
-                            Bold
-                        </label>
-                        <label for="nameItalic" style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; letter-spacing: normal; cursor: pointer; color: var(--text-main); font-weight: 500; font-size: 0.95rem;">
-                            <input type="checkbox" id="nameItalic">
-                            Italic
-                        </label>
-                    </div>
                     <input type="hidden" name="name_font" id="nameFontInput"
-                        value="{{ active_template.name_font|default:'Montserrat-ExtraBold.ttf' }}">
+                        value="{{ active_template.name_font|default:'framdcn.ttf' }}">
                 </div>
 
                 <hr style="margin: 16px 0;">
@@ -384,30 +370,15 @@
                     <div>
                         <label>Font Family</label>
                         <select id="phoneFontFamily" class="font-select">
-                            <option value="Montserrat">Montserrat</option>
-                            <option value="Calibri">Calibri</option>
-                            <option value="Arial">Arial</option>
-                            <option value="Times New Roman">Times New Roman</option>
-                            <option value="EB Garamond">EB Garamond</option>
-                            <option value="Impact">Impact</option>
                             <option value="Franklin Gothic Medium Cond">Franklin Gothic Medium Cond</option>
+                            <option value="Calibri">Calibri</option>
                             <option value="Microsoft Uighur">Microsoft Uighur</option>
                             <option value="Sitla Heading Semi Bold">Sitla Heading Semi Bold</option>
                             <option value="Sylfaen">Sylfaen</option>
                         </select>
                     </div>
-                    <div style="display: flex; gap: 24px; align-items: center; margin-top: 28px;">
-                        <label for="phoneBold" style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; letter-spacing: normal; cursor: pointer; color: var(--text-main); font-weight: 500; font-size: 0.95rem;">
-                            <input type="checkbox" id="phoneBold">
-                            Bold
-                        </label>
-                        <label for="phoneItalic" style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; letter-spacing: normal; cursor: pointer; color: var(--text-main); font-weight: 500; font-size: 0.95rem;">
-                            <input type="checkbox" id="phoneItalic">
-                            Italic
-                        </label>
-                    </div>
                     <input type="hidden" name="phone_font" id="phoneFontInput"
-                        value="{{ active_template.phone_font|default:'Montserrat-SemiBold.ttf' }}">
+                        value="{{ active_template.phone_font|default:'framdcn.ttf' }}">
                 </div>
 
                 <hr style="margin: 16px 0;">
@@ -416,30 +387,15 @@
                     <div>
                         <label>Font Family</label>
                         <select id="addressFontFamily" class="font-select">
-                            <option value="Montserrat">Montserrat</option>
-                            <option value="Calibri">Calibri</option>
-                            <option value="Arial">Arial</option>
-                            <option value="Times New Roman">Times New Roman</option>
-                            <option value="EB Garamond">EB Garamond</option>
-                            <option value="Impact">Impact</option>
                             <option value="Franklin Gothic Medium Cond">Franklin Gothic Medium Cond</option>
+                            <option value="Calibri">Calibri</option>
                             <option value="Microsoft Uighur">Microsoft Uighur</option>
                             <option value="Sitla Heading Semi Bold">Sitla Heading Semi Bold</option>
                             <option value="Sylfaen">Sylfaen</option>
                         </select>
                     </div>
-                    <div style="display: flex; gap: 24px; align-items: center; margin-top: 28px;">
-                        <label for="addressBold" style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; letter-spacing: normal; cursor: pointer; color: var(--text-main); font-weight: 500; font-size: 0.95rem;">
-                            <input type="checkbox" id="addressBold">
-                            Bold
-                        </label>
-                        <label for="addressItalic" style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; letter-spacing: normal; cursor: pointer; color: var(--text-main); font-weight: 500; font-size: 0.95rem;">
-                            <input type="checkbox" id="addressItalic">
-                            Italic
-                        </label>
-                    </div>
                     <input type="hidden" name="address_font" id="addressFontInput"
-                        value="{{ active_template.address_font|default:'Montserrat-Medium.ttf' }}">
+                        value="{{ active_template.address_font|default:'framdcn.ttf' }}">
                 </div>
 
                 <button type="submit" class="btn-primary" style="width: 100%; margin-top: 10px;">
@@ -634,68 +590,22 @@
         const prefixes = ['name', 'phone', 'address'];
 
         function parseFontFilename(filename, prefix) {
-            let family = 'Montserrat';
-            let isBold = false;
-            let isItalic = false;
+            let family = 'Franklin Gothic Medium Cond';
 
-            if (filename.includes('Roboto')) family = 'Roboto';
-            if (filename.includes('Arial') || filename.includes('arial')) family = 'Arial';
             if (filename.includes('Calibri') || filename.includes('calibri')) family = 'Calibri';
-            if (filename.includes('Times') || filename.includes('times')) family = 'Times New Roman';
-            if (filename.includes('Garamond')) family = 'EB Garamond';
-            if (filename.includes('Impact') || filename.includes('impact')) family = 'Impact';
             if (filename.includes('framdcn')) family = 'Franklin Gothic Medium Cond';
             if (filename.includes('msuighur')) family = 'Microsoft Uighur';
             if (filename.includes('SitkaVF')) family = 'Sitla Heading Semi Bold';
             if (filename.includes('sylfaen')) family = 'Sylfaen';
 
-            if (filename.includes('Bold') || filename.includes('bd') || filename.includes('b.ttf') || filename.includes('z.ttf') || filename.includes('bi.ttf')) isBold = true;
-            if (filename.includes('Italic') || filename.includes('i.ttf') || filename.includes('z.ttf') || filename.includes('bi.ttf')) isItalic = true;
-
-            // Explicitly map SemiBold/ExtraBold/Medium to bold for simplicity in UI, though in DB they are specific
-            if (filename.includes('SemiBold') || filename.includes('ExtraBold') || filename.includes('Medium')) {
-                // If it's the default, we map it to checked.
-                isBold = true;
-            }
-
             document.getElementById(prefix + 'FontFamily').value = family;
-            document.getElementById(prefix + 'Bold').checked = isBold;
-            document.getElementById(prefix + 'Italic').checked = isItalic;
         }
 
         function generateFontFilename(prefix) {
             const family = document.getElementById(prefix + 'FontFamily').value;
-            const isBold = document.getElementById(prefix + 'Bold').checked;
-            const isItalic = document.getElementById(prefix + 'Italic').checked;
 
-            let suffix = '-Regular';
-            if (isBold && isItalic) suffix = '-BoldItalic';
-            else if (isBold) suffix = '-Bold';
-            else if (isItalic) suffix = '-Italic';
-
-            if (family === 'Arial') {
-                if (isBold && isItalic) return 'arialbi.ttf';
-                if (isBold) return 'arialbd.ttf';
-                if (isItalic) return 'ariali.ttf';
-                return 'arial.ttf';
-            }
-            if (family === 'Times New Roman') {
-                if (isBold && isItalic) return 'timesbi.ttf';
-                if (isBold) return 'timesbd.ttf';
-                if (isItalic) return 'timesi.ttf';
-                return 'times.ttf';
-            }
             if (family === 'Calibri') {
-                if (isBold && isItalic) return 'calibriz.ttf';
-                if (isBold) return 'calibrib.ttf';
-                if (isItalic) return 'calibrii.ttf';
                 return 'calibri.ttf';
-            }
-            if (family === 'Impact') {
-                return 'impact.ttf';
-            }
-            if (family === 'EB Garamond') {
-                return `EBGaramond${suffix}.ttf`;
             }
             if (family === 'Franklin Gothic Medium Cond') {
                 return 'framdcn.ttf';
@@ -710,7 +620,7 @@
                 return 'sylfaen.ttf';
             }
 
-            return `${family}${suffix}.ttf`;
+            return 'framdcn.ttf';
         }
 
         prefixes.forEach(prefix => {
@@ -726,8 +636,6 @@
             };
 
             document.getElementById(prefix + 'FontFamily').addEventListener('change', updateField);
-            document.getElementById(prefix + 'Bold').addEventListener('change', updateField);
-            document.getElementById(prefix + 'Italic').addEventListener('change', updateField);
         });
 
         // Override updateMarkerStyle to also apply font-family, weight, and style
@@ -737,8 +645,6 @@
 
             prefixes.forEach(prefix => {
                 const family = document.getElementById(prefix + 'FontFamily').value;
-                const isBold = document.getElementById(prefix + 'Bold').checked;
-                const isItalic = document.getElementById(prefix + 'Italic').checked;
 
                 let targetEl = null;
                 if (prefix === 'name') targetEl = document.getElementById('markerName');
@@ -747,8 +653,8 @@
 
                 if (targetEl) {
                     targetEl.style.fontFamily = `"${family}", sans-serif`;
-                    targetEl.style.fontWeight = isBold ? 'bold' : 'normal';
-                    targetEl.style.fontStyle = isItalic ? 'italic' : 'normal';
+                    targetEl.style.fontWeight = 'normal';
+                    targetEl.style.fontStyle = 'normal';
                 }
             });
         };
