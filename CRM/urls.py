@@ -12,7 +12,7 @@ import CRM.gigatel_views
 from CRM.globestar_views import GlobestarDataAPIView
 from CRM.navratri_views import NavratriRegistrationAPIView
 from CRM.jms_campaign_views import JMSCampaignUploadView, JMSCampaignHistoryView, JMSCampaignListView, jms_campaign_ui_view, JMSCSVUploadView, JMSCSVListView
-from CRM.icemake_views import IceMakeDataAPIView
+from CRM.icemake_views import IceMakeDataAPIView, IceMakeComplaintLogsAPIView
 
 urlpatterns = [
 
@@ -94,6 +94,7 @@ urlpatterns = [
 
     # ── Ice Make ──────────────────────────────────────────────────────────────
     path("api/icemake/data/", IceMakeDataAPIView.as_view(), name="icemake-data"),
+    path("api/icemake/complaint-logs/", IceMakeComplaintLogsAPIView.as_view(), name="icemake-complaint-logs"),
     
     # ── Avantika Bot ──────────────────────────────────────────────────────────
     path("avantika-template/", avantika_template_view, name="avantika-template-view"),

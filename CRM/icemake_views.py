@@ -587,3 +587,90 @@ class IceMakeDataAPIView(APIView):
             "conversations": conversations_data,
         })
 
+
+class IceMakeComplaintLogsAPIView(APIView):
+    """
+    GET /api/icemake/complaint-logs/?token=<token>
+    
+    Returns a log of complaint templates sent to customers and service engineers.
+    """
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        from django.core.paginator import Paginator
+        from django.db.models import Q
+        
+        token = request.GET.get("token")
+
+        if not token:
+            return Response({"error": "token is required"}, status=400)
+
+        if token != ICEMAKE_PHONE_NUMBER_ID:
+            return Response({"error": "Invalid token"}, status=401)
+
+        # Pagination params
+        page_num  = int(request.GET.get("page", 1))
+        page_size = int(request.GET.get("page_size", 50))
+
+        # Need to select related conversation for ticket data
+        messages = Message.objects.filter(
+            client__phone_number_id=ICEMAKE_PHONE_NUMBER_ID,
+            direction="outbound"
+        ).filter(
+            Q(content__icontains="TEMPLATE: ICEMAKE_CUSTOMER_") | 
+            Q(content__icontains="TEMPLATE: ICEMAKE_SERVICEENGINEER") |
+            Q(content__icontains="[Template: icemake_customer_]") | 
+            Q(content__icontains="[Template: icemake_serviceengineer]")
+        ).select_related("customer", "conversation").order_by("-timestamp")
+
+        total = messages.count()
+        paginator = Paginator(messages, page_size)
+        page = paginator.get_page(page_num)
+
+        base_url = request.build_absolute_uri(request.path)
+        def make_url(p):
+            if p is None:
+                return None
+            params = request.GET.copy()
+            params["page"] = p
+            return f"{base_url}?{params.urlencode()}"
+
+        logs_data = []
+        for msg in page.object_list:
+            
+            # Determine target type based on content
+            target = "Unknown"
+            if "icemake_customer_" in msg.content.lower():
+                target = "Customer"
+            elif "icemake_serviceengineer" in msg.content.lower():
+                target = "Service Engineer"
+                
+            bot_meta = msg.conversation.bot_metadata if msg.conversation and isinstance(msg.conversation.bot_metadata, dict) else {}
+            td = bot_meta.get("ticket_data", {}) or {}
+                
+            logs_data.append({
+                "id": msg.id,
+                "sent_to": msg.customer.phone if msg.customer else "",
+                "target": target,
+                "customer_name": td.get("name", msg.customer.name if msg.customer else ""),
+                "registered_mobile": td.get("mobile", ""),
+                "ticket_no": td.get("ticket_no", ""),
+                "assigned_engineer": td.get("engineer_name", ""),
+                "content": msg.content,
+                "status": msg.status,
+                "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
+                "meta_message_id": msg.meta_message_id,
+            })
+
+        return Response({
+            "total": total,
+            "page": page_num,
+            "page_size": page_size,
+            "total_pages": paginator.num_pages,
+            "next": make_url(page.next_page_number() if page.has_next() else None),
+            "previous": make_url(page.previous_page_number() if page.has_previous() else None),
+            "logs": logs_data,
+        })
+
+
