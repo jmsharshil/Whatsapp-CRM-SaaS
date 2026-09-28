@@ -148,22 +148,26 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         body = msg.get("button", {}).get("payload", "").strip()
         display_body = msg.get("button", {}).get("text", body).strip()
     elif msg_type in ["image", "video", "audio", "document", "sticker"]:
-        media_id = msg.get(msg_type, {}).get("id")
-        if media_id:
-            icemake_phone_id = getattr(settings, 'ICEMAKE_PHONE_NUMBER_ID', ICEMAKE_PHONE_NUMBER_ID)
-            client_account_obj = ClientAccount.objects.filter(phone_number_id=icemake_phone_id).first()
-            token = client_account_obj.access_token if client_account_obj and client_account_obj.access_token else getattr(settings, "META_PERMANENT_TOKEN", "")
-            dl_url = download_media_from_whatsapp(media_id, token)
-            if dl_url:
-                prefix = f"[{msg_type.upper()}]"
-                body = f"{prefix} {dl_url}"
-                display_body = body
-            else:
-                body = f"[{msg_type}]"
-                display_body = f"[{msg_type}]"
-        else:
-            body = f"[{msg_type}]"
-            display_body = f"[{msg_type}]"
+        # Do not download media for IceMake, only store text tag
+        # media_id = msg.get(msg_type, {}).get("id")
+        # if media_id:
+        #     icemake_phone_id = getattr(settings, 'ICEMAKE_PHONE_NUMBER_ID', ICEMAKE_PHONE_NUMBER_ID)
+        #     client_account_obj = ClientAccount.objects.filter(phone_number_id=icemake_phone_id).first()
+        #     token = client_account_obj.access_token if client_account_obj and client_account_obj.access_token else getattr(settings, "META_PERMANENT_TOKEN", "")
+        #     dl_url = download_media_from_whatsapp(media_id, token)
+        #     if dl_url:
+        #         prefix = f"[{msg_type.upper()}]"
+        #         body = f"{prefix} {dl_url}"
+        #         display_body = body
+        #     else:
+        #         body = f"[{msg_type}]"
+        #         display_body = f"[{msg_type}]"
+        # else:
+        #     body = f"[{msg_type}]"
+        #     display_body = f"[{msg_type}]"
+        
+        body = f"[{msg_type.upper()}]"
+        display_body = body
             
     elif msg_type == "location":
         lat = msg.get("location", {}).get("latitude")
