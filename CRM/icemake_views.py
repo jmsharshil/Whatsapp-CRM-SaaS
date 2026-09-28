@@ -166,7 +166,7 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         #     body = f"[{msg_type}]"
         #     display_body = f"[{msg_type}]"
         
-        body = f"[{msg_type.upper()}]"
+        body = "-"
         display_body = body
             
     elif msg_type == "location":
@@ -549,7 +549,7 @@ class IceMakeDataAPIView(APIView):
             # Fallback: extract from messages if missing
             if not ticket_no or not assigned_engineer:
                 import re
-                for msg in conv.messages.all():
+                for msg in conv.messages.order_by("-timestamp"):
                     if msg.direction == "outbound" and "TEMPLATE: ICEMAKE" in (msg.content or "").upper():
                         content_str = msg.content or ""
                         if not ticket_no:
