@@ -2,7 +2,11 @@ from django.contrib import admin
 from .models import *
 # Register your models here.
 
-admin.site.register(Customer)
+class CustomerAdmin(admin.ModelAdmin):
+    search_fields = ['phone', 'name']
+    list_display = ['name', 'phone']
+
+admin.site.register(Customer, CustomerAdmin)
 admin.site.register(Message)
 admin.site.register(Conversation)
 admin.site.register(User)
