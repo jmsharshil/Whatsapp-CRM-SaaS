@@ -359,7 +359,7 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         session.ticket_data = td
         
         # Generate ticket
-        ticket_no = f"C{datetime.now().strftime('%m%d%H%M%S')}"
+        ticket_no = f"WC{datetime.now().strftime('%m%d%H%M%S')}"
         
         # Find engineer (with fuzzy match to handle spelling mistakes)
         user_state = td.get("state", "").lower().strip()
