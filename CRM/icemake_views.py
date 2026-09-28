@@ -525,6 +525,9 @@ class IceMakeDataAPIView(APIView):
             params["page"] = p
             return f"{base_url}?{params.urlencode()}"
 
+        import datetime
+        ist_tz = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+
         conversations_data = []
         for conv in page.object_list:
             bot_meta = conv.bot_metadata if isinstance(conv.bot_metadata, dict) else {}
@@ -538,26 +541,52 @@ class IceMakeDataAPIView(APIView):
             except Exception:
                 pass
 
+            ticket_no = td.get("ticket_no", "")
+            assigned_engineer = td.get("engineer_name", "")
+            registered_mobile = td.get("mobile", "")
+            customer_name = td.get("name", "")
+
+            # Fallback: extract from messages if missing
+            if not ticket_no or not assigned_engineer:
+                import re
+                for msg in conv.messages.all():
+                    if msg.direction == "outbound" and "TEMPLATE: ICEMAKE" in (msg.content or "").upper():
+                        content_str = msg.content or ""
+                        if not ticket_no:
+                            t_match = re.search(r'Ticket\s*:\s*([A-Za-z0-9]+)', content_str)
+                            if not t_match:
+                                t_match = re.search(r'Complaint Number:\s*\*?([A-Za-z0-9]+)\*?', content_str)
+                            if t_match: ticket_no = t_match.group(1).strip()
+                        if not assigned_engineer:
+                            e_match = re.search(r'Assigned Engineer:\s*([^\n]+)', content_str)
+                            if e_match: assigned_engineer = e_match.group(1).strip()
+                        if not registered_mobile:
+                            m_match = re.search(r'Customer Mobile:\s*([^\n]+)', content_str)
+                            if m_match: registered_mobile = m_match.group(1).strip()
+                        if not customer_name:
+                            n_match = re.search(r'Customer Name:\s*([^\n]+)', content_str)
+                            if n_match: customer_name = n_match.group(1).strip()
+
             conv_data = {
                 "id": conv.id,
                 "status": conv.status,
                 "bot_state": conv.bot_state,
                 "stage": stage,
-                "created_at": conv.created_at.isoformat() if conv.created_at else None,
+                "created_at": conv.created_at.astimezone(ist_tz).isoformat() if conv.created_at else None,
                 "customer": {
                     "name": conv.customer.name,
                     "whatsapp_number": conv.customer.phone,
                 },
                 "ticket_data": {
-                    "ticket_no": td.get("ticket_no", ""),
-                    "name": td.get("name", ""),
-                    "registered_mobile": td.get("mobile", ""),
+                    "ticket_no": ticket_no,
+                    "name": customer_name,
+                    "registered_mobile": registered_mobile,
                     "city": td.get("city", ""),
                     "state": td.get("state", ""),
                     "pincode": td.get("pincode", ""),
                     "complaint_type": td.get("complaint_type", ""),
                     "issue_desc": td.get("issue_desc", ""),
-                    "assigned_engineer": td.get("engineer_name", ""),
+                    "assigned_engineer": assigned_engineer,
                     "engineer_phone": td.get("engineer_phone", ""),
                 },
                 "messages": []
@@ -570,7 +599,7 @@ class IceMakeDataAPIView(APIView):
                     "type": msg.message_type,
                     "content": msg.content,
                     "status": msg.status,
-                    "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
+                    "timestamp": msg.timestamp.astimezone(ist_tz).isoformat() if msg.timestamp else None,
                     "meta_message_id": msg.meta_message_id,
                 })
 
@@ -640,6 +669,8 @@ class IceMakeComplaintLogsAPIView(APIView):
             params["page"] = p
             return f"{base_url}?{params.urlencode()}"
 
+        import re
+
         logs_data = []
         for msg in page.object_list:
             
@@ -652,22 +683,54 @@ class IceMakeComplaintLogsAPIView(APIView):
                 
             bot_meta = msg.conversation.bot_metadata if msg.conversation and isinstance(msg.conversation.bot_metadata, dict) else {}
             td = bot_meta.get("ticket_data", {}) or {}
+            
+            # Extract from content using regex as a reliable fallback
+            content_str = msg.content or ""
+            
+            # Extract Ticket No
+            ticket_match = re.search(r'Ticket\s*:\s*([A-Za-z0-9]+)', content_str)
+            if not ticket_match:
+                ticket_match = re.search(r'Complaint Number:\s*\*?([A-Za-z0-9]+)\*?', content_str)
+            ticket_no = ticket_match.group(1).strip() if ticket_match else td.get("ticket_no", "")
+            
+            # Extract Customer Name
+            name_match = re.search(r'Customer Name:\s*([^\n]+)', content_str)
+            customer_name = name_match.group(1).strip() if name_match else td.get("name", msg.customer.name if msg.customer else "")
+            
+            # Extract Mobile
+            mobile_match = re.search(r'Customer Mobile:\s*([^\n]+)', content_str)
+            registered_mobile = mobile_match.group(1).strip() if mobile_match else td.get("mobile", "")
+            
+            # Extract Assigned Engineer
+            engineer_match = re.search(r'Assigned Engineer:\s*([^\n]+)', content_str)
+            assigned_engineer = engineer_match.group(1).strip() if engineer_match else td.get("engineer_name", "")
                 
+            import datetime
+            ist_tz = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+            ts = msg.timestamp.astimezone(ist_tz).isoformat() if msg.timestamp else None
+
             logs_data.append({
                 "id": msg.id,
                 "sent_to": msg.customer.phone if msg.customer else "",
                 "target": target,
-                "customer_name": td.get("name", msg.customer.name if msg.customer else ""),
-                "registered_mobile": td.get("mobile", ""),
-                "ticket_no": td.get("ticket_no", ""),
-                "assigned_engineer": td.get("engineer_name", ""),
+                "customer_name": customer_name,
+                "registered_mobile": registered_mobile,
+                "ticket_no": ticket_no,
+                "assigned_engineer": assigned_engineer,
                 "content": msg.content,
                 "status": msg.status,
-                "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
+                "timestamp": ts,
                 "meta_message_id": msg.meta_message_id,
             })
 
+        client_account = ClientAccount.objects.filter(phone_number_id=ICEMAKE_PHONE_NUMBER_ID).first()
+
         return Response({
+            "client": {
+                "name": client_account.name if client_account else "Ice Make Refrigeration Limited",
+                "phone_number_id": ICEMAKE_PHONE_NUMBER_ID,
+                "waba_id": client_account.waba_id if client_account else "",
+            },
             "total": total,
             "page": page_num,
             "page_size": page_size,
