@@ -12,127 +12,155 @@
         rel="stylesheet">
     <style>
         :root {
-            --primary: #4F46E5;
-            --primary-hover: #4338CA;
-            --danger: #EF4444;
-            --danger-hover: #DC2626;
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --danger: #f43f5e;
+            --danger-hover: #e11d48;
             --surface: #ffffff;
-            --background: #F3F4F6;
-            --text-main: #1F2937;
-            --text-muted: #6B7280;
-            --border: #E5E7EB;
+            --background: #f8fafc;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
             --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            --radius-md: 0.5rem;
-            --radius-lg: 0.75rem;
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+            --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+            --radius-md: 12px;
+            --radius-lg: 20px;
+            --accent: #8b5cf6;
         }
 
         body {
             font-family: 'Inter', sans-serif;
-            background-color: var(--background);
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
             color: var(--text-main);
             margin: 0;
             padding: 40px 20px;
-            line-height: 1.5;
+            line-height: 1.6;
+            min-height: 100vh;
         }
 
         .container {
-            max-width: 800px;
+            max-width: 850px;
             margin: 0 auto;
             display: flex;
             flex-direction: column;
-            gap: 24px;
+            gap: 32px;
         }
 
         .card {
-            background-color: var(--surface);
+            background-color: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
             border-radius: var(--radius-lg);
-            box-shadow: var(--shadow-md);
-            padding: 32px;
-            border: 1px solid var(--border);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: var(--shadow-lg);
+            padding: 40px;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
         }
 
         .card:hover {
-            box-shadow: var(--shadow-lg);
+            transform: translateY(-2px);
+            box-shadow: 0 25px 30px -5px rgba(0, 0, 0, 0.08), 0 10px 15px -6px rgba(0, 0, 0, 0.04);
         }
 
         h2 {
             margin-top: 0;
-            margin-bottom: 16px;
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: #111827;
+            margin-bottom: 24px;
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #0f172a;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 12px;
+            letter-spacing: -0.025em;
         }
 
         p.instructions {
-            color: var(--text-muted);
-            margin-bottom: 24px;
-            font-size: 0.95rem;
-            background: #EFF6FF;
-            padding: 12px 16px;
-            border-left: 4px solid #3B82F6;
+            color: #334155;
+            margin-bottom: 32px;
+            font-size: 1rem;
+            background: linear-gradient(to right, #eff6ff, #f8fafc);
+            padding: 16px 20px;
+            border-left: 4px solid var(--primary);
             border-radius: 0 var(--radius-md) var(--radius-md) 0;
+            box-shadow: var(--shadow-sm);
         }
 
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 24px;
         }
 
         .form-row {
             display: flex;
-            gap: 16px;
+            gap: 20px;
             align-items: center;
             flex-wrap: wrap;
         }
 
         label {
-            font-weight: 500;
+            font-weight: 600;
             font-size: 0.9rem;
-            color: #374151;
-            margin-bottom: 6px;
+            color: #475569;
+            margin-bottom: 8px;
             display: block;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
         input[type="number"],
         input[type="text"],
-        input[type="file"] {
-            border: 1px solid var(--border);
+        input[type="file"],
+        select {
+            border: 1.5px solid var(--border);
             border-radius: var(--radius-md);
-            padding: 10px 14px;
-            font-size: 0.95rem;
+            padding: 12px 16px;
+            font-size: 1rem;
+            font-family: 'Inter', sans-serif;
             width: 100%;
             box-sizing: border-box;
-            transition: border-color 0.2s ease, box-shadow 0.2s ease;
-            background-color: #F9FAFB;
+            transition: all 0.2s ease;
+            background-color: #ffffff;
+            color: var(--text-main);
+        }
+
+        select {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 16px;
+            padding-right: 40px;
         }
 
         input[type="number"] {
-            width: 120px;
+            width: 130px;
         }
 
         input[type="number"]:focus,
         input[type="text"]:focus,
-        input[type="file"]:focus {
+        input[type="file"]:focus,
+        select:focus {
             outline: none;
             border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2);
-            background-color: white;
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
         }
 
         input[type="color"] {
             -webkit-appearance: none;
-            border: 1px solid var(--border);
-            width: 44px;
-            height: 44px;
-            border-radius: var(--radius-md);
+            border: 2px solid var(--border);
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
             cursor: pointer;
-            padding: 2px;
+            padding: 0;
             background: white;
+            overflow: hidden;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        input[type="color"]:hover {
+            transform: scale(1.05);
+            box-shadow: var(--shadow-md);
         }
 
         input[type="color"]::-webkit-color-swatch-wrapper {
@@ -141,29 +169,35 @@
 
         input[type="color"]::-webkit-color-swatch {
             border: none;
-            border-radius: 4px;
+            border-radius: 50%;
         }
 
         .image-container {
             position: relative;
             display: inline-block;
-            border: 2px dashed #CBD5E1;
-            border-radius: var(--radius-md);
-            padding: 4px;
-            background: #F8FAFC;
-            margin-bottom: 24px;
+            border: 2px dashed #cbd5e1;
+            border-radius: var(--radius-lg);
+            padding: 8px;
+            background: #f8fafc;
+            margin-bottom: 32px;
             width: 100%;
             box-sizing: border-box;
             text-align: center;
             overflow: hidden;
+            transition: border-color 0.3s ease;
+        }
+
+        .image-container:hover {
+            border-color: var(--primary);
         }
 
         #preview {
             max-width: 100%;
             display: none;
             cursor: crosshair;
-            border-radius: 4px;
+            border-radius: var(--radius-md);
             margin: 0 auto;
+            box-shadow: var(--shadow-sm);
         }
 
         .marker {
@@ -172,7 +206,7 @@
             font-weight: bold;
             font-size: 24px;
             display: none;
-            text-shadow: 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 0px 2px 4px rgba(0, 0, 0, 0.5);
+            text-shadow: 2px 2px 0 #fff, -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff, 0px 4px 8px rgba(0, 0, 0, 0.3);
             pointer-events: none;
             white-space: nowrap;
             transform: translateX(-50%);
@@ -180,57 +214,64 @@
         }
 
         button {
-            padding: 12px 24px;
-            font-size: 1rem;
-            font-weight: 500;
+            padding: 14px 28px;
+            font-size: 1.05rem;
+            font-weight: 600;
             border-radius: var(--radius-md);
             border: none;
             cursor: pointer;
-            transition: background-color 0.2s ease, transform 0.1s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             display: inline-flex;
             align-items: center;
             justify-content: center;
             gap: 8px;
             font-family: inherit;
+            letter-spacing: 0.025em;
         }
 
         button:active {
-            transform: translateY(1px);
+            transform: translateY(2px);
         }
 
         .btn-primary {
-            background-color: var(--primary);
+            background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
             color: white;
-            box-shadow: 0 4px 6px rgba(79, 70, 229, 0.25);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
         }
 
         .btn-primary:hover {
-            background-color: var(--primary-hover);
+            box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+            transform: translateY(-1px);
         }
 
         .btn-danger {
-            background-color: var(--danger);
+            background: linear-gradient(135deg, var(--danger) 0%, #be123c 100%);
             color: white;
-            box-shadow: 0 4px 6px rgba(239, 68, 68, 0.25);
+            box-shadow: 0 4px 12px rgba(244, 63, 94, 0.3);
         }
 
         .btn-danger:hover {
-            background-color: var(--danger-hover);
+            box-shadow: 0 6px 16px rgba(244, 63, 94, 0.4);
+            transform: translateY(-1px);
         }
 
         .alert-success {
-            background-color: #DEF7EC;
-            color: #03543F;
-            padding: 16px;
+            background-color: #ecfdf5;
+            color: #065f46;
+            padding: 16px 24px;
             border-radius: var(--radius-md);
             margin-bottom: 24px;
-            border-left: 4px solid #31C48D;
+            border-left: 4px solid #10b981;
             font-weight: 500;
             list-style: none;
+            box-shadow: var(--shadow-sm);
         }
 
         .alert-success li {
-            margin-bottom: 4px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .alert-success li:last-child {
@@ -240,8 +281,31 @@
         hr {
             border: none;
             height: 1px;
-            background: var(--border);
+            background: linear-gradient(to right, transparent, var(--border), transparent);
             margin: 32px 0;
+        }
+        
+        .styling-section {
+            background: #f8fafc;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            margin-bottom: 20px;
+            transition: border-color 0.2s ease;
+        }
+        
+        .styling-section:hover {
+            border-color: #cbd5e1;
+        }
+        
+        .styling-section h3 {
+            margin-top: 0;
+            margin-bottom: 16px;
+            font-size: 1.15rem;
+            color: #334155;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 8px;
+            display: inline-block;
         }
     </style>
 </head>
@@ -271,8 +335,7 @@
                 <input type="hidden" name="auth" value="{{ auth_token }}">
                 <div class="form-group">
                     <label>Upload Base Image</label>
-                    <input type="file" name="base_image" id="imageInput" accept="image/*" {% if not active_template
-                        %}required{% endif %}>
+                    <input type="file" name="base_image" id="imageInput" accept="image/*" {% if not active_template %}required{% endif %}>
                     {% if active_template %}
                     <small style="color: var(--text-muted); display: block; margin-top: 4px;">Leave empty to keep the
                         currently active image.</small>
@@ -347,106 +410,58 @@
                     </div>
                 </div>
 
-                <hr style="margin: 16px 0;">
-                <h3 style="margin-top:0; margin-bottom:12px; font-size: 1.1rem;">Name Styling</h3>
-                <div class="form-row form-group">
-                    <div>
-                        <label>Font Family</label>
-                        <select id="nameFontFamily" class="font-select">
-                            <option value="Montserrat">Montserrat</option>
-                            <option value="Calibri">Calibri</option>
-                            <option value="Arial">Arial</option>
-                            <option value="Times New Roman">Times New Roman</option>
-                            <option value="EB Garamond">EB Garamond</option>
-                            <option value="Impact">Impact</option>
-                            <option value="Franklin Gothic Medium Cond">Franklin Gothic Medium Cond</option>
-                            <option value="Microsoft Uighur">Microsoft Uighur</option>
-                            <option value="Sitla Heading Semi Bold">Sitla Heading Semi Bold</option>
-                            <option value="Sylfaen">Sylfaen</option>
-                        </select>
+                <div class="styling-section">
+                    <h3>Name Styling</h3>
+                    <div class="form-row form-group">
+                        <div style="flex: 1;">
+                            <label>Font Family</label>
+                            <select id="nameFontFamily" class="font-select">
+                                <option value="Franklin Gothic Medium Cond">Franklin Gothic Medium Cond</option>
+                                <option value="Calibri">Calibri</option>
+                                <option value="Microsoft Uighur">Microsoft Uighur</option>
+                                <option value="Sitla Heading Semi Bold">Sitla Heading Semi Bold</option>
+                                <option value="Sylfaen">Sylfaen</option>
+                            </select>
+                        </div>
+                        <input type="hidden" name="name_font" id="nameFontInput"
+                            value="{{ active_template.name_font|default:'framdcn.ttf' }}">
                     </div>
-                    <div style="display: flex; gap: 24px; align-items: center; margin-top: 28px;">
-                        <label for="nameBold"
-                            style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; letter-spacing: normal; cursor: pointer; color: var(--text-main); font-weight: 500; font-size: 0.95rem;">
-                            <input type="checkbox" id="nameBold">
-                            Bold
-                        </label>
-                        <label for="nameItalic"
-                            style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; letter-spacing: normal; cursor: pointer; color: var(--text-main); font-weight: 500; font-size: 0.95rem;">
-                            <input type="checkbox" id="nameItalic">
-                            Italic
-                        </label>
-                    </div>
-                    <input type="hidden" name="name_font" id="nameFontInput"
-                        value="{{ active_template.name_font|default:'Montserrat-ExtraBold.ttf' }}">
                 </div>
 
-                <hr style="margin: 16px 0;">
-                <h3 style="margin-top:0; margin-bottom:12px; font-size: 1.1rem;">Phone Styling</h3>
-                <div class="form-row form-group">
-                    <div>
-                        <label>Font Family</label>
-                        <select id="phoneFontFamily" class="font-select">
-                            <option value="Montserrat">Montserrat</option>
-                            <option value="Calibri">Calibri</option>
-                            <option value="Arial">Arial</option>
-                            <option value="Times New Roman">Times New Roman</option>
-                            <option value="EB Garamond">EB Garamond</option>
-                            <option value="Impact">Impact</option>
-                            <option value="Franklin Gothic Medium Cond">Franklin Gothic Medium Cond</option>
-                            <option value="Microsoft Uighur">Microsoft Uighur</option>
-                            <option value="Sitla Heading Semi Bold">Sitla Heading Semi Bold</option>
-                            <option value="Sylfaen">Sylfaen</option>
-                        </select>
+                <div class="styling-section">
+                    <h3>Phone Styling</h3>
+                    <div class="form-row form-group">
+                        <div style="flex: 1;">
+                            <label>Font Family</label>
+                            <select id="phoneFontFamily" class="font-select">
+                                <option value="Franklin Gothic Medium Cond">Franklin Gothic Medium Cond</option>
+                                <option value="Calibri">Calibri</option>
+                                <option value="Microsoft Uighur">Microsoft Uighur</option>
+                                <option value="Sitla Heading Semi Bold">Sitla Heading Semi Bold</option>
+                                <option value="Sylfaen">Sylfaen</option>
+                            </select>
+                        </div>
+                        <input type="hidden" name="phone_font" id="phoneFontInput"
+                            value="{{ active_template.phone_font|default:'framdcn.ttf' }}">
                     </div>
-                    <div style="display: flex; gap: 24px; align-items: center; margin-top: 28px;">
-                        <label for="phoneBold"
-                            style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; letter-spacing: normal; cursor: pointer; color: var(--text-main); font-weight: 500; font-size: 0.95rem;">
-                            <input type="checkbox" id="phoneBold">
-                            Bold
-                        </label>
-                        <label for="phoneItalic"
-                            style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; letter-spacing: normal; cursor: pointer; color: var(--text-main); font-weight: 500; font-size: 0.95rem;">
-                            <input type="checkbox" id="phoneItalic">
-                            Italic
-                        </label>
-                    </div>
-                    <input type="hidden" name="phone_font" id="phoneFontInput"
-                        value="{{ active_template.phone_font|default:'Montserrat-SemiBold.ttf' }}">
                 </div>
 
-                <hr style="margin: 16px 0;">
-                <h3 style="margin-top:0; margin-bottom:12px; font-size: 1.1rem;">Address Styling</h3>
-                <div class="form-row form-group">
-                    <div>
-                        <label>Font Family</label>
-                        <select id="addressFontFamily" class="font-select">
-                            <option value="Montserrat">Montserrat</option>
-                            <option value="Calibri">Calibri</option>
-                            <option value="Arial">Arial</option>
-                            <option value="Times New Roman">Times New Roman</option>
-                            <option value="EB Garamond">EB Garamond</option>
-                            <option value="Impact">Impact</option>
-                            <option value="Franklin Gothic Medium Cond">Franklin Gothic Medium Cond</option>
-                            <option value="Microsoft Uighur">Microsoft Uighur</option>
-                            <option value="Sitla Heading Semi Bold">Sitla Heading Semi Bold</option>
-                            <option value="Sylfaen">Sylfaen</option>
-                        </select>
+                <div class="styling-section">
+                    <h3>Address Styling</h3>
+                    <div class="form-row form-group">
+                        <div style="flex: 1;">
+                            <label>Font Family</label>
+                            <select id="addressFontFamily" class="font-select">
+                                <option value="Franklin Gothic Medium Cond">Franklin Gothic Medium Cond</option>
+                                <option value="Calibri">Calibri</option>
+                                <option value="Microsoft Uighur">Microsoft Uighur</option>
+                                <option value="Sitla Heading Semi Bold">Sitla Heading Semi Bold</option>
+                                <option value="Sylfaen">Sylfaen</option>
+                            </select>
+                        </div>
+                        <input type="hidden" name="address_font" id="addressFontInput"
+                            value="{{ active_template.address_font|default:'framdcn.ttf' }}">
                     </div>
-                    <div style="display: flex; gap: 24px; align-items: center; margin-top: 28px;">
-                        <label for="addressBold"
-                            style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; letter-spacing: normal; cursor: pointer; color: var(--text-main); font-weight: 500; font-size: 0.95rem;">
-                            <input type="checkbox" id="addressBold">
-                            Bold
-                        </label>
-                        <label for="addressItalic"
-                            style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; letter-spacing: normal; cursor: pointer; color: var(--text-main); font-weight: 500; font-size: 0.95rem;">
-                            <input type="checkbox" id="addressItalic">
-                            Italic
-                        </label>
-                    </div>
-                    <input type="hidden" name="address_font" id="addressFontInput"
-                        value="{{ active_template.address_font|default:'Montserrat-Medium.ttf' }}">
                 </div>
 
                 <button type="submit" class="btn-primary" style="width: 100%; margin-top: 10px;">
@@ -641,68 +656,22 @@
         const prefixes = ['name', 'phone', 'address'];
 
         function parseFontFilename(filename, prefix) {
-            let family = 'Montserrat';
-            let isBold = false;
-            let isItalic = false;
+            let family = 'Franklin Gothic Medium Cond';
 
-            if (filename.includes('Roboto')) family = 'Roboto';
-            if (filename.includes('Arial') || filename.includes('arial')) family = 'Arial';
             if (filename.includes('Calibri') || filename.includes('calibri')) family = 'Calibri';
-            if (filename.includes('Times') || filename.includes('times')) family = 'Times New Roman';
-            if (filename.includes('Garamond')) family = 'EB Garamond';
-            if (filename.includes('Impact') || filename.includes('impact')) family = 'Impact';
             if (filename.includes('framdcn')) family = 'Franklin Gothic Medium Cond';
             if (filename.includes('msuighur')) family = 'Microsoft Uighur';
             if (filename.includes('SitkaVF')) family = 'Sitla Heading Semi Bold';
             if (filename.includes('sylfaen')) family = 'Sylfaen';
 
-            if (filename.includes('Bold') || filename.includes('bd') || filename.includes('b.ttf') || filename.includes('z.ttf') || filename.includes('bi.ttf')) isBold = true;
-            if (filename.includes('Italic') || filename.includes('i.ttf') || filename.includes('z.ttf') || filename.includes('bi.ttf')) isItalic = true;
-
-            // Explicitly map SemiBold/ExtraBold/Medium to bold for simplicity in UI, though in DB they are specific
-            if (filename.includes('SemiBold') || filename.includes('ExtraBold') || filename.includes('Medium')) {
-                // If it's the default, we map it to checked.
-                isBold = true;
-            }
-
             document.getElementById(prefix + 'FontFamily').value = family;
-            document.getElementById(prefix + 'Bold').checked = isBold;
-            document.getElementById(prefix + 'Italic').checked = isItalic;
         }
 
         function generateFontFilename(prefix) {
             const family = document.getElementById(prefix + 'FontFamily').value;
-            const isBold = document.getElementById(prefix + 'Bold').checked;
-            const isItalic = document.getElementById(prefix + 'Italic').checked;
 
-            let suffix = '-Regular';
-            if (isBold && isItalic) suffix = '-BoldItalic';
-            else if (isBold) suffix = '-Bold';
-            else if (isItalic) suffix = '-Italic';
-
-            if (family === 'Arial') {
-                if (isBold && isItalic) return 'arialbi.ttf';
-                if (isBold) return 'arialbd.ttf';
-                if (isItalic) return 'ariali.ttf';
-                return 'arial.ttf';
-            }
-            if (family === 'Times New Roman') {
-                if (isBold && isItalic) return 'timesbi.ttf';
-                if (isBold) return 'timesbd.ttf';
-                if (isItalic) return 'timesi.ttf';
-                return 'times.ttf';
-            }
             if (family === 'Calibri') {
-                if (isBold && isItalic) return 'calibriz.ttf';
-                if (isBold) return 'calibrib.ttf';
-                if (isItalic) return 'calibrii.ttf';
                 return 'calibri.ttf';
-            }
-            if (family === 'Impact') {
-                return 'impact.ttf';
-            }
-            if (family === 'EB Garamond') {
-                return `EBGaramond${suffix}.ttf`;
             }
             if (family === 'Franklin Gothic Medium Cond') {
                 return 'framdcn.ttf';
@@ -717,7 +686,7 @@
                 return 'sylfaen.ttf';
             }
 
-            return `${family}${suffix}.ttf`;
+            return 'framdcn.ttf';
         }
 
         prefixes.forEach(prefix => {
@@ -733,8 +702,6 @@
             };
 
             document.getElementById(prefix + 'FontFamily').addEventListener('change', updateField);
-            document.getElementById(prefix + 'Bold').addEventListener('change', updateField);
-            document.getElementById(prefix + 'Italic').addEventListener('change', updateField);
         });
 
         // Override updateMarkerStyle to also apply font-family, weight, and style
@@ -744,8 +711,6 @@
 
             prefixes.forEach(prefix => {
                 const family = document.getElementById(prefix + 'FontFamily').value;
-                const isBold = document.getElementById(prefix + 'Bold').checked;
-                const isItalic = document.getElementById(prefix + 'Italic').checked;
 
                 let targetEl = null;
                 if (prefix === 'name') targetEl = document.getElementById('markerName');
@@ -754,8 +719,8 @@
 
                 if (targetEl) {
                     targetEl.style.fontFamily = `"${family}", sans-serif`;
-                    targetEl.style.fontWeight = isBold ? 'bold' : 'normal';
-                    targetEl.style.fontStyle = isItalic ? 'italic' : 'normal';
+                    targetEl.style.fontWeight = 'normal';
+                    targetEl.style.fontStyle = 'normal';
                 }
             });
         };
