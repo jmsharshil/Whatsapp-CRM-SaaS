@@ -1,6 +1,8 @@
 import os
 import random
 import datetime
+from datetime import timedelta
+from django.utils import timezone
 from django.core.mail import send_mail, EmailMultiAlternatives
 from django.core.cache import cache
 from rest_framework.views import APIView
@@ -2025,6 +2027,10 @@ def _serialise_client(client, *, tech_provider_token: str, fetch_meta: bool = Tr
         "phone_number":   client.phone_number,
         "member_count":   len(members),
         "members":        members,
+        "daily_messages":   getattr(client, 'daily_messages', 0),
+        "weekly_messages":  getattr(client, 'weekly_messages', 0),
+        "monthly_messages": getattr(client, 'monthly_messages', 0),
+        "total_messages":   getattr(client, 'total_messages', 0),
         "created_at":     client.created_at.isoformat(),
         "updated_at":     client.updated_at.isoformat(),
     }
@@ -2063,9 +2069,20 @@ class TechProviderClientListView(APIView):
 
         tech_token = getattr(settings, "META_PERMANENT_TOKEN", "") or ""
 
+        now = timezone.now()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_start = today_start - timedelta(days=7)
+        month_start = today_start - timedelta(days=30)
+
         qs = (
             org.clients
             .prefetch_related("members", "members__user")
+            .annotate(
+                total_messages=Count('messages'),
+                daily_messages=Count('messages', filter=Q(messages__timestamp__gte=today_start)),
+                weekly_messages=Count('messages', filter=Q(messages__timestamp__gte=week_start)),
+                monthly_messages=Count('messages', filter=Q(messages__timestamp__gte=month_start))
+            )
             .order_by("-created_at")
         )
 
@@ -2114,10 +2131,22 @@ class TechProviderClientDetailView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
         tech_token = getattr(settings, "META_PERMANENT_TOKEN", "") or ""
+
+        now = timezone.now()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_start = today_start - timedelta(days=7)
+        month_start = today_start - timedelta(days=30)
+
         try:
             client = (
                 org.clients
                 .prefetch_related("members", "members__user")
+                .annotate(
+                    total_messages=Count('messages'),
+                    daily_messages=Count('messages', filter=Q(messages__timestamp__gte=today_start)),
+                    weekly_messages=Count('messages', filter=Q(messages__timestamp__gte=week_start)),
+                    monthly_messages=Count('messages', filter=Q(messages__timestamp__gte=month_start))
+                )
                 .get(pk=pk)
             )
             return org, tech_token, client, None
