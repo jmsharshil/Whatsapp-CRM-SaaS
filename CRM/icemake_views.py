@@ -504,14 +504,25 @@ class IceMakeDataAPIView(APIView):
             return Response({"error": "Invalid token"}, status=401)
 
         # Pagination params
-        page_num  = int(request.GET.get("page", 1))
-        page_size = int(request.GET.get("page_size", 20))
+        try:
+            page_num = int(request.GET.get("page", 1))
+        except (ValueError, TypeError):
+            page_num = 1
+            
+        try:
+            page_size = int(request.GET.get("page_size", 20))
+        except (ValueError, TypeError):
+            page_size = 20
 
         client_account = ClientAccount.objects.filter(phone_number_id=ICEMAKE_PHONE_NUMBER_ID).first()
 
+        from django.db.models import Prefetch
+
         conversations = Conversation.objects.filter(
             phone_number_id=ICEMAKE_PHONE_NUMBER_ID
-        ).select_related("customer").prefetch_related("messages").order_by("-created_at")
+        ).select_related("customer", "chatbot_state").prefetch_related(
+            Prefetch("messages", queryset=Message.objects.order_by("timestamp"))
+        ).order_by("-created_at")
 
         total = conversations.count()
         paginator = Paginator(conversations, page_size)
@@ -549,7 +560,7 @@ class IceMakeDataAPIView(APIView):
             # Fallback: extract from messages if missing
             if not ticket_no or not assigned_engineer:
                 import re
-                for msg in conv.messages.order_by("-timestamp"):
+                for msg in reversed(conv.messages.all()):
                     if msg.direction == "outbound" and "TEMPLATE: ICEMAKE" in (msg.content or "").upper():
                         content_str = msg.content or ""
                         if not ticket_no:
@@ -566,7 +577,7 @@ class IceMakeDataAPIView(APIView):
                         if not customer_name:
                             n_match = re.search(r'Customer Name:\s*([^\n]+)', content_str)
                             if n_match: customer_name = n_match.group(1).strip()
-
+                        
             conv_data = {
                 "id": conv.id,
                 "status": conv.status,
@@ -574,8 +585,8 @@ class IceMakeDataAPIView(APIView):
                 "stage": stage,
                 "created_at": conv.created_at.astimezone(ist_tz).isoformat() if conv.created_at else None,
                 "customer": {
-                    "name": conv.customer.name,
-                    "whatsapp_number": conv.customer.phone,
+                    "name": conv.customer.name if conv.customer else "",
+                    "whatsapp_number": conv.customer.phone if conv.customer else "",
                 },
                 "ticket_data": {
                     "ticket_no": ticket_no,
@@ -592,7 +603,7 @@ class IceMakeDataAPIView(APIView):
                 "messages": []
             }
 
-            for msg in conv.messages.order_by("timestamp"):
+            for msg in conv.messages.all():
                 conv_data["messages"].append({
                     "id": msg.id,
                     "direction": msg.direction,
@@ -619,125 +630,4 @@ class IceMakeDataAPIView(APIView):
             "previous": make_url(page.previous_page_number() if page.has_previous() else None),
             "conversations": conversations_data,
         })
-
-
-class IceMakeComplaintLogsAPIView(APIView):
-    """
-    GET /api/icemake/complaint-logs/?token=<token>
-    
-    Returns a log of complaint templates sent to customers and service engineers.
-    """
-    authentication_classes = []
-    permission_classes = [AllowAny]
-
-    def get(self, request, *args, **kwargs):
-        from django.core.paginator import Paginator
-        from django.db.models import Q
-        
-        token = request.GET.get("token")
-
-        if not token:
-            return Response({"error": "token is required"}, status=400)
-
-        if token != ICEMAKE_PHONE_NUMBER_ID:
-            return Response({"error": "Invalid token"}, status=401)
-
-        # Pagination params
-        page_num  = int(request.GET.get("page", 1))
-        page_size = int(request.GET.get("page_size", 50))
-
-        # Need to select related conversation for ticket data
-        messages = Message.objects.filter(
-            client__phone_number_id=ICEMAKE_PHONE_NUMBER_ID,
-            direction="outbound"
-        ).filter(
-            Q(content__icontains="TEMPLATE: ICEMAKE_CUSTOMER_") | 
-            Q(content__icontains="TEMPLATE: ICEMAKE_SERVICEENGINEER") |
-            Q(content__icontains="[Template: icemake_customer_]") | 
-            Q(content__icontains="[Template: icemake_serviceengineer]")
-        ).select_related("customer", "conversation").order_by("-timestamp")
-
-        total = messages.count()
-        paginator = Paginator(messages, page_size)
-        page = paginator.get_page(page_num)
-
-        base_url = request.build_absolute_uri(request.path)
-        def make_url(p):
-            if p is None:
-                return None
-            params = request.GET.copy()
-            params["page"] = p
-            return f"{base_url}?{params.urlencode()}"
-
-        import re
-
-        logs_data = []
-        for msg in page.object_list:
-            
-            # Determine target type based on content
-            target = "Unknown"
-            if "icemake_customer_" in msg.content.lower():
-                target = "Customer"
-            elif "icemake_serviceengineer" in msg.content.lower():
-                target = "Service Engineer"
-                
-            bot_meta = msg.conversation.bot_metadata if msg.conversation and isinstance(msg.conversation.bot_metadata, dict) else {}
-            td = bot_meta.get("ticket_data", {}) or {}
-            
-            # Extract from content using regex as a reliable fallback
-            content_str = msg.content or ""
-            
-            # Extract Ticket No
-            ticket_match = re.search(r'Ticket\s*:\s*([A-Za-z0-9]+)', content_str)
-            if not ticket_match:
-                ticket_match = re.search(r'Complaint Number:\s*\*?([A-Za-z0-9]+)\*?', content_str)
-            ticket_no = ticket_match.group(1).strip() if ticket_match else td.get("ticket_no", "")
-            
-            # Extract Customer Name
-            name_match = re.search(r'Customer Name:\s*([^\n]+)', content_str)
-            customer_name = name_match.group(1).strip() if name_match else td.get("name", msg.customer.name if msg.customer else "")
-            
-            # Extract Mobile
-            mobile_match = re.search(r'Customer Mobile:\s*([^\n]+)', content_str)
-            registered_mobile = mobile_match.group(1).strip() if mobile_match else td.get("mobile", "")
-            
-            # Extract Assigned Engineer
-            engineer_match = re.search(r'Assigned Engineer:\s*([^\n]+)', content_str)
-            assigned_engineer = engineer_match.group(1).strip() if engineer_match else td.get("engineer_name", "")
-                
-            import datetime
-            ist_tz = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
-            ts = msg.timestamp.astimezone(ist_tz).isoformat() if msg.timestamp else None
-
-            logs_data.append({
-                "id": msg.id,
-                "sent_to": msg.customer.phone if msg.customer else "",
-                "target": target,
-                "customer_name": customer_name,
-                "registered_mobile": registered_mobile,
-                "ticket_no": ticket_no,
-                "assigned_engineer": assigned_engineer,
-                "content": msg.content,
-                "status": msg.status,
-                "timestamp": ts,
-                "meta_message_id": msg.meta_message_id,
-            })
-
-        client_account = ClientAccount.objects.filter(phone_number_id=ICEMAKE_PHONE_NUMBER_ID).first()
-
-        return Response({
-            "client": {
-                "name": client_account.name if client_account else "Ice Make Refrigeration Limited",
-                "phone_number_id": ICEMAKE_PHONE_NUMBER_ID,
-                "waba_id": client_account.waba_id if client_account else "",
-            },
-            "total": total,
-            "page": page_num,
-            "page_size": page_size,
-            "total_pages": paginator.num_pages,
-            "next": make_url(page.next_page_number() if page.has_next() else None),
-            "previous": make_url(page.previous_page_number() if page.has_previous() else None),
-            "logs": logs_data,
-        })
-
 
