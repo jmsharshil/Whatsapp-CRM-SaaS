@@ -516,13 +516,15 @@ class IceMakeDataAPIView(APIView):
 
         client_account = ClientAccount.objects.filter(phone_number_id=ICEMAKE_PHONE_NUMBER_ID).first()
 
-        from django.db.models import Prefetch
+        from django.db.models import Prefetch, Max
 
         conversations = Conversation.objects.filter(
             phone_number_id=ICEMAKE_PHONE_NUMBER_ID
+        ).annotate(
+            latest_message_time=Max('messages__timestamp')
         ).select_related("customer", "chatbot_state").prefetch_related(
             Prefetch("messages", queryset=Message.objects.order_by("timestamp"))
-        ).order_by("-created_at")
+        ).order_by("-latest_message_time", "-created_at")
 
         total = conversations.count()
         paginator = Paginator(conversations, page_size)
