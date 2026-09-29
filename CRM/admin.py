@@ -24,8 +24,22 @@ admin.site.register(CampaignRecipient)
 admin.site.register(WhatsAppMessage)
 admin.site.register(WhatsAppSession)
 
+# Other remaining models
+admin.site.register(Document)
+admin.site.register(ChatSession)
+admin.site.register(ChatMessage)
+admin.site.register(NavratriRegistration)
+
+
 admin.site.register(MetaRegistrationDetails)
 
 # Avantika Models
 admin.site.register(AvantikaContact)
 admin.site.register(AvantikaTemplate)
+
+class AvantikaCampaignHistoryAdmin(admin.ModelAdmin):
+    list_display = ['name', 'phone', 'template', 'campaign_run_id', 'status']
+    search_fields = ['name', 'phone', 'campaign_run_id']
+    list_filter = ['status', 'template']
+
+admin.site.register(AvantikaCampaignHistory, AvantikaCampaignHistoryAdmin)
