@@ -2078,10 +2078,10 @@ class TechProviderClientListView(APIView):
             org.clients
             .prefetch_related("members", "members__user")
             .annotate(
-                total_messages=Count('messages'),
-                daily_messages=Count('messages', filter=Q(messages__timestamp__gte=today_start)),
-                weekly_messages=Count('messages', filter=Q(messages__timestamp__gte=week_start)),
-                monthly_messages=Count('messages', filter=Q(messages__timestamp__gte=month_start))
+                total_messages=Count('messages', filter=Q(messages__direction='outbound')),
+                daily_messages=Count('messages', filter=Q(messages__timestamp__gte=today_start, messages__direction='outbound')),
+                weekly_messages=Count('messages', filter=Q(messages__timestamp__gte=week_start, messages__direction='outbound')),
+                monthly_messages=Count('messages', filter=Q(messages__timestamp__gte=month_start, messages__direction='outbound'))
             )
             .order_by("-created_at")
         )
@@ -2142,10 +2142,10 @@ class TechProviderClientDetailView(APIView):
                 org.clients
                 .prefetch_related("members", "members__user")
                 .annotate(
-                    total_messages=Count('messages'),
-                    daily_messages=Count('messages', filter=Q(messages__timestamp__gte=today_start)),
-                    weekly_messages=Count('messages', filter=Q(messages__timestamp__gte=week_start)),
-                    monthly_messages=Count('messages', filter=Q(messages__timestamp__gte=month_start))
+                    total_messages=Count('messages', filter=Q(messages__direction='outbound')),
+                    daily_messages=Count('messages', filter=Q(messages__timestamp__gte=today_start, messages__direction='outbound')),
+                    weekly_messages=Count('messages', filter=Q(messages__timestamp__gte=week_start, messages__direction='outbound')),
+                    monthly_messages=Count('messages', filter=Q(messages__timestamp__gte=month_start, messages__direction='outbound'))
                 )
                 .get(pk=pk)
             )
