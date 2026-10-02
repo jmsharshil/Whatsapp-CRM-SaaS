@@ -13,6 +13,7 @@ from CRM.globestar_views import GlobestarDataAPIView
 from CRM.navratri_views import NavratriRegistrationAPIView
 from CRM.jms_campaign_views import JMSCampaignUploadView, JMSCampaignHistoryView, JMSCampaignListView, jms_campaign_ui_view, JMSCSVUploadView, JMSCSVListView
 from CRM.icemake_views import IceMakeDataAPIView
+from CRM.khodiyar_views import KhodiyarSendBillReceiptView
 
 urlpatterns = [
 
@@ -111,4 +112,7 @@ urlpatterns = [
     path("api/v1/jms/campaign/upload/", JMSCampaignUploadView.as_view(), name="jms-campaign-upload"),
     path("api/v1/jms/campaign/history/", JMSCampaignListView.as_view(), name="jms-campaign-history-list"),
     path("api/v1/jms/campaign/history/<str:campaign_id>/", JMSCampaignHistoryView.as_view(), name="jms-campaign-history-detail"),
+    
+    # ── Khodiyar API ───────────────────────────────────────────────────────────
+    path("api/khodiyar/send-bill-receipt/", KhodiyarSendBillReceiptView.as_view(), name="khodiyar-send-bill-receipt"),
 ]
