@@ -96,8 +96,6 @@ from CRM.vtech_views import handle_vtech_message
 from CRM.vtech_utils import vtech_PHONE_NUMBER_ID
 from CRM.kia_views import handle_kia_message
 from CRM.kia_utils import kia_PHONE_NUMBER_ID
-from CRM.khodiyar_views import handle_khodiyar_message
-from CRM.khodiyar_utils import KHODIYAR_PHONE_NUMBER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -615,7 +613,6 @@ class WhatsAppWebhookView(APIView):
                         icemake_phone_id = ICEMAKE_PHONE_NUMBER_ID
                         vtech_phone_id = vtech_PHONE_NUMBER_ID
                         kia_phone_id = kia_PHONE_NUMBER_ID
-                        khodiyar_phone_id = KHODIYAR_PHONE_NUMBER_ID
                         
                         if gigatel_phone_id and phone_number_id == gigatel_phone_id:
                             logger.info("[Webhook] Routing message to Gigatel Bot")
@@ -672,9 +669,6 @@ class WhatsAppWebhookView(APIView):
                         elif kia_phone_id and phone_number_id == kia_phone_id:
                             logger.info("[Webhook] Routing message to Kia Bot")
                             handle_kia_message(msg)
-                        elif khodiyar_phone_id and phone_number_id == khodiyar_phone_id:
-                            logger.info("[Webhook] Routing message to Khodiyar Bot")
-                            handle_khodiyar_message(msg)
                         elif phone_number_id == "1168578376348442":
                             logger.info(f"[Webhook] Saving message for disabled bot number {phone_number_id}")
                             
