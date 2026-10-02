@@ -518,15 +518,23 @@ class IceMakeDataAPIView(APIView):
 
         from django.db.models import Prefetch, Max
 
-        conversations = Conversation.objects.filter(
-            phone_number_id=ICEMAKE_PHONE_NUMBER_ID
-        ).annotate(
+        base_qs = Conversation.objects.filter(phone_number_id=ICEMAKE_PHONE_NUMBER_ID)
+        
+        last_fetched = request.GET.get("last_fetched")
+        if last_fetched:
+            from django.utils.dateparse import parse_datetime
+            dt = parse_datetime(last_fetched)
+            if dt:
+                base_qs = base_qs.filter(messages__timestamp__gte=dt).distinct()
+
+        total = base_qs.count()
+
+        conversations = base_qs.annotate(
             latest_message_time=Max('messages__timestamp')
         ).select_related("customer", "chatbot_state").prefetch_related(
             Prefetch("messages", queryset=Message.objects.order_by("timestamp"))
         ).order_by("-latest_message_time", "-created_at")
 
-        total = conversations.count()
         paginator = Paginator(conversations, page_size)
         page = paginator.get_page(page_num)
 
@@ -562,7 +570,7 @@ class IceMakeDataAPIView(APIView):
             # Fallback: extract from messages if missing
             if not ticket_no or not assigned_engineer:
                 import re
-                for msg in reversed(conv.messages.all()):
+                for msg in reversed(list(conv.messages.all())):
                     if msg.direction == "outbound" and "TEMPLATE: ICEMAKE" in (msg.content or "").upper():
                         content_str = msg.content or ""
                         if not ticket_no:
