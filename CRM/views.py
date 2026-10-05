@@ -1473,16 +1473,31 @@ class MetaCustomerListView(APIView):
         if phone_number_id:
             qs = Conversation.objects.select_related("customer").filter(
                 Q(client__phone_number_id=phone_number_id) | Q(phone_number_id=phone_number_id)
-            ).annotate(
-                last_msg_time=Max('messages__timestamp')
-            ).order_by("-last_msg_time", "-created_at")
+            )
         else:
             # Fallback: if no WABA connected yet, filter by org's clients
             qs = Conversation.objects.select_related("customer").filter(
                 client__tech_provider=org
-            ).annotate(
-                last_msg_time=Max('messages__timestamp')
             )
+
+        # Annotate non-campaign messages
+        qs = qs.annotate(
+            non_campaign_msgs=Count('messages', filter=~Q(messages__reply_of='campaign'))
+        )
+        
+        # ── Optional query filters ────────────────────────────────────────────
+        number    = request.query_params.get("number",    "").strip()
+        from_date = request.query_params.get("from_date", "").strip()
+        to_date   = request.query_params.get("to_date",   "").strip()
+        status    = request.query_params.get("status",    "").strip()
+
+        if not number:
+            # Only filter out campaign-only conversations if we are NOT searching by number
+            qs = qs.filter(non_campaign_msgs__gt=0)
+            
+        qs = qs.annotate(
+            last_msg_time=Max('messages__timestamp')
+        ).order_by("-last_msg_time", "-created_at")
             
         if is_tp:
             qs = qs.annotate(
@@ -1501,11 +1516,6 @@ class MetaCustomerListView(APIView):
         qs = qs.order_by("-last_msg_time", "-created_at")
 
         # ── Optional query filters ────────────────────────────────────────────
-        number    = request.query_params.get("number",    "").strip()
-        from_date = request.query_params.get("from_date", "").strip()
-        to_date   = request.query_params.get("to_date",   "").strip()
-        status    = request.query_params.get("status",    "").strip()
-
         if number:
             qs = qs.filter(customer__phone__icontains=number)
         if from_date:

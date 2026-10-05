@@ -409,9 +409,14 @@ class CampaignListCreateView(APIView):
                     
                     try:
                         from CRM.models import Customer, Conversation, Message, ClientAccount
+                        
+                        normalized_phone = recipient.phone_number
+                        if not normalized_phone.startswith("+"):
+                            normalized_phone = f"+{normalized_phone}"
+                            
                         customer_obj, _ = Customer.objects.get_or_create(
-                            phone=recipient.phone_number, 
-                            defaults={'name': recipient.phone_number}
+                            phone=normalized_phone, 
+                            defaults={'name': normalized_phone}
                         )
                         client_account_obj = ClientAccount.objects.filter(phone_number_id=waba.phone_number_id).first()
                         conv_obj, _ = Conversation.objects.get_or_create(
@@ -427,7 +432,8 @@ class CampaignListCreateView(APIView):
                             direction='outbound',
                             message_type='template',
                             meta_message_id=msg_id,
-                            status='sent'
+                            status='sent',
+                            reply_of='campaign'
                         )
                     except Exception as e:
                         logger.error(f"Failed to log campaign message for {recipient.phone_number}: {e}")
