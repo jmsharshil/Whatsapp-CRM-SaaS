@@ -406,6 +406,31 @@ class CampaignListCreateView(APIView):
                     recipient.status         = "sent"
                     recipient.meta_message_id = msg_id
                     recipient.sent_at        = timezone.now()
+                    
+                    try:
+                        from CRM.models import Customer, Conversation, Message, ClientAccount
+                        customer_obj, _ = Customer.objects.get_or_create(
+                            phone=recipient.phone_number, 
+                            defaults={'name': recipient.phone_number}
+                        )
+                        client_account_obj = ClientAccount.objects.filter(phone_number_id=waba.phone_number_id).first()
+                        conv_obj, _ = Conversation.objects.get_or_create(
+                            customer=customer_obj, 
+                            phone_number_id=waba.phone_number_id, 
+                            defaults={'client': client_account_obj}
+                        )
+                        Message.objects.create(
+                            customer=customer_obj,
+                            client=client_account_obj,
+                            conversation=conv_obj,
+                            content=f"[Template: {template.name}]",
+                            direction='outbound',
+                            message_type='template',
+                            meta_message_id=msg_id,
+                            status='sent'
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to log campaign message for {recipient.phone_number}: {e}")
                 else:
                     recipient.status       = "failed"
                     recipient.error_detail = error_detail
