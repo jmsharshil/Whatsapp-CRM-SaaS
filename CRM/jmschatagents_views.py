@@ -2302,9 +2302,8 @@ def customer_list(request):
     base_qs = Customer.objects.all()
     if phone_number_id:
         base_qs = base_qs.filter(
-            (Q(conversations__client__phone_number_id=phone_number_id) |
-            Q(conversations__phone_number_id=phone_number_id)),
-            messages__direction="inbound"
+            Q(conversations__client__phone_number_id=phone_number_id) |
+            Q(conversations__phone_number_id=phone_number_id)
         ).distinct()
     else:
         # If no phone_number_id is found for TechProvider, do not leak clients

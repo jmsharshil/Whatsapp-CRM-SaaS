@@ -617,8 +617,7 @@ class MetaDashboardAPIView(APIView):
         
         if phone_number_id:
             client_customers = Customer.objects.filter(
-                (Q(conversations__client__phone_number_id=phone_number_id) | Q(conversations__phone_number_id=phone_number_id)),
-                conversations__messages__direction="inbound"
+                Q(conversations__client__phone_number_id=phone_number_id) | Q(conversations__phone_number_id=phone_number_id)
             ).distinct()
             active_today = client_customers.filter(conversations__messages__timestamp__date=date.today()).distinct().count()
         else:
@@ -1780,15 +1779,13 @@ class LeadsProspectsView(APIView):
         if phone_number_id:
             # Filter by org's WABA or directly by conversation's phone_number_id
             customers = Customer.objects.filter(
-                (Q(conversations__client__phone_number_id=phone_number_id) |
-                Q(conversations__phone_number_id=phone_number_id)),
-                conversations__messages__direction="inbound"
+                Q(conversations__client__phone_number_id=phone_number_id) |
+                Q(conversations__phone_number_id=phone_number_id)
             ).distinct()
         else:
             # Fallback: filter by org's clients
             customers = Customer.objects.filter(
-                conversations__client__tech_provider=org,
-                conversations__messages__direction="inbound"
+                conversations__client__tech_provider=org
             ).distinct()
 
         # ── Search filter ─────────────────────────────────────────────────
@@ -2680,7 +2677,7 @@ class MetaTemplateAnalyticsView(APIView):
         
         url = f"https://graph.facebook.com/v20.0/{waba_id}"
         params = {
-            "fields": f"template_analytics.start({start_time}).end({end_time}).granularity(DAILY).template_ids({template_id})",
+            "fields": f"template_analytics.start({start_time}).end({end_time}).granularity(DAILY).template_ids({template_id}).limit(100)",
             "access_token": access_token
         }
         
