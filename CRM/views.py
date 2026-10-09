@@ -2694,6 +2694,27 @@ class MetaTemplateAnalyticsView(APIView):
                     "details": error_obj
                 }, status=res.status_code if res.status_code != 200 else 400)
                 
+            # Handle Pagination to get all days
+            analytics_data = data.get('template_analytics', {})
+            pages_fetched = 0
+            while analytics_data and analytics_data.get('paging', {}).get('next'):
+                next_url = analytics_data['paging']['next']
+                next_res = requests.get(next_url)
+                if not next_res.ok:
+                    break
+                next_data = next_res.json()
+                pages_fetched += 1
+                
+                # Append data_points from next page to the original data
+                if 'data' in next_data and len(next_data['data']) > 0 and 'data_points' in next_data['data'][0]:
+                    if 'data' in analytics_data and len(analytics_data['data']) > 0:
+                        if 'data_points' not in analytics_data['data'][0]:
+                            analytics_data['data'][0]['data_points'] = []
+                        analytics_data['data'][0]['data_points'].extend(next_data['data'][0].get('data_points', []))
+                        
+                # Update paging to continue loop
+                analytics_data['paging'] = next_data.get('paging', {})
+                
             return Response({"status": "success", "data": data})
             
         except Exception as e:
