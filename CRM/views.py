@@ -617,11 +617,12 @@ class MetaDashboardAPIView(APIView):
         
         if phone_number_id:
             client_customers = Customer.objects.filter(
-                Q(conversations__client__phone_number_id=phone_number_id) | Q(conversations__phone_number_id=phone_number_id)
+                (Q(conversations__client__phone_number_id=phone_number_id) | Q(conversations__phone_number_id=phone_number_id)),
+                messages__direction="inbound"
             ).distinct()
             active_today = client_customers.filter(
-                conversations__messages__timestamp__date=date.today(),
-                conversations__messages__direction="inbound"
+                messages__timestamp__date=date.today(),
+                messages__direction="inbound"
             ).distinct().count()
         else:
             client_customers = Customer.objects.none()
@@ -643,12 +644,12 @@ class MetaDashboardAPIView(APIView):
 
         leads_count = client_customers.filter(
             (Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids) | Q(conversations__status="confirmed")),
-            conversations__messages__direction="inbound"
+            messages__direction="inbound"
         ).distinct().count()
 
         prospects_count = client_customers.exclude(
             Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids) | Q(conversations__status="confirmed")
-        ).filter(conversations__messages__direction="inbound").distinct().count()
+        ).filter(messages__direction="inbound").distinct().count()
 
         client_summary = {
             "total_customers": client_customers.count(),
@@ -1783,13 +1784,15 @@ class LeadsProspectsView(APIView):
         if phone_number_id:
             # Filter by org's WABA or directly by conversation's phone_number_id
             customers = Customer.objects.filter(
-                Q(conversations__client__phone_number_id=phone_number_id) |
-                Q(conversations__phone_number_id=phone_number_id)
+                (Q(conversations__client__phone_number_id=phone_number_id) |
+                Q(conversations__phone_number_id=phone_number_id)),
+                messages__direction="inbound"
             ).distinct()
         else:
             # Fallback: filter by org's clients
             customers = Customer.objects.filter(
-                conversations__client__tech_provider=org
+                conversations__client__tech_provider=org,
+                messages__direction="inbound"
             ).distinct()
 
         # ── Search filter ─────────────────────────────────────────────────

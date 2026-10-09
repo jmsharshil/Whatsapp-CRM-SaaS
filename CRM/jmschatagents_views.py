@@ -2216,7 +2216,10 @@ def dashboard_summary(request):
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     if phone_number_id:
-        customer_qs = Customer.objects.filter(conversations__phone_number_id=phone_number_id).distinct()
+        customer_qs = Customer.objects.filter(
+            conversations__phone_number_id=phone_number_id,
+            messages__direction="inbound"
+        ).distinct()
         conversation_qs = Conversation.objects.filter(phone_number_id=phone_number_id)
         message_qs = Message.objects.filter(conversation__phone_number_id=phone_number_id)
     else:
