@@ -94,6 +94,10 @@ from CRM.icemake_views import handle_icemake_message
 from CRM.icemake_utils import ICEMAKE_PHONE_NUMBER_ID
 from CRM.vtech_views import handle_vtech_message
 from CRM.vtech_utils import vtech_PHONE_NUMBER_ID
+from CRM.gam21_views import handle_gam21_message
+from CRM.gam21_utils import GAM21_PHONE_NUMBER_ID
+from CRM.ai4trades_views import handle_ai4trades_message
+from CRM.ai4trades_utils import AI4TRADES_PHONE_NUMBER_ID
 from CRM.kia_views import handle_kia_message
 from CRM.kia_utils import kia_PHONE_NUMBER_ID
 from CRM.veda_hyundai_views import handle_veda_hyundai_message
@@ -614,6 +618,8 @@ class WhatsAppWebhookView(APIView):
                         acva_phone_id = ACVA_PHONE_NUMBER_ID
                         icemake_phone_id = ICEMAKE_PHONE_NUMBER_ID
                         vtech_phone_id = vtech_PHONE_NUMBER_ID
+                        gam21_phone_id = GAM21_PHONE_NUMBER_ID
+                        ai4trades_phone_id = AI4TRADES_PHONE_NUMBER_ID
                         kia_phone_id = kia_PHONE_NUMBER_ID
                         veda_hyundai_phone_id = veda_hyundai_PHONE_NUMBER_ID
                         
@@ -666,6 +672,12 @@ class WhatsAppWebhookView(APIView):
                         elif icemake_phone_id and phone_number_id == icemake_phone_id:
                             logger.info("[Webhook] Routing message to IceMake Bot")
                             handle_icemake_message(msg, contacts[0] if contacts else {})
+                        elif ai4trades_phone_id and phone_number_id == ai4trades_phone_id:
+                            logger.info("[Webhook] Routing message to Ai4Trades Bot")
+                            handle_ai4trades_message(msg, contacts[0] if contacts else {})
+                        elif gam21_phone_id and phone_number_id == gam21_phone_id:
+                            logger.info("[Webhook] Routing message to Gam21 Bot")
+                            handle_gam21_message(msg, contacts[0] if contacts else {})
                         elif vtech_phone_id and phone_number_id == vtech_phone_id:
                             logger.info("[Webhook] Routing message to Vtech Bot")
                             handle_vtech_message(msg)
@@ -790,3 +802,4 @@ def _handle_status_update(status_payload: dict):
         logger.info("[Webhook] Status wamid=%s -> %s", wa_msg_id, new_status)
     else:
         logger.debug("[Webhook] Unknown wamid=%s status=%s", wa_msg_id, new_status)
+
