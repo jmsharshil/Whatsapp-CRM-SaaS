@@ -2217,8 +2217,8 @@ def dashboard_summary(request):
 
     if phone_number_id:
         customer_qs = Customer.objects.filter(
-            conversations__phone_number_id=phone_number_id,
-            messages__direction="inbound"
+            ~Q(messages__reply_of='campaign'), conversations__phone_number_id=phone_number_id,
+            
         ).distinct()
         conversation_qs = Conversation.objects.filter(phone_number_id=phone_number_id)
         message_qs = Message.objects.filter(conversation__phone_number_id=phone_number_id)
@@ -2233,14 +2233,14 @@ def dashboard_summary(request):
     
     # Active today: Conversations that had an inbound reply today
     active_today = conversation_qs.filter(
-        messages__timestamp__gte=today,
-        messages__direction="inbound"
+        ~Q(messages__reply_of='campaign'), messages__timestamp__gte=today,
+        
     ).distinct().count()
     
     # New today: Customers created today who have replied
     new_today = customer_qs.filter(
-        conversations__created_at__gte=today,
-        messages__direction="inbound"
+        ~Q(messages__reply_of='campaign'), conversations__created_at__gte=today,
+        
     ).distinct().count()
 
     status_qs               = conversation_qs.values("status").annotate(count=Count("id"))
@@ -2329,7 +2329,7 @@ def customer_list(request):
         created_at=Subquery(first_seen_subq),
         closing_count=Count(
             "messages",
-            filter=Q(messages__direction="inbound") & (
+            filter=Q(~Q(messages__reply_of='campaign')) & (
                 Q(messages__content__icontains="thank you") |
                 Q(messages__content__icontains="thanks") |
                 Q(messages__content__iexact="tq") |

@@ -618,11 +618,11 @@ class MetaDashboardAPIView(APIView):
         if phone_number_id:
             client_customers = Customer.objects.filter(
                 (Q(conversations__client__phone_number_id=phone_number_id) | Q(conversations__phone_number_id=phone_number_id)),
-                messages__direction="inbound"
+                ~Q(messages__reply_of='campaign')
             ).distinct()
             active_today = client_customers.filter(
-                messages__timestamp__date=date.today(),
-                messages__direction="inbound"
+                ~Q(messages__reply_of='campaign'),
+                messages__timestamp__date=date.today()
             ).distinct().count()
         else:
             client_customers = Customer.objects.none()
@@ -643,13 +643,12 @@ class MetaDashboardAPIView(APIView):
         ).values_list("conversation_id", flat=True)
 
         leads_count = client_customers.filter(
-            (Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids) | Q(conversations__status="confirmed")),
-            messages__direction="inbound"
+            Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids) | Q(conversations__status="confirmed")
         ).distinct().count()
 
         prospects_count = client_customers.exclude(
             Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids) | Q(conversations__status="confirmed")
-        ).filter(messages__direction="inbound").distinct().count()
+        ).distinct().count()
 
         client_summary = {
             "total_customers": client_customers.count(),
@@ -1786,13 +1785,13 @@ class LeadsProspectsView(APIView):
             customers = Customer.objects.filter(
                 (Q(conversations__client__phone_number_id=phone_number_id) |
                 Q(conversations__phone_number_id=phone_number_id)),
-                messages__direction="inbound"
+                ~Q(messages__reply_of='campaign')
             ).distinct()
         else:
             # Fallback: filter by org's clients
             customers = Customer.objects.filter(
-                conversations__client__tech_provider=org,
-                messages__direction="inbound"
+                ~Q(messages__reply_of='campaign'),
+                conversations__client__tech_provider=org
             ).distinct()
 
         # ── Search filter ─────────────────────────────────────────────────
@@ -1819,13 +1818,12 @@ class LeadsProspectsView(APIView):
         ).values_list("conversation_id", flat=True)
 
         leads_qs = customers.filter(
-            (Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids) | Q(conversations__status="confirmed")),
-            conversations__messages__direction="inbound"
+            Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids) | Q(conversations__status="confirmed")
         ).distinct()
 
         prospects_qs = customers.exclude(
             Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids) | Q(conversations__status="confirmed")
-        ).filter(conversations__messages__direction="inbound").distinct()
+        ).distinct()
 
         total_count = customers.count()
         lead_count = leads_qs.count()
