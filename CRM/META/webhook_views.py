@@ -750,6 +750,9 @@ class WhatsAppWebhookView(APIView):
                                 db_msg.message_type = msg.get("type", "text")
                                 db_msg.meta_message_id = msg.get("id", "")
                                 db_msg.save(update_fields=["message_type", "meta_message_id"])
+                        elif phone_number_id == "1160424227149252":
+                            logger.info(f"[Webhook] Routing message to JMS internal bot for phone_number_id={phone_number_id}")
+                            _handle_jms_internal_message(msg, value, phone_number_id)
                         elif client:
                             # ── CLIENT BOT FLOW ───────────────────────────
                             # Route to client-specific bot
@@ -760,8 +763,18 @@ class WhatsAppWebhookView(APIView):
                             )
                         else:
                             # -- UNKNOWN / UNCONFIGURED NUMBER ---------------
-                            logger.info(f"[Webhook] No bot flow configured for phone_number_id={phone_number_id}. Stopping execution.")
-                            # _handle_jms_internal_message(msg, value, phone_number_id)
+                            logger.info(f"[Webhook] No bot flow configured for phone_number_id={phone_number_id}. Stopping execution and sending auto-reply.")
+                            raw_phone = msg.get("from", "").strip()
+                            if raw_phone:
+                                try:
+                                    token = getattr(settings, "META_PERMANENT_TOKEN", os.environ.get("META_ACCESS_TOKEN", ""))
+                                    url = f"https://graph.facebook.com/v22.0/{phone_number_id}/messages"
+                                    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+                                    reply_text = "Thank you for connecting with us. Our team will contact you shortly!"
+                                    payload = {"messaging_product": "whatsapp", "to": raw_phone, "type": "text", "text": {"body": reply_text}}
+                                    requests.post(url, json=payload, headers=headers)
+                                except Exception as e:
+                                    logger.error(f"[Webhook] Fallback auto-reply send error: {e}")
 
                     except Exception:
                         logger.exception(
