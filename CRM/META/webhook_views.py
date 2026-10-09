@@ -747,26 +747,8 @@ class WhatsAppWebhookView(APIView):
                                 contacts[0] if contacts else {},
                             )
                         else:
-                            # ── UNKNOWN / UNCONFIGURED NUMBER ───────────────
-                            logger.info(f"[Webhook] No bot flow configured for phone_number_id={phone_number_id}. Sending auto-reply.")
-                            raw_phone = msg.get("from", "").strip()
-                            token = getattr(settings, "META_PERMANENT_TOKEN", getattr(settings, "META_ACCESS_TOKEN", ""))
-                            url = f"https://graph.facebook.com/v20.0/{phone_number_id}/messages"
-                            headers = {
-                                "Authorization": f"Bearer {token}",
-                                "Content-Type": "application/json"
-                            }
-                            reply_payload = {
-                                "messaging_product": "whatsapp",
-                                "to": raw_phone,
-                                "type": "text",
-                                "text": {"body": "Thank you for reaching out to us! 🙌 Our team has received your message and will get back to you shortly. Have a great day!"}
-                            }
-                            try:
-                                requests.post(url, headers=headers, json=reply_payload, timeout=5)
-                            except Exception as e:
-                                logger.error(f"Failed to send fallback reply: {e}")
-                                
+                            # -- UNKNOWN / UNCONFIGURED NUMBER ---------------
+                            logger.info(f"[Webhook] No bot flow configured for phone_number_id={phone_number_id}. Stopping execution.")
                             # _handle_jms_internal_message(msg, value, phone_number_id)
 
                     except Exception:
