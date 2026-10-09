@@ -2634,13 +2634,22 @@ class MetaTemplateAnalyticsView(APIView):
     Fetch Template Analytics (Sent, Delivered, Read, Replied) directly from Meta Graph API.
     """
     def get(self, request):
-        waba_id = request.GET.get('waba_id')
         template_id = request.GET.get('template_id')
         template_name = request.GET.get('template_name')
-        access_token = request.GET.get('access_token') 
+        
+        req_waba_id = request.GET.get('waba_id')
+        req_token = request.GET.get('access_token')
+        
+        org, waba, err = _get_org_and_waba(request.user)
+        if err:
+            return Response(err, status=400)
+            
+        waba_id = req_waba_id or waba.waba_id
+        import os
+        access_token = req_token or os.environ.get("WHATSAPP_TOKEN", waba.access_token)
         
         if not waba_id or not access_token:
-            return Response({"error": "waba_id and access_token are required"}, status=400)
+            return Response({"error": "waba_id and access_token are required, or organization must have WABA connected"}, status=400)
             
         if not template_id and not template_name:
             return Response({"error": "Either template_id or template_name must be provided"}, status=400)
@@ -2679,10 +2688,20 @@ class MetaTemplateAnalyticsView(APIView):
             res = requests.get(url, params=params)
             data = res.json()
             
-            if 'error' in data:
-                return Response({"error": data['error']['message']}, status=400)
+            if not res.ok or 'error' in data:
+                error_obj = data.get('error', {})
+                error_message = error_obj.get('message', 'Unknown Meta Graph API error')
+                return Response({
+                    "status": "error",
+                    "error": error_message,
+                    "details": error_obj
+                }, status=res.status_code if res.status_code != 200 else 400)
                 
             return Response({"status": "success", "data": data})
             
         except Exception as e:
-            return Response({"error": str(e)}, status=500)
+            return Response({
+                "status": "error",
+                "error": "Failed to fetch analytics from Meta",
+                "details": str(e)
+            }, status=500)
