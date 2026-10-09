@@ -5,7 +5,7 @@ from CRM.META.webhook_views import *
 from CRM.META.waba_views import *
 from CRM.META.client_views import *
 from .views import *
-from CRM.views import MetaConversationMessageListView, MetaDirectMessageSendView
+from CRM.views import MetaConversationMessageListView, MetaDirectMessageSendView, MetaTemplateAnalyticsView
 from CRM.jmschatagents_views import *
 from CRM.gigatel_views import GigatelDataExportView
 import CRM.gigatel_views
@@ -70,7 +70,7 @@ urlpatterns = [
     path("api/templates/sync-all/",      TemplateSyncAllView.as_view(),    name="template-sync-all"),
     path("api/templates/<int:pk>/",      TemplateDetailView.as_view(),     name="template-detail"),
     path("api/templates/<int:pk>/sync/", TemplateSyncView.as_view(),       name="template-sync"),
-    
+    path("api/templates/analytics/",     MetaTemplateAnalyticsView.as_view(), name="template-analytics"),
 
     # ── Campaigns ─────────────────────────────────────────────────────────────
     path("api/campaigns/",          CampaignListCreateView.as_view(), name="campaign-list-create"),

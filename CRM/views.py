@@ -2620,3 +2620,66 @@ def avantika_history_api(request):
         "total_failed": failed_count,
         "history": data
     })
+
+import requests
+import datetime
+from rest_framework.views import APIView
+from rest_framework.response import Response
+
+class MetaTemplateAnalyticsView(APIView):
+    """
+    Fetch Template Analytics (Sent, Delivered, Read, Replied) directly from Meta Graph API.
+    """
+    def get(self, request):
+        waba_id = request.GET.get('waba_id')
+        template_id = request.GET.get('template_id')
+        template_name = request.GET.get('template_name')
+        access_token = request.GET.get('access_token') 
+        
+        if not waba_id or not access_token:
+            return Response({"error": "waba_id and access_token are required"}, status=400)
+            
+        if not template_id and not template_name:
+            return Response({"error": "Either template_id or template_name must be provided"}, status=400)
+            
+        # If template_name is provided but no ID, fetch the ID from Meta first
+        if template_name and not template_id:
+            templates_url = f"https://graph.facebook.com/v20.0/{waba_id}/message_templates"
+            list_params = {"name": template_name, "access_token": access_token}
+            
+            try:
+                list_res = requests.get(templates_url, params=list_params).json()
+                
+                if 'error' in list_res:
+                    return Response({
+                        "error": f"Meta API Error during name resolution: {list_res['error'].get('message', 'Unknown error')}"
+                    }, status=400)
+                    
+                if 'data' in list_res and len(list_res['data']) > 0:
+                    template_id = list_res['data'][0]['id']
+                else:
+                    return Response({"error": f"Template with name '{template_name}' not found on Meta."}, status=404)
+            except Exception as e:
+                return Response({"error": f"Failed to resolve template_name to ID: {str(e)}"}, status=500)
+            
+        # Generate UNIX timestamps for the last 30 days
+        end_time = int(datetime.datetime.now().timestamp())
+        start_time = int((datetime.datetime.now() - datetime.timedelta(days=30)).timestamp())
+        
+        url = f"https://graph.facebook.com/v20.0/{waba_id}"
+        params = {
+            "fields": f"template_analytics.start({start_time}).end({end_time}).granularity(DAILY).template_ids({template_id})",
+            "access_token": access_token
+        }
+        
+        try:
+            res = requests.get(url, params=params)
+            data = res.json()
+            
+            if 'error' in data:
+                return Response({"error": data['error']['message']}, status=400)
+                
+            return Response({"status": "success", "data": data})
+            
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
