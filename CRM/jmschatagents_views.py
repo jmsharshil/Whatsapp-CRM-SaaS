@@ -2227,8 +2227,18 @@ def dashboard_summary(request):
     total_customers     = customer_qs.count()
     total_conversations = conversation_qs.count()
     total_messages      = message_qs.count()
-    active_today        = conversation_qs.filter(messages__timestamp__gte=today).distinct().count()
-    new_today           = customer_qs.filter(conversations__created_at__gte=today).distinct().count()
+    
+    # Active today: Conversations that had an inbound reply today
+    active_today = conversation_qs.filter(
+        messages__timestamp__gte=today,
+        messages__direction="inbound"
+    ).distinct().count()
+    
+    # New today: Customers created today who have replied
+    new_today = customer_qs.filter(
+        conversations__created_at__gte=today,
+        messages__direction="inbound"
+    ).distinct().count()
 
     status_qs               = conversation_qs.values("status").annotate(count=Count("id"))
     conversations_by_status = {row["status"]: row["count"] for row in status_qs}

@@ -619,7 +619,10 @@ class MetaDashboardAPIView(APIView):
             client_customers = Customer.objects.filter(
                 Q(conversations__client__phone_number_id=phone_number_id) | Q(conversations__phone_number_id=phone_number_id)
             ).distinct()
-            active_today = client_customers.filter(conversations__messages__timestamp__date=date.today()).distinct().count()
+            active_today = client_customers.filter(
+                conversations__messages__timestamp__date=date.today(),
+                conversations__messages__direction="inbound"
+            ).distinct().count()
         else:
             client_customers = Customer.objects.none()
             active_today = 0
@@ -639,12 +642,13 @@ class MetaDashboardAPIView(APIView):
         ).values_list("conversation_id", flat=True)
 
         leads_count = client_customers.filter(
-            Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids) | Q(conversations__status="confirmed")
+            (Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids) | Q(conversations__status="confirmed")),
+            conversations__messages__direction="inbound"
         ).distinct().count()
 
         prospects_count = client_customers.exclude(
             Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids) | Q(conversations__status="confirmed")
-        ).distinct().count()
+        ).filter(conversations__messages__direction="inbound").distinct().count()
 
         client_summary = {
             "total_customers": client_customers.count(),
@@ -1812,16 +1816,17 @@ class LeadsProspectsView(APIView):
         ).values_list("conversation_id", flat=True)
 
         leads_qs = customers.filter(
-            Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids) | Q(conversations__status="confirmed")
+            (Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids) | Q(conversations__status="confirmed")),
+            conversations__messages__direction="inbound"
         ).distinct()
 
         prospects_qs = customers.exclude(
             Q(conversations__id__in=completed_conv_ids) | Q(id__in=ticket_customer_ids) | Q(conversations__status="confirmed")
-        ).distinct()
+        ).filter(conversations__messages__direction="inbound").distinct()
 
         total_count = customers.count()
         lead_count = leads_qs.count()
-        prospect_count = total_count - lead_count
+        prospect_count = prospects_qs.count()
 
         if tab in ["leads", "lead"]:
             customers = leads_qs
