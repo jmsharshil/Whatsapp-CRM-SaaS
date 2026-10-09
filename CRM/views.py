@@ -618,10 +618,10 @@ class MetaDashboardAPIView(APIView):
         if phone_number_id:
             client_customers = Customer.objects.filter(
                 (Q(conversations__client__phone_number_id=phone_number_id) | Q(conversations__phone_number_id=phone_number_id)),
-                ~Q(messages__reply_of='campaign')
+                messages__direction="inbound"
             ).distinct()
             active_today = client_customers.filter(
-                ~Q(messages__reply_of='campaign'),
+                messages__direction="inbound",
                 messages__timestamp__date=date.today()
             ).distinct().count()
         else:
@@ -1486,7 +1486,7 @@ class MetaCustomerListView(APIView):
 
         # Annotate non-campaign messages
         qs = qs.annotate(
-            non_campaign_msgs=Count('messages', filter=~Q(messages__reply_of='campaign'))
+            non_campaign_msgs=Count('messages', filter=Q(messages__direction="inbound"))
         )
         
         # ── Optional query filters ────────────────────────────────────────────
@@ -1785,12 +1785,12 @@ class LeadsProspectsView(APIView):
             customers = Customer.objects.filter(
                 (Q(conversations__client__phone_number_id=phone_number_id) |
                 Q(conversations__phone_number_id=phone_number_id)),
-                ~Q(messages__reply_of='campaign')
+                messages__direction="inbound"
             ).distinct()
         else:
             # Fallback: filter by org's clients
             customers = Customer.objects.filter(
-                ~Q(messages__reply_of='campaign'),
+                messages__direction="inbound",
                 conversations__client__tech_provider=org
             ).distinct()
 

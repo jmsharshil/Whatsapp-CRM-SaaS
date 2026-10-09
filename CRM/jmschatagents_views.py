@@ -2217,7 +2217,7 @@ def dashboard_summary(request):
 
     if phone_number_id:
         customer_qs = Customer.objects.filter(
-            ~Q(messages__reply_of='campaign'), conversations__phone_number_id=phone_number_id,
+            messages__direction="inbound", conversations__phone_number_id=phone_number_id,
             
         ).distinct()
         conversation_qs = Conversation.objects.filter(phone_number_id=phone_number_id)
@@ -2233,13 +2233,13 @@ def dashboard_summary(request):
     
     # Active today: Conversations that had an inbound reply today
     active_today = conversation_qs.filter(
-        ~Q(messages__reply_of='campaign'), messages__timestamp__gte=today,
+        messages__direction="inbound", messages__timestamp__gte=today,
         
     ).distinct().count()
     
     # New today: Customers created today who have replied
     new_today = customer_qs.filter(
-        ~Q(messages__reply_of='campaign'), conversations__created_at__gte=today,
+        messages__direction="inbound", conversations__created_at__gte=today,
         
     ).distinct().count()
 
@@ -2316,7 +2316,8 @@ def customer_list(request):
     if phone_number_id:
         base_qs = base_qs.filter(
             Q(conversations__client__phone_number_id=phone_number_id) |
-            Q(conversations__phone_number_id=phone_number_id)
+            Q(conversations__phone_number_id=phone_number_id),
+            messages__direction="inbound"
         ).distinct()
     else:
         # If no phone_number_id is found for TechProvider, do not leak clients
@@ -2329,7 +2330,7 @@ def customer_list(request):
         created_at=Subquery(first_seen_subq),
         closing_count=Count(
             "messages",
-            filter=Q(~Q(messages__reply_of='campaign')) & (
+            filter=Q(messages__direction="inbound") & (
                 Q(messages__content__icontains="thank you") |
                 Q(messages__content__icontains="thanks") |
                 Q(messages__content__iexact="tq") |
