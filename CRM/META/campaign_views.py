@@ -45,7 +45,7 @@ from rest_framework import permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from CRM.models import Campaign, CampaignRecipient, Template, WABAAccount
+from CRM.models import Campaign, CampaignRecipient, Template, WABAAccount, Message
 from CRM.views import _get_org_and_waba   
 
 logger = logging.getLogger(__name__)
@@ -73,6 +73,10 @@ def _normalise_phone(raw: str, default_country_code: str = "91") -> str | None:
 
     if len(digits) < 7:
         return None
+
+    # Handle leading 0 (e.g. 09876543210 -> 11 digits)
+    if len(digits) == 11 and digits.startswith("0"):
+        digits = digits[1:]
 
     # If it looks like a local number (10 digits for India), prepend country code
     if len(digits) == 10:
@@ -134,7 +138,7 @@ def _build_template_components(template: Template, variables: dict) -> list:
     for v in unique_body_vars:
         val = variables.get(v, "")
         if not val:
-            val = " "
+            val = variables.get("otp", "") or variables.get("code", "") or " "
         body_params.append({"type": "text", "text": str(val)})
     
     if body_params:
@@ -142,6 +146,41 @@ def _build_template_components(template: Template, variables: dict) -> list:
             "type": "body",
             "parameters": body_params
         })
+
+    # BUTTONS (Meta Cloud API button parameters if dynamic)
+    if template.buttons:
+        for idx, btn in enumerate(template.buttons):
+            b_type = (btn.get("type") or "").upper()
+            # Dynamic URL button
+            if b_type in ("URL", "VISIT_WEBSITE"):
+                btn_var = variables.get(f"button_{idx}") or variables.get(f"btn_url_{idx}")
+                if btn_var:
+                    components.append({
+                        "type": "button",
+                        "sub_type": "url",
+                        "index": str(idx),
+                        "parameters": [{"type": "text", "text": str(btn_var)}]
+                    })
+            # Quick reply with payload
+            elif b_type == "QUICK_REPLY":
+                btn_payload = variables.get(f"button_payload_{idx}")
+                if btn_payload:
+                    components.append({
+                        "type": "button",
+                        "sub_type": "quick_reply",
+                        "index": str(idx),
+                        "parameters": [{"type": "payload", "payload": str(btn_payload)}]
+                    })
+            # Authentication OTP / Copy Code button
+            elif b_type == "OTP":
+                otp_code = variables.get("1") or variables.get("otp") or variables.get("code", "")
+                if otp_code:
+                    components.append({
+                        "type": "button",
+                        "sub_type": "url",
+                        "index": str(idx),
+                        "parameters": [{"type": "text", "text": str(otp_code)}]
+                    })
 
     return components
 
@@ -326,20 +365,30 @@ class CampaignListCreateView(APIView):
                 status=400,
             )
 
-        # ── 3. Normalise phone numbers ───────────────────────────────────────
+        # ── 3. Normalise phone numbers & recipient vars ──────────────────────
         normalised = []
+        recipient_vars_map = {}  # {normalised_phone: {"1": "Rahul", ...}}
         invalid    = []
         seen       = set()
 
-        for raw in phone_numbers:
-            n = _normalise_phone(str(raw))
+        for item in phone_numbers:
+            if isinstance(item, dict):
+                raw_phone = item.get("phone") or item.get("number") or item.get("phone_number")
+                rec_vars = item.get("vars") or item.get("variables") or {}
+            else:
+                raw_phone = str(item)
+                rec_vars = {}
+
+            n = _normalise_phone(str(raw_phone))
             if n is None:
-                invalid.append(str(raw))
+                invalid.append(str(raw_phone))
             elif n in seen:
                 pass  # silent dedup
             else:
                 seen.add(n)
                 normalised.append(n)
+                if rec_vars and isinstance(rec_vars, dict):
+                    recipient_vars_map[n] = rec_vars
 
         if not normalised:
             return Response(
@@ -377,10 +426,58 @@ class CampaignListCreateView(APIView):
         ]
         CampaignRecipient.objects.bulk_create(recipient_objs)
 
-        # ── 6. Build Meta components (same for all recipients) ───────────────
-        components = _build_template_components(template, variables)
+        # ── 6. Push to Azure Storage Queue (COMMENTED OUT TEMPORARILY) ───────
+        """
+        try:
+            from azure.storage.queue import QueueClient
+            import json
+            import os
+            import base64
+            
+            # Configure these in your .env file
+            conn_str = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
+            queue_name = os.environ.get("AZURE_QUEUE_NAME", "whatsapp-campaigns")
+            
+            if not conn_str:
+                raise ValueError("AZURE_STORAGE_CONNECTION_STRING is not set in the environment.")
+                
+            queue_client = QueueClient.from_connection_string(conn_str, queue_name)
+            
+            message_payload = {
+                "campaign_id": campaign.id,
+                "organization_id": org.id,
+                "waba_phone_number_id": waba.phone_number_id,
+                "token": token,
+                "template_name": template.name,
+                "language_code": template.language,
+            }
+            
+            # Azure queue expects base64 encoded strings by default
+            encoded_message = base64.b64encode(json.dumps(message_payload).encode('utf-8')).decode('utf-8')
+            queue_client.send_message(encoded_message)
+            
+        except Exception as e:
+            logger.error(f"Failed to queue campaign {campaign.id} to Azure: {e}")
+            campaign.status = "failed"
+            campaign.error_log = f"Queue Error: {str(e)}"
+            campaign.save()
+            return Response({"error": "Failed to queue campaign for processing.", "detail": str(e)}, status=500)
 
-        # ── 7. Send to Meta concurrently ─────────────────────────────────────
+        return Response({
+            "id":            campaign.id,
+            "name":          campaign.name,
+            "template_name": campaign.template_name,
+            "status":        campaign.status,
+            "total_count":   campaign.total_count,
+            "message":       "Campaign successfully queued for background processing via Azure Worker.",
+            "created_at":    campaign.created_at.isoformat(),
+        }, status=202)
+        """
+
+        # ── 6. Default components (fallback if no per-recipient vars) ─────────
+        default_components = _build_template_components(template, variables)
+
+        # ── 7. Send to Meta concurrently (Threading) ─────────────────────────
         sent_count   = 0
         failed_count = 0
         error_samples = []
@@ -393,13 +490,21 @@ class CampaignListCreateView(APIView):
         def process_recipient(recipient):
             close_old_connections()
             try:
+                # If recipient has specific variables from CSV (e.g. name, order_id), merge them
+                rec_vars = recipient_vars_map.get(recipient.phone_number)
+                if rec_vars:
+                    merged_vars = {**variables, **rec_vars}
+                    recipient_components = _build_template_components(template, merged_vars)
+                else:
+                    recipient_components = default_components
+
                 success, msg_id, error_detail = _send_meta_template_message(
                     phone_number_id=waba.phone_number_id,
                     access_token=token,
                     to_number=recipient.phone_number,
                     template_name=template.name,
                     language_code=template.language,
-                    components=components,
+                    components=recipient_components,
                 )
 
                 if success:
@@ -449,7 +554,6 @@ class CampaignListCreateView(APIView):
                 return success, error_detail, recipient.phone_number
             except Exception as e:
                 logger.error("Exception in campaign worker for %s: %s", recipient.phone_number, str(e))
-                # Attempt to save the failed status if possible, but if DB connection is broken, this might fail too.
                 try:
                     recipient.status = "failed"
                     recipient.error_detail = f"System Error: {str(e)}"
@@ -509,17 +613,46 @@ class CampaignDetailView(APIView):
         except Campaign.DoesNotExist:
             return Response({"error": "Campaign not found."}, status=404)
 
-        recipients = campaign.recipients.all().order_by("id")
-        recipient_data = [
-            {
+        recipients = list(campaign.recipients.all().order_by("id"))
+        
+        # Batch lookup any updated delivery statuses from Message table by meta_message_id
+        meta_ids = [r.meta_message_id for r in recipients if r.meta_message_id]
+        msg_status_map = {}
+        if meta_ids:
+            try:
+                messages = Message.objects.filter(meta_message_id__in=meta_ids).values('meta_message_id', 'status', 'error_message')
+                msg_status_map = {m['meta_message_id']: m for m in messages}
+            except Exception as e:
+                logger.warning(f"Could not query Message table for campaign recipient status sync: {e}")
+
+        recipient_data = []
+        for r in recipients:
+            current_status = r.status
+            current_error = r.error_detail
+
+            # If Message table has status from Meta webhook and CampaignRecipient differs
+            if r.meta_message_id in msg_status_map:
+                m_info = msg_status_map[r.meta_message_id]
+                m_stat = m_info.get('status')
+                if m_stat and m_stat != r.status:
+                    current_status = m_stat
+                    if m_info.get('error_message'):
+                        current_error = m_info.get('error_message')
+                    try:
+                        CampaignRecipient.objects.filter(id=r.id).update(
+                            status=current_status,
+                            error_detail=current_error
+                        )
+                    except Exception as e:
+                        logger.warning(f"Could not persist recipient status: {e}")
+
+            recipient_data.append({
                 "phone_number":    r.phone_number,
-                "status":          r.status,
+                "status":          current_status,
                 "meta_message_id": r.meta_message_id,
-                "error_detail":    r.error_detail,
+                "error_detail":    current_error,
                 "sent_at":         r.sent_at.isoformat() if r.sent_at else None,
-            }
-            for r in recipients
-        ]
+            })
 
         return Response({
             "id":            campaign.id,

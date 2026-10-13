@@ -898,18 +898,52 @@ def _get_org_and_waba(user):
 def _build_meta_components(data):
     """
     Convert flat CRM fields into the nested `components` list Meta expects.
+    Supports TEXT, IMAGE, VIDEO, DOCUMENT headers, variables with examples,
+    and QUICK_REPLY, URL, PHONE_NUMBER buttons.
     """
     components = []
+    category = data.get("category", "").upper()
 
-    # HEADER
+    # Meta strictly enforces a fixed structure for AUTHENTICATION templates:
+    # Meta generates the body automatically and requires add_security_recommendation and an OTP button.
+    # Passing custom 'text' in BODY will cause '(#100) Invalid parameter' error from Meta.
+    if category == "AUTHENTICATION":
+        components.append({
+            "type": "BODY",
+            "add_security_recommendation": True,
+        })
+        components.append({
+            "type": "FOOTER",
+            "code_expiration_minutes": 10,
+        })
+        components.append({
+            "type": "BUTTONS",
+            "buttons": [
+                {
+                    "type": "OTP",
+                    "otp_type": "COPY_CODE",
+                    "text": "Copy Code",
+                }
+            ],
+        })
+        return components
+
+    # HEADER (Only for non-authentication)
     header_type = data.get("header_type", "").upper()
     header_text = data.get("header_text", "")
     if header_type == "TEXT" and header_text:
-        components.append({
+        header_comp = {
             "type": "HEADER",
             "format": "TEXT",
             "text": header_text,
-        })
+        }
+        import re
+        header_vars = re.findall(r"\{\{\d+\}\}", header_text)
+        if header_vars:
+            header_comp["example"] = {
+                "header_text": ["sample"] * len(header_vars)
+            }
+        components.append(header_comp)
     elif header_type in ("IMAGE", "VIDEO", "DOCUMENT"):
         components.append({
             "type": "HEADER",
@@ -920,7 +954,6 @@ def _build_meta_components(data):
     body_text = data.get("body_text", "")
     if body_text:
         body_component = {"type": "BODY", "text": body_text}
-        # extract {{n}} variables
         import re
         vars_found = re.findall(r"\{\{\d+\}\}", body_text)
         if vars_found:
@@ -929,15 +962,59 @@ def _build_meta_components(data):
             }
         components.append(body_component)
 
-    # FOOTER
+    # FOOTER (Only for non-authentication)
     footer_text = data.get("footer_text", "")
     if footer_text:
         components.append({"type": "FOOTER", "text": footer_text})
 
-    # BUTTONS
-    buttons = data.get("buttons", [])
-    if buttons:
-        components.append({"type": "BUTTONS", "buttons": buttons})
+    # BUTTONS (Only for non-authentication)
+    raw_buttons = data.get("buttons", [])
+    if raw_buttons:
+        meta_buttons = []
+        for btn in raw_buttons:
+            b_type = (btn.get("type") or "QUICK_REPLY").upper()
+            text = (btn.get("text") or "").strip()
+            if not text:
+                continue
+
+            if b_type == "QUICK_REPLY":
+                meta_buttons.append({
+                    "type": "QUICK_REPLY",
+                    "text": text,
+                })
+            elif b_type in ("URL", "VISIT_WEBSITE"):
+                url = (btn.get("url") or "").strip()
+                if url and not url.startswith(("http://", "https://")):
+                    url = f"https://{url}"
+                b_obj = {
+                    "type": "URL",
+                    "text": text,
+                    "url": url,
+                }
+                # Check dynamic URL example
+                import re
+                if re.search(r"\{\{\d+\}\}", url):
+                    b_obj["example"] = ["https://example.com/item"]
+                meta_buttons.append(b_obj)
+            elif b_type in ("PHONE_NUMBER", "CALL_PHONE_NUMBER"):
+                phone = (btn.get("phone_number") or "").strip()
+                import re
+                digits = re.sub(r"[^\d+]", "", phone)
+                if not digits.startswith("+"):
+                    if len(digits) == 10:
+                        digits = f"+91{digits}"
+                    elif len(digits) == 12 and digits.startswith("91"):
+                        digits = f"+{digits}"
+                    else:
+                        digits = f"+{digits}"
+                meta_buttons.append({
+                    "type": "PHONE_NUMBER",
+                    "text": text,
+                    "phone_number": digits,
+                })
+
+        if meta_buttons:
+            components.append({"type": "BUTTONS", "buttons": meta_buttons})
 
     return components
 
@@ -1131,13 +1208,18 @@ class TemplateListCreateView(APIView):
             }, status=201)
         else:
             # Meta rejected the submission
-            error_msg = meta_data.get("error", {}).get("message", "Meta API error")
+            err_dict = meta_data.get("error", {})
+            error_msg = err_dict.get("error_user_msg") or err_dict.get("message", "Meta API error")
+            err_data_detail = err_dict.get("error_data", {}).get("details")
+            if err_data_detail:
+                error_msg = f"{error_msg}: {err_data_detail}"
+            print(f"❌ [META TEMPLATE ERROR] {meta_data}")
             template.status = "REJECTED"
             template.save()
             return Response({
                 "id":          template.id,
                 "error":       error_msg,
-                "meta_error":  meta_data.get("error", {}),
+                "meta_error":  err_dict,
                 "status":      "REJECTED",
             }, status=400)
 

@@ -354,8 +354,17 @@ def handle_client_message(
         return
 
     # Normalize phone
-    if not phone.startswith("+"):
-        phone = f"+{phone}"
+    digits = re.sub(r"[^\d]", "", str(phone).strip())
+    if len(digits) == 10:
+        phone = f"+91{digits}"
+    elif len(digits) == 11 and digits.startswith("0"):
+        phone = f"+91{digits[1:]}"
+    elif len(digits) == 12 and digits.startswith("91"):
+        phone = f"+{digits}"
+    elif not str(phone).strip().startswith("+"):
+        phone = f"+{digits}"
+    else:
+        phone = f"+{digits}"
 
     # Extract text
     text = _extract_text(msg_payload)

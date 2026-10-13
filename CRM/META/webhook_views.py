@@ -26,6 +26,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import requests
 from django.conf import settings
 from django.core.cache import cache
@@ -37,7 +38,7 @@ from django.utils.decorators import method_decorator
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 
-from CRM.models import ClientAccount, Customer, Conversation, Message
+from CRM.models import ClientAccount, Customer, Conversation, Message, CampaignRecipient
 
 # ── Client bot flow (multi-tenant) ────────────────────────────────────────────
 from CRM.META.client_views import handle_client_message
@@ -126,6 +127,31 @@ def _verify_meta_signature(request) -> bool:
         hashlib.sha256,
     ).hexdigest()
     return hmac.compare_digest(expected, sig_header[7:])
+
+
+def _normalize_e164_phone(raw: str, default_country: str = "91") -> str:
+    """
+    Ensure phone is in proper +<country_code><digits> format.
+    - If 10 digits (e.g. 9876543210), prepends +91.
+    - If 11 digits with 0 (e.g. 09876543210), strips 0 and prepends +91.
+    - If 12 digits starting with 91 (e.g. 919876543210), prepends +.
+    - If already starts with +, retains valid +<digits>.
+    """
+    if not raw:
+        return ""
+    stripped = str(raw).strip()
+    digits = re.sub(r"[^\d]", "", stripped)
+    if not digits:
+        return ""
+    if len(digits) == 10:
+        return f"+{default_country}{digits}"
+    if len(digits) == 11 and digits.startswith("0"):
+        return f"+{default_country}{digits[1:]}"
+    if len(digits) == 12 and digits.startswith(default_country):
+        return f"+{digits}"
+    if not stripped.startswith("+"):
+        return f"+{digits}"
+    return f"+{digits}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -560,8 +586,8 @@ class WhatsAppWebhookView(APIView):
 
                 if not raw_phone or not content:
                     return HttpResponse("Missing phone or content", status=400)
-                if not raw_phone.startswith("+"):
-                    raw_phone = f"+{raw_phone}"
+
+                raw_phone = _normalize_e164_phone(raw_phone)
 
                 client_acc = ClientAccount.objects.filter(phone_number_id=phone_number_id).first()
                 db_msg = save_message(
@@ -610,6 +636,10 @@ class WhatsAppWebhookView(APIView):
                 # ── Process messages ──────────────────────────────────────
                 for msg in value.get("messages", []):
                     try:
+                        # Normalize sender phone across ALL bots (auto-handles 91, leading 0, 10 digits)
+                        if "from" in msg and msg["from"]:
+                            msg["from"] = _normalize_e164_phone(msg["from"])
+
                         gigatel_phone_id = os.environ.get("META_PHONE_NUMBER_ID", "").strip()
                         globestar_phone_id = GLOBESTAR_PHONE_NUMBER_ID
                         gkd_phone_id = GKD_PHONE_NUMBER_ID
@@ -711,9 +741,7 @@ class WhatsAppWebhookView(APIView):
                                 logger.error(f"[Webhook] Failed to start forwarding thread for insights institute: {e}")
                             
 
-                            raw_phone = msg.get("from", "").strip()
-                            if not raw_phone.startswith("+"):
-                                raw_phone = f"+{raw_phone}"
+                            raw_phone = _normalize_e164_phone(msg.get("from", ""))
                                 
                             msg_type = msg.get("type", "text")
                             text = _extract_text_for_routing(msg) or ""
@@ -803,16 +831,54 @@ def _handle_status_update(status_payload: dict):
     wa_msg_id = status_payload.get("id", "")
     new_status = status_payload.get("status", "")
     error_data = status_payload.get("errors", [])
+    recipient_id = status_payload.get("recipient_id", "")
+    
+    # print(f"\n==================== [WEBHOOK STATUS RECEIVED] ====================")
+    # print(f"🔹 wamid: {wa_msg_id}")
+    # print(f"🔹 Status: {new_status}")
+    # print(f"🔹 Recipient: {recipient_id}")
+
     if not wa_msg_id or not new_status:
+        # print("⚠️ [WEBHOOK STATUS] Missing wa_msg_id or status")
         return
 
-    # Try meta_message_id first (client bot), then whatsapp_message_id fallback
+    # Format error message if present
+    err_text = ""
+    if error_data:
+        err_parts = []
+        for e in error_data:
+            if isinstance(e, dict):
+                title = e.get("title") or e.get("message") or ""
+                code = e.get("code")
+                detail = e.get("error_data", {}).get("details") if isinstance(e.get("error_data"), dict) else ""
+                part = f"{title} (code: {code})" if code else title
+                if detail:
+                    part += f": {detail}"
+                err_parts.append(part.strip())
+            else:
+                err_parts.append(str(e))
+        err_text = "; ".join(err_parts) if err_parts else json.dumps(error_data)
+        # print(f"⚠️ [WEBHOOK ERROR] {err_text}")
+
+    # 1. Update Message model
     updated = Message.objects.filter(meta_message_id=wa_msg_id).update(
         status=new_status,
-        error_message=json.dumps(error_data) if error_data else "",
+        error_message=err_text if err_text else (json.dumps(error_data) if error_data else ""),
     )
     if updated:
-        logger.info("[Webhook] Status wamid=%s -> %s", wa_msg_id, new_status)
+        logger.info("[Webhook] Message status wamid=%s -> %s", wa_msg_id, new_status)
     else:
-        logger.debug("[Webhook] Unknown wamid=%s status=%s", wa_msg_id, new_status)
+        logger.debug("[Webhook] Unknown Message wamid=%s status=%s", wa_msg_id, new_status)
+
+    # 2. Update CampaignRecipient model for broadcast campaigns
+    rec_update_fields = {"status": new_status}
+    if err_text:
+        rec_update_fields["error_detail"] = err_text
+
+    rec_updated = CampaignRecipient.objects.filter(meta_message_id=wa_msg_id).update(**rec_update_fields)
+    if rec_updated:
+        logger.info("[Webhook] CampaignRecipient status wamid=%s -> %s", wa_msg_id, new_status)
+
+    # print(f"✅ DB Updated -> Message: {bool(updated)}, CampaignRecipient: {bool(rec_updated)}")
+    # print(f"===================================================================\n")
 
