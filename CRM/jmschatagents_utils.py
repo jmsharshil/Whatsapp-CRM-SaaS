@@ -263,7 +263,24 @@ def send_list(
 ):
     body_text   = body_text or body
     button_text = button_text or button_label
-    sections    = sections or []
+    clean_sections = []
+    for sec in sections:
+        clean_sec = dict(sec)
+        if "title" in clean_sec:
+            clean_sec["title"] = str(clean_sec["title"])[:24]
+        if "rows" in clean_sec:
+            clean_rows = []
+            for row in clean_sec["rows"]:
+                r = dict(row)
+                if "title" in r:
+                    r["title"] = str(r["title"])[:24]
+                if "description" in r and r["description"]:
+                    r["description"] = str(r["description"])[:72]
+                if "id" in r:
+                    r["id"] = str(r["id"])[:200]
+                clean_rows.append(r)
+            clean_sec["rows"] = clean_rows
+        clean_sections.append(clean_sec)
 
     payload = {
         "messaging_product": "whatsapp",
@@ -275,7 +292,7 @@ def send_list(
             "body": {"text": body_text},
             "action": {
                 "button": str(button_text)[:20],   # Meta caps this at 20 chars
-                "sections": sections,
+                "sections": clean_sections,
             },
         },
     }

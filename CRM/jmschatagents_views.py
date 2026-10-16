@@ -214,7 +214,7 @@ SHOPIFY_SESSION_TTL = 60 * 15
 HOTEL_SESSION_TTL = 60 * 30
 SHOPIFY_BOT_TRIGGER = "shopify"
 HOTEL_BOT_TRIGGER = "service"
-HOTEL_NOTIFY_NUMBER = "917874566064"
+HOTEL_NOTIFY_NUMBER = "919898271321"
 HOTEL_ADMIN_TEMPLATE = "hotel_service_request"
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -3820,7 +3820,7 @@ def _handle_hotel_bot(phone: str, text: str, phone_number_id: str = None, inboun
 
             sections = [
                 {
-                    "title": "Hotel Dining Destinations",
+                    "title": "Featured Dining",
                     "rows": [
                         {"id": "rest_royal_dine", "title": "The Royal Spice", "description": "Authentic North & South Indian Fine Dining"},
                         {"id": "rest_sky_lounge", "title": "Skyview Rooftop", "description": "Continental, Italian & Mocktails with a View"},
@@ -3963,7 +3963,23 @@ def _handle_hotel_bot(phone: str, text: str, phone_number_id: str = None, inboun
 
     # ── Stage 5A (Restaurant): Restaurant Selected -> Ask Meal Type ───────────
     if stage == "restaurant_selection":
-        rest_name = interactive_title or text_clean
+        rest_map = {
+            "rest_royal_dine": "The Royal Spice",
+            "rest_sky_lounge": "Skyview Rooftop",
+            "rest_bistro_cafe": "Garden Bistro Café",
+        }
+        chosen_id = interactive_id or text_clean.lower()
+        rest_name = rest_map.get(chosen_id) or interactive_title
+        if not rest_name:
+            if "royal" in text_lower or "spice" in text_lower or text_clean == "1":
+                rest_name = "The Royal Spice"
+            elif "sky" in text_lower or "rooftop" in text_lower or text_clean == "2":
+                rest_name = "Skyview Rooftop"
+            elif "bistro" in text_lower or "café" in text_lower or "cafe" in text_lower or text_clean == "3":
+                rest_name = "Garden Bistro Café"
+            else:
+                rest_name = text_clean
+
         session["restaurant_name"] = rest_name
         session["stage"] = "rest_meal_type"
         hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)
@@ -3986,7 +4002,18 @@ def _handle_hotel_bot(phone: str, text: str, phone_number_id: str = None, inboun
             "rest_meal_lunch": "Lunch",
             "rest_meal_dinner": "Dinner",
         }
-        chosen_meal = meal_map.get(interactive_id) or interactive_title or text_clean.capitalize()
+        chosen_id = interactive_id or text_lower
+        chosen_meal = meal_map.get(chosen_id) or interactive_title
+        if not chosen_meal:
+            if "break" in text_lower or text_clean == "1":
+                chosen_meal = "Breakfast"
+            elif "lunch" in text_lower or text_clean == "2":
+                chosen_meal = "Lunch"
+            elif "din" in text_lower or text_clean == "3":
+                chosen_meal = "Dinner"
+            else:
+                chosen_meal = text_clean.capitalize()
+
         session["meal_type"] = chosen_meal
         session["stage"] = "rest_pax"
         hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)
@@ -4007,7 +4034,13 @@ def _handle_hotel_bot(phone: str, text: str, phone_number_id: str = None, inboun
 
     # ── Stage 5C (Restaurant): Pax Selected -> Ask Timing ─────────────────────
     if stage == "rest_pax":
-        pax = interactive_title or text_clean
+        pax_map = {
+            "pax_2": "1 - 2 Guests",
+            "pax_4": "3 - 4 Guests",
+            "pax_more": "5+ Guests",
+        }
+        chosen_id = interactive_id or text_clean.lower()
+        pax = pax_map.get(chosen_id) or interactive_title or text_clean
         session["pax"] = pax
         session["stage"] = "rest_timing"
         hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)

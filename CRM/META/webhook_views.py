@@ -106,6 +106,8 @@ from CRM.kia_views import handle_kia_message
 from CRM.kia_utils import kia_PHONE_NUMBER_ID
 from CRM.veda_hyundai_views import handle_veda_hyundai_message
 from CRM.veda_hyundai_utils import veda_hyundai_PHONE_NUMBER_ID
+from CRM.mahindra_views import handle_mahindra_message
+from CRM.mahindra_utils import mahindra_PHONE_NUMBER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -671,6 +673,7 @@ class WhatsAppWebhookView(APIView):
                         ai4trades_phone_id = AI4TRADES_PHONE_NUMBER_ID
                         kia_phone_id = kia_PHONE_NUMBER_ID
                         veda_hyundai_phone_id = veda_hyundai_PHONE_NUMBER_ID
+                        mahindra_phone_id = mahindra_PHONE_NUMBER_ID
                         
                         if gigatel_phone_id and phone_number_id == gigatel_phone_id:
                             logger.info("[Webhook] Routing message to Gigatel Bot")
@@ -736,8 +739,12 @@ class WhatsAppWebhookView(APIView):
                         elif veda_hyundai_phone_id and phone_number_id == veda_hyundai_phone_id:
                             logger.info("[Webhook] Routing message to Veda Hyundai Bot")
                             handle_veda_hyundai_message(msg)
+                        elif mahindra_phone_id and phone_number_id == mahindra_phone_id:
+                            logger.info("[Webhook] Routing message to Mahindra Bot")
+                            handle_mahindra_message(msg)
                         elif phone_number_id == "1168578376348442":
                             logger.info(f"[Webhook] Saving message for disabled bot number {phone_number_id}")
+
                             
                             # ── Forward webhook to Insights Institute URL ─────────────────
                             try:
