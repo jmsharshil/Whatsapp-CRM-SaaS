@@ -205,12 +205,17 @@ jms_sessions = SafeCache(prefix="jms_sess:",  default_ttl=60 * 60)   # JMS-Tech 
 wa_sessions  = SafeCache(prefix="wa_sess:",   default_ttl=60 * 15)   # WhatsApp-API bot
 ind_sessions = SafeCache(prefix="ind_sess:",  default_ttl=60 * 60)   # Industry bot
 shopify_sessions = SafeCache(prefix="shopify_sess:", default_ttl=60 * 15) # Shopify bot
+hotel_sessions = SafeCache(prefix="hotel_sess:", default_ttl=60 * 30)     # Hotel service bot
 
 JMS_SESSION_TTL = 60 * 60
 WA_SESSION_TTL  = 60 * 15
 IND_SESSION_TTL = 60 * 60
 SHOPIFY_SESSION_TTL = 60 * 15
+HOTEL_SESSION_TTL = 60 * 30
 SHOPIFY_BOT_TRIGGER = "shopify"
+HOTEL_BOT_TRIGGER = "service"
+HOTEL_NOTIFY_NUMBER = "917874566064"
+HOTEL_ADMIN_TEMPLATE = "hotel_service_request"
 
 # ═════════════════════════════════════════════════════════════════════════════
 # SHARED DB HELPERS
@@ -3549,4 +3554,532 @@ def _send_shopify_shoes(phone: str, inbound_msg_id: int, brand: str):
     )
     if inbound_msg_id:
         _save_reply(inbound_msg_id, f"Sent {brand} shoes list")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────────────────
+#  BOT 6 — HOTEL SERVICE BOT (trigger: "service")
+# ─────────────────────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _send_hotel_admin_notification(customer_phone: str, customer_name: str, service_type: str, details_summary: str, description: str):
+    """
+    Send customer service request details to admin number (917874566064).
+    Tries WhatsApp template first; also sends structured text.
+    Wrapped in try-except so admin notification failures NEVER fail or disrupt customer flow.
+    """
+    try:
+        clean_phone = (customer_phone or "").lstrip("+")
+        c_name = customer_name or "Guest"
+        stype = service_type or "General Service"
+        sdetails = details_summary or "None"
+        sdesc = description or "None"
+
+        # 1. Try sending Meta Template if configured in Meta
+        components = [
+            {
+                "type": "body",
+                "parameters": [
+                    {"type": "text", "text": clean_phone},
+                    {"type": "text", "text": c_name},
+                    {"type": "text", "text": stype},
+                    {"type": "text", "text": sdetails},
+                    {"type": "text", "text": sdesc},
+                ]
+            }
+        ]
+        try:
+            send_template(
+                to=HOTEL_NOTIFY_NUMBER,
+                template_name=HOTEL_ADMIN_TEMPLATE,
+                language_code="en",
+                components=components
+            )
+        except Exception as e:
+            logger.warning("Failed to send hotel admin template: %s", e)
+
+        # 2. Also send as formatted text to guarantee real-time delivery
+        admin_text = (
+            "🛎️ *New Hotel Service Request Received!*\n\n"
+            f"📱 *Customer Phone:* +{clean_phone}\n"
+            f"👤 *Customer Name:* {c_name}\n"
+            f"🛎️ *Service Type:* {stype}\n"
+            f"📋 *Details:* {sdetails}\n"
+            f"📝 *Description / Preference:* {sdesc}\n\n"
+            "⚡ Please assign a staff member promptly."
+        )
+        send_text(HOTEL_NOTIFY_NUMBER, admin_text)
+    except Exception as e:
+        logger.exception("Error in _send_hotel_admin_notification: %s", e)
+
+
+
+def _handle_hotel_bot(phone: str, text: str, phone_number_id: str = None, inbound_msg_id: int = None, raw_msg: dict = None, client_name: str = ""):
+    """
+    Enhanced state machine for Hotel Guest Service Bot.
+    Triggers on 'service' or continues through interactive buttons / lists / text.
+    Supports reset words ('service', 'menu', 'reset') at any time.
+    """
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+    session = hotel_sessions.get(phone)
+
+    # Extract interactive ID if sent via button or list reply
+    interactive_id = ""
+    interactive_title = ""
+    if raw_msg and raw_msg.get("type") == "interactive":
+        interactive = raw_msg.get("interactive", {})
+        itype = interactive.get("type", "")
+        if itype == "list_reply":
+            interactive_id = interactive.get("list_reply", {}).get("id", "")
+            interactive_title = interactive.get("list_reply", {}).get("title", "")
+        elif itype == "button_reply":
+            interactive_id = interactive.get("button_reply", {}).get("id", "")
+            interactive_title = interactive.get("button_reply", {}).get("title", "")
+
+    # Quick exit / cancel check
+    if text_lower in ["cancel", "exit", "quit"]:
+        hotel_sessions.delete(phone)
+        cancel_msg = "Your request has been cancelled. Send *service* whenever you need anything! 😊"
+        send_text(phone, cancel_msg)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, cancel_msg)
+        return
+
+    # Trigger or reset
+    if text_lower in [HOTEL_BOT_TRIGGER, "menu", "start"] or not session:
+        guest_name = client_name or "Guest"
+        session = {
+            "stage": "welcome",
+            "phone": phone,
+            "client_name": guest_name,
+            "service_type": None,
+            "room_service_type": None,
+            "food_venue": None,
+            "meal_type": None,
+            "dish_option": None,
+            "restaurant_name": None,
+            "pax": None,
+            "timing": None,
+            "description": None,
+        }
+        hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)
+
+        welcome_text = (
+            f"🏨 *Welcome to Our Hotel Guest Services, {guest_name}!* ✨\n\n"
+            "We are delighted to assist you during your stay. "
+            "Please choose a service option below:"
+        )
+        buttons = [
+            {"id": "svc_room_service", "title": "Room Service"},
+            {"id": "svc_food", "title": "Food & Dining"},
+        ]
+        send_buttons(phone, welcome_text, buttons)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, welcome_text)
+        return
+
+    stage = session.get("stage")
+
+    # ── Stage 1: Welcome Options ──────────────────────────────────────────────
+    if stage == "welcome":
+        selected = interactive_id or text_lower
+        if selected in ["svc_room_service", "room service"] or "room service" in text_lower:
+            session["service_type"] = "Room Service"
+            session["stage"] = "room_service_menu"
+            hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)
+
+            sections = [
+                {
+                    "title": "Housekeeping & Room Care",
+                    "rows": [
+                        {"id": "rs_cleaning", "title": "Room Cleaning", "description": "Linen change, vacuuming & dusting"},
+                        {"id": "rs_laundry", "title": "Laundry & Ironing", "description": "Express washing & pressing"},
+                        {"id": "rs_amenities", "title": "Extra Amenities", "description": "Fresh towels, toiletries, slippers & water"},
+                        {"id": "rs_maintenance", "title": "Repairs & Tech", "description": "AC, plumbing, electrical or TV assist"},
+                    ]
+                }
+            ]
+            body_msg = (
+                "🛎️ *Room Service & Housekeeping*\n\n"
+                "Please choose the service you require from the list below:"
+            )
+            send_interactive_list(
+                to=phone,
+                body_text=body_msg,
+                button_text="View Services",
+                sections=sections
+            )
+            if inbound_msg_id:
+                _save_reply(inbound_msg_id, body_msg)
+            return
+
+        elif selected in ["svc_food", "food", "food & dining"] or "food" in text_lower or "dining" in text_lower:
+            session["service_type"] = "Food & Dining"
+            session["stage"] = "food_location"
+            hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)
+
+            body_msg = (
+                "🍽️ *Food & Dining Services*\n\n"
+                "Where would you prefer to enjoy your culinary experience?"
+            )
+            buttons = [
+                {"id": "food_in_room", "title": "In Room"},
+                {"id": "food_in_restaurant", "title": "In Restaurant"},
+            ]
+            send_buttons(phone, body_msg, buttons)
+            if inbound_msg_id:
+                _save_reply(inbound_msg_id, body_msg)
+            return
+
+        else:
+            buttons = [
+                {"id": "svc_room_service", "title": "Room Service"},
+                {"id": "svc_food", "title": "Food & Dining"},
+            ]
+            send_buttons(phone, "Please select an option using the buttons below:", buttons)
+            return
+
+    # ── Stage 2A: Room Service Selection ──────────────────────────────────────
+    if stage == "room_service_menu":
+        choice_map = {
+            "rs_cleaning": "Room Cleaning",
+            "rs_laundry": "Laundry & Ironing",
+            "rs_amenities": "Extra Amenities",
+            "rs_maintenance": "Repairs & Maintenance",
+        }
+        chosen = choice_map.get(interactive_id) or interactive_title or text_clean
+        session["room_service_type"] = chosen
+        session["stage"] = "room_service_desc"
+        hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)
+
+        prompt_msg = (
+            f"You selected *{chosen}*.\n\n"
+            "📝 Please reply with your *Room Number* and any specific instructions "
+            "(e.g., *Room 304, clean before 2 PM, extra mineral water*):"
+        )
+        send_text(phone, prompt_msg)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, prompt_msg)
+        return
+
+    # ── Stage 2B: Room Service Description & Finalize ─────────────────────────
+    if stage == "room_service_desc":
+        description = text_clean
+        session["description"] = description
+        
+        stype = "Room Service"
+        details = f"Service: {session.get('room_service_type', 'General')}"
+        
+        # Notify Admin
+        _send_hotel_admin_notification(
+            customer_phone=phone,
+            customer_name=session.get("client_name") or client_name,
+            service_type=stype,
+            details_summary=details,
+            description=description
+        )
+
+        thank_you_msg = (
+            "✅ *Thank You! Your Request Has Been Logged.* 🌟\n\n"
+            f"📋 *Service Requested:* {session.get('room_service_type')}\n"
+            f"📝 *Details:* {description}\n\n"
+            "Our guest care attendant has been dispatched to your room. "
+            "Send *service* anytime if you need further assistance!"
+        )
+        send_text(phone, thank_you_msg)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, thank_you_msg)
+
+        hotel_sessions.delete(phone)
+        return
+
+    # ── Stage 3: Food Venue (In Room vs In Restaurant) ─────────────────────────
+    if stage == "food_location":
+        selected = interactive_id or text_lower
+        if selected in ["food_in_room", "in room"] or "room" in text_lower:
+            session["food_venue"] = "In Room"
+            session["stage"] = "room_meal_type"
+            hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)
+
+            body_msg = "🍳 What meal would you like delivered to your room?"
+            buttons = [
+                {"id": "meal_breakfast", "title": "Breakfast"},
+                {"id": "meal_lunch", "title": "Lunch"},
+                {"id": "meal_dinner", "title": "Dinner"},
+            ]
+            send_buttons(phone, body_msg, buttons)
+            if inbound_msg_id:
+                _save_reply(inbound_msg_id, body_msg)
+            return
+
+        elif selected in ["food_in_restaurant", "in restaurant"] or "restaurant" in text_lower:
+            session["food_venue"] = "In Restaurant"
+            session["stage"] = "restaurant_selection"
+            hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)
+
+            sections = [
+                {
+                    "title": "Hotel Dining Destinations",
+                    "rows": [
+                        {"id": "rest_royal_dine", "title": "The Royal Spice", "description": "Authentic North & South Indian Fine Dining"},
+                        {"id": "rest_sky_lounge", "title": "Skyview Rooftop", "description": "Continental, Italian & Mocktails with a View"},
+                        {"id": "rest_bistro_cafe", "title": "Garden Bistro Café", "description": "Fresh Brews, Bakery, Asian Bowls & Snacks"},
+                    ]
+                }
+            ]
+            body_msg = (
+                "🍽️ *Choose Your Dining Venue*\n\n"
+                "Please select from our featured hotel restaurants:"
+            )
+            send_interactive_list(
+                to=phone,
+                body_text=body_msg,
+                button_text="Select Restaurant",
+                sections=sections
+            )
+            if inbound_msg_id:
+                _save_reply(inbound_msg_id, body_msg)
+            return
+
+        else:
+            buttons = [
+                {"id": "food_in_room", "title": "In Room"},
+                {"id": "food_in_restaurant", "title": "In Restaurant"},
+            ]
+            send_buttons(phone, "Please select where you would like your food:", buttons)
+            return
+
+    # ── Stage 4A (Room Food): Meal Type (Breakfast, Lunch, Dinner) ────────────
+    if stage == "room_meal_type":
+        meal_map = {
+            "meal_breakfast": "Breakfast",
+            "meal_lunch": "Lunch",
+            "meal_dinner": "Dinner",
+        }
+        chosen_meal = meal_map.get(interactive_id) or interactive_title or text_clean.capitalize()
+        session["meal_type"] = chosen_meal
+        session["stage"] = "room_dish_options"
+        hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)
+
+        if "Breakfast" in chosen_meal:
+            sections = [
+                {
+                    "title": "Breakfast Chef Specials",
+                    "rows": [
+                        {"id": "dish_continental", "title": "Continental Platter", "description": "Fluffy eggs, buttered toast, croissant & fresh juice"},
+                        {"id": "dish_indian_bf", "title": "Indian Classic Thali", "description": "Masala Dosa / Idli or Poha with hot filter coffee"},
+                        {"id": "dish_healthy_bf", "title": "Healthy Wellness Bowl", "description": "Oatmeal porridge, seasonal fruits, honey & roasted nuts"},
+                    ]
+                }
+            ]
+        elif "Lunch" in chosen_meal:
+            sections = [
+                {
+                    "title": "Lunch Delicacies",
+                    "rows": [
+                        {"id": "dish_deluxe_thali", "title": "Deluxe Indian Thali", "description": "Shahi Paneer, Dal Makhani, Rotis, Rice & Gulab Jamun"},
+                        {"id": "dish_pasta_pizza", "title": "Italian Delight Combo", "description": "Woodfired Margherita slice with creamy Alfredo pasta"},
+                        {"id": "dish_biryani", "title": "Dum Biryani Special", "description": "Fragrant Basmati rice cooked with herbs, raita & salan"},
+                    ]
+                }
+            ]
+        else: # Dinner
+            sections = [
+                {
+                    "title": "Dinner Favorites",
+                    "rows": [
+                        {"id": "dish_chef_special", "title": "Chef Special Dinner", "description": "Signature curry, garlic naan, jeera rice & dessert"},
+                        {"id": "dish_sizzler", "title": "Sizzler Platter", "description": "Grilled paneer/veg patty on sizzler bed with fries"},
+                        {"id": "dish_light_meal", "title": "Light Comfort Meal", "description": "Creamy tomato soup, garlic baguette & garden salad"},
+                    ]
+                }
+            ]
+
+        body_msg = (
+            f"🍴 *{chosen_meal} Menu - In-Room Dining*\n\n"
+            "Please pick your preferred dish combination:"
+        )
+        send_interactive_list(
+            to=phone,
+            body_text=body_msg,
+            button_text="Select Dish",
+            sections=sections
+        )
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body_msg)
+        return
+
+    # ── Stage 4B (Room Food): Dish Selected -> Ask Preference Description ─────
+    if stage == "room_dish_options":
+        dish = interactive_title or text_clean
+        session["dish_option"] = dish
+        session["stage"] = "room_food_desc"
+        hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)
+
+        prompt_msg = (
+            f"You selected *{dish}* ({session.get('meal_type')}).\n\n"
+            "📝 Please reply with your *Room Number* and any food preferences "
+            "(e.g., *Room 402, medium spicy, Jain preparation, no onions, extra cutlery*):"
+        )
+        send_text(phone, prompt_msg)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, prompt_msg)
+        return
+
+    # ── Stage 4C (Room Food): Receive Description & Thank You ─────────────────
+    if stage == "room_food_desc":
+        description = text_clean
+        session["description"] = description
+
+        stype = "Food & Dining (In-Room)"
+        details = (
+            f"Meal: {session.get('meal_type', 'N/A')} | "
+            f"Dish: {session.get('dish_option', 'N/A')}"
+        )
+
+        _send_hotel_admin_notification(
+            customer_phone=phone,
+            customer_name=session.get("client_name") or client_name,
+            service_type=stype,
+            details_summary=details,
+            description=description
+        )
+
+        thank_you_msg = (
+            "✅ *Thank You! Your In-Room Food Order is Placed.* 🍽️\n\n"
+            f"🍲 *Meal:* {session.get('meal_type')}\n"
+            f"🍛 *Selected:* {session.get('dish_option')}\n"
+            f"📝 *Preferences:* {description}\n\n"
+            "Our master chefs are preparing your food with utmost care. It will be served hot to your room shortly. Bon appétit! ✨\n"
+            "Send *service* anytime if you need anything else."
+        )
+        send_text(phone, thank_you_msg)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, thank_you_msg)
+
+        hotel_sessions.delete(phone)
+        return
+
+    # ── Stage 5A (Restaurant): Restaurant Selected -> Ask Meal Type ───────────
+    if stage == "restaurant_selection":
+        rest_name = interactive_title or text_clean
+        session["restaurant_name"] = rest_name
+        session["stage"] = "rest_meal_type"
+        hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)
+
+        body_msg = f"🍽️ *{rest_name}*\n\nPlease select the meal session for your table reservation:"
+        buttons = [
+            {"id": "rest_meal_breakfast", "title": "Breakfast"},
+            {"id": "rest_meal_lunch", "title": "Lunch"},
+            {"id": "rest_meal_dinner", "title": "Dinner"},
+        ]
+        send_buttons(phone, body_msg, buttons)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body_msg)
+        return
+
+    # ── Stage 5B (Restaurant): Meal Selected -> Ask Number of Persons ─────────
+    if stage == "rest_meal_type":
+        meal_map = {
+            "rest_meal_breakfast": "Breakfast",
+            "rest_meal_lunch": "Lunch",
+            "rest_meal_dinner": "Dinner",
+        }
+        chosen_meal = meal_map.get(interactive_id) or interactive_title or text_clean.capitalize()
+        session["meal_type"] = chosen_meal
+        session["stage"] = "rest_pax"
+        hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)
+
+        body_msg = (
+            f"Table reservation for *{chosen_meal}* at *{session.get('restaurant_name')}*.\n\n"
+            "👥 How many guests will be joining?"
+        )
+        buttons = [
+            {"id": "pax_2", "title": "1 - 2 Guests"},
+            {"id": "pax_4", "title": "3 - 4 Guests"},
+            {"id": "pax_more", "title": "5+ Guests"},
+        ]
+        send_buttons(phone, body_msg, buttons)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body_msg)
+        return
+
+    # ── Stage 5C (Restaurant): Pax Selected -> Ask Timing ─────────────────────
+    if stage == "rest_pax":
+        pax = interactive_title or text_clean
+        session["pax"] = pax
+        session["stage"] = "rest_timing"
+        hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)
+
+        prompt_msg = (
+            f"Table for *{pax}*.\n\n"
+            "⏰ Please reply with your preferred dining time (e.g., *1:30 PM, 8:00 PM, or Now*):"
+        )
+        send_text(phone, prompt_msg)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, prompt_msg)
+        return
+
+    # ── Stage 5D (Restaurant): Timing Entered -> Ask Description / Special Request
+    if stage == "rest_timing":
+        timing = text_clean
+        session["timing"] = timing
+        session["stage"] = "rest_desc"
+        hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)
+
+        prompt_msg = (
+            f"Timing noted: *{timing}*.\n\n"
+            "📝 Any special requests or description? (e.g., *Room 204, window seat, anniversary decor, baby chair, or type 'None'*):"
+        )
+        send_text(phone, prompt_msg)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, prompt_msg)
+        return
+
+    # ── Stage 5E (Restaurant): Description Entered -> Send Thank You & Notify Admin
+    if stage == "rest_desc":
+        description = text_clean
+        session["description"] = description
+
+        stype = "Restaurant Reservation"
+        details = (
+            f"Restaurant: {session.get('restaurant_name', 'N/A')} | "
+            f"Meal: {session.get('meal_type', 'N/A')} | "
+            f"Guests: {session.get('pax', 'N/A')} | "
+            f"Time: {session.get('timing', 'N/A')}"
+        )
+
+        _send_hotel_admin_notification(
+            customer_phone=phone,
+            customer_name=session.get("client_name") or client_name,
+            service_type=stype,
+            details_summary=details,
+            description=description
+        )
+
+        thank_you_msg = (
+            "✅ *Thank You! Your Table Reservation is Confirmed.* 🥂\n\n"
+            f"🏛️ *Restaurant:* {session.get('restaurant_name')}\n"
+            f"🍽️ *Meal:* {session.get('meal_type')}\n"
+            f"👥 *Guests:* {session.get('pax')}\n"
+            f"⏰ *Time:* {session.get('timing')}\n"
+            f"📝 *Special Requests:* {description}\n\n"
+            "Our restaurant captain has prepared your table and looks forward to hosting you! "
+            "Send *service* anytime if you need anything else."
+        )
+        send_text(phone, thank_you_msg)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, thank_you_msg)
+
+        hotel_sessions.delete(phone)
+        return
+
+    # Fallback if stage is unknown or stale
+    buttons = [
+        {"id": "svc_room_service", "title": "Room Service"},
+        {"id": "svc_food", "title": "Food & Dining"},
+    ]
+    send_buttons(phone, "How may we assist you with our guest services?", buttons)
+
 

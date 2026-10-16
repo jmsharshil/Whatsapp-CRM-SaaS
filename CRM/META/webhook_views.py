@@ -53,9 +53,11 @@ from CRM.jmschatagents_views import (
     wa_sessions,
     mf_sessions,
     shopify_sessions,
+    hotel_sessions,
     # Constants
     INDUSTRY_TRIGGERS,
     SHOPIFY_BOT_TRIGGER,
+    HOTEL_BOT_TRIGGER,
     FAREWELL_KEYWORDS,
     WA_BOT_TRIGGER,
     MF_BOT_TRIGGER,
@@ -67,6 +69,7 @@ from CRM.jmschatagents_views import (
     _handle_wa_bot,
     _handle_mf_bot,
     _handle_shopify_bot,
+    _handle_hotel_bot,
     # Session key helper
     _sess_key,
     # DB helper
@@ -313,6 +316,7 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
     mf_sess = mf_sessions.get(raw_phone)
     wa_sess = wa_sessions.get(raw_phone)
     shopify_sess = shopify_sessions.get(raw_phone)
+    hotel_sess = hotel_sessions.get(raw_phone)
     jms_sess = jms_sessions.get(raw_phone)
 
     # ── Route decision ────────────────────────────────────────────────────
@@ -322,6 +326,7 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
     go_wa = False
     go_jms = False
     go_shopify = False
+    go_hotel = False
     go_navratri = False
     skip_all = False
 
@@ -340,6 +345,8 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
             avantika_sessions.delete(raw_phone)
         if keep_bot != "shopify":
             shopify_sessions.delete(raw_phone)
+        if keep_bot != "hotel":
+            hotel_sessions.delete(raw_phone)
         if keep_bot != "jms":
             jms_sessions.delete(raw_phone)
 
@@ -359,6 +366,9 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
     elif text_lower == SHOPIFY_BOT_TRIGGER:
         go_shopify = True
         _clear_other_sessions("shopify")
+    elif text_lower == HOTEL_BOT_TRIGGER:
+        go_hotel = True
+        _clear_other_sessions("hotel")
     elif text_lower == "jms":
         go_jms = True
         _clear_other_sessions("jms")
@@ -386,6 +396,8 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
             go_wa = True
         elif shopify_sess and shopify_sess.get("stage", "idle") != "idle":
             go_shopify = True
+        elif hotel_sess and hotel_sess.get("stage"):
+            go_hotel = True
         elif jms_sess and jms_sess.get("stage", "idle") != "idle":
             go_jms = True
         else:
@@ -530,6 +542,13 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
             _handle_shopify_bot(raw_phone, text, phone_number_id, inbound_msg_id=inbound_msg_id, raw_msg=msg)
         except Exception as e:
             logger.exception("Shopify bot error: %s", e)
+
+    elif go_hotel:
+        logger.info("[Webhook/JMS] → HOTEL BOT for %s", raw_phone)
+        try:
+            _handle_hotel_bot(raw_phone, text, phone_number_id, inbound_msg_id=inbound_msg_id, raw_msg=msg, client_name=client_name)
+        except Exception as e:
+            logger.exception("Hotel bot error: %s", e)
             
     elif go_jms:
         logger.info("[Webhook/JMS] → JMS-TECH BOT for %s", raw_phone)
@@ -878,6 +897,16 @@ def _handle_status_update(status_payload: dict):
     rec_updated = CampaignRecipient.objects.filter(meta_message_id=wa_msg_id).update(**rec_update_fields)
     if rec_updated:
         logger.info("[Webhook] CampaignRecipient status wamid=%s -> %s", wa_msg_id, new_status)
+
+    # 3. Update AvantikaCampaignHistory status if matched by ID or wamid
+    # try:
+    #     from CRM.models import AvantikaCampaignHistory
+    #     # Fast indexed or recent record filter to prevent locking/blocking the database
+    #     AvantikaCampaignHistory.objects.filter(
+    #         error_message__contains=wa_msg_id
+    #     ).update(status=new_status.capitalize())
+    # except Exception as e:
+    #     logger.debug("[Webhook] Error updating AvantikaCampaignHistory status: %s", e)
 
     # print(f"✅ DB Updated -> Message: {bool(updated)}, CampaignRecipient: {bool(rec_updated)}")
     # print(f"===================================================================\n")
