@@ -2362,7 +2362,7 @@ def customer_list(request):
         ),
         last_hotel_id=Max(
             "messages__id",
-            filter=Q(messages__content__iexact="service") | Q(messages__content__icontains="hotel"),
+            filter=Q(messages__direction="inbound") & Q(messages__content__iexact="service"),
         ),
     ).order_by("-id")
 
