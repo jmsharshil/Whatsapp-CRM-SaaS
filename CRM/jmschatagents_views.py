@@ -3573,8 +3573,8 @@ def _send_hotel_admin_notification(customer_phone: str, customer_name: str, serv
         clean_phone = (customer_phone or "").lstrip("+")
         c_name = customer_name or "Guest"
         stype = service_type or "General Service"
-        sdetails = details_summary or "None"
-        sdesc = description or "None"
+        sdetails = details_summary or "Standard Request"
+        sdesc = (description or "").strip() or "No special notes"
 
         # 1. Template components
         components = [
@@ -3601,8 +3601,9 @@ def _send_hotel_admin_notification(customer_phone: str, customer_name: str, serv
             "⚡ Please assign a staff member promptly."
         )
 
-        # 3. Send to all configured admin numbers
+        # 3. Send to all configured admin numbers (Template first; Text ONLY as fallback)
         for notify_num in HOTEL_NOTIFY_NUMBERS:
+            template_sent = False
             try:
                 send_template(
                     to=notify_num,
@@ -3610,13 +3611,16 @@ def _send_hotel_admin_notification(customer_phone: str, customer_name: str, serv
                     language_code="en",
                     components=components
                 )
+                template_sent = True
             except Exception as e:
                 logger.warning("Failed to send hotel admin template to %s: %s", notify_num, e)
 
-            try:
-                send_text(notify_num, admin_text)
-            except Exception as e:
-                logger.warning("Failed to send hotel admin text to %s: %s", notify_num, e)
+            # Only send plain text if template failed, preventing duplicate messages
+            if not template_sent:
+                try:
+                    send_text(notify_num, admin_text)
+                except Exception as e:
+                    logger.warning("Failed to send hotel admin fallback text to %s: %s", notify_num, e)
 
         # 4. Save notification in CRM database strictly under this Customer's existing Conversation
         dispatch_tag = f"📢 [ADMIN DISPATCHED to {', '.join(HOTEL_NOTIFY_NUMBERS)}]\n{admin_text}"
@@ -3746,28 +3750,16 @@ def _handle_hotel_bot(phone: str, text: str, phone_number_id: str = None, inboun
             session["stage"] = "room_service_categories"
             hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)
 
-            sections = [
-                {
-                    "title": "Room Service Menu",
-                    "rows": [
-                        {"id": "cat_cleaning", "title": "Room Cleaning", "description": "Linen, dusting, vacuuming & mop"},
-                        {"id": "cat_laundry", "title": "Laundry & Ironing", "description": "Washing, dry clean & pressing"},
-                        {"id": "cat_amenities", "title": "Extra Amenities", "description": "Towels, dental kit, water & soap"},
-                        {"id": "cat_repairs", "title": "Repairs & Tech", "description": "AC, plumbing, electrical & TV"},
-                        {"id": "cat_other", "title": "Other / Custom Help", "description": "Type your custom requirement"},
-                    ]
-                }
-            ]
             body_msg = (
                 f"🛎️ *Room Service & Care (Room {room_number})*\n\n"
-                "Please choose a service category below:"
+                "Please choose a service below:"
             )
-            send_interactive_list(
-                to=phone,
-                body_text=body_msg,
-                button_text="Select Category",
-                sections=sections
-            )
+            buttons = [
+                {"id": "cat_cleaning", "title": "Room Cleaning"},
+                {"id": "cat_laundry", "title": "Laundry & Iron"},
+                {"id": "cat_more_services", "title": "More Services"},
+            ]
+            send_buttons(phone, body_msg, buttons)
             if inbound_msg_id:
                 _save_reply(inbound_msg_id, body_msg)
             return
@@ -3803,10 +3795,23 @@ def _handle_hotel_bot(phone: str, text: str, phone_number_id: str = None, inboun
     if stage == "room_service_categories":
         cat_id = interactive_id or text_clean.lower()
 
-        # If user picked "Other / Custom Help" directly from categories
-        if cat_id in ["cat_other", "other"] or "other" in text_lower or "custom" in text_lower:
-            session["room_service_category"] = "Custom Request"
-            session["room_service_item"] = "Custom Service"
+        # If user clicks "More Services" from the initial 2 categories -> Show remaining categories
+        if cat_id in ["cat_more_services", "more services"] or "more service" in text_lower:
+            body_msg = f"🛎️ *Additional Room Services (Room {room_number})*\n\nSelect an option below:"
+            buttons = [
+                {"id": "cat_amenities", "title": "Extra Amenities"},
+                {"id": "cat_repairs", "title": "Repairs & Tech"},
+                {"id": "cat_other", "title": "Other Help"},
+            ]
+            send_buttons(phone, body_msg, buttons)
+            if inbound_msg_id:
+                _save_reply(inbound_msg_id, body_msg)
+            return
+
+        # If user picked "Other Help" directly from categories -> Ask description
+        if cat_id in ["cat_other", "other", "other help"] or "other" in text_lower or "custom" in text_lower:
+            session["room_service_category"] = "Room Service"
+            session["room_service_item"] = "Custom Request"
             session["stage"] = "room_service_desc"
             hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)
 
@@ -3819,94 +3824,70 @@ def _handle_hotel_bot(phone: str, text: str, phone_number_id: str = None, inboun
                 _save_reply(inbound_msg_id, prompt_msg)
             return
 
-        # Category 1: Room Cleaning Sub-menu
-        if cat_id == "cat_cleaning" or "clean" in text_lower:
+        # Category 1: Room Cleaning
+        if cat_id in ["cat_cleaning", "clean"] or "clean" in text_lower:
             session["room_service_category"] = "Room Cleaning"
             session["stage"] = "room_service_submenu"
             hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)
 
-            sections = [
-                {
-                    "title": "Room Cleaning Options",
-                    "rows": [
-                        {"id": "sub_clean_full", "title": "Full Room Cleaning", "description": "Linen change, vacuum, washroom cleaning"},
-                        {"id": "sub_clean_bed", "title": "Bed & Linen Refresh", "description": "Change bedsheets, pillow covers & duvet"},
-                        {"id": "sub_clean_trash", "title": "Trash & Dusting Only", "description": "Empty dustbins, quick dust & mop"},
-                        {"id": "sub_rs_other", "title": "Other Cleaning Need", "description": "Specify custom cleaning instructions"},
-                    ]
-                }
+            body_msg = f"🧹 *Room Cleaning Services (Room {room_number})*\n\nSelect an option below:"
+            buttons = [
+                {"id": "sub_clean_full", "title": "Full Cleaning"},
+                {"id": "sub_clean_bed", "title": "Bed & Linen"},
+                {"id": "sub_clean_more", "title": "Other Options"},
             ]
-            body_msg = f"🧹 *Room Cleaning Sub-Menu (Room {room_number})*\n\nSelect an option below:"
-            send_interactive_list(to=phone, body_text=body_msg, button_text="Select Option", sections=sections)
+            send_buttons(phone, body_msg, buttons)
             if inbound_msg_id:
                 _save_reply(inbound_msg_id, body_msg)
             return
 
-        # Category 2: Laundry & Ironing Sub-menu
-        elif cat_id == "cat_laundry" or "laundry" in text_lower or "iron" in text_lower:
+        # Category 2: Laundry & Ironing
+        elif cat_id in ["cat_laundry", "laundry", "iron"] or "laundry" in text_lower or "iron" in text_lower:
             session["room_service_category"] = "Laundry & Ironing"
             session["stage"] = "room_service_submenu"
             hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)
 
-            sections = [
-                {
-                    "title": "Laundry & Ironing",
-                    "rows": [
-                        {"id": "sub_laund_express", "title": "Express Laundry & Wash", "description": "Same day washing & folding"},
-                        {"id": "sub_laund_iron", "title": "Steam Ironing / Press", "description": "Wrinkle-free pressing on hangers"},
-                        {"id": "sub_laund_dry", "title": "Dry Cleaning Service", "description": "Suits, blazers, sarees & silks"},
-                        {"id": "sub_rs_other", "title": "Other Laundry Need", "description": "Specify custom laundry instructions"},
-                    ]
-                }
+            body_msg = f"🧺 *Laundry & Ironing Services (Room {room_number})*\n\nSelect an option below:"
+            buttons = [
+                {"id": "sub_laund_express", "title": "Express Laundry"},
+                {"id": "sub_laund_iron", "title": "Steam Ironing"},
+                {"id": "sub_laund_more", "title": "Other Options"},
             ]
-            body_msg = f"🧺 *Laundry & Ironing Sub-Menu (Room {room_number})*\n\nSelect an option below:"
-            send_interactive_list(to=phone, body_text=body_msg, button_text="Select Option", sections=sections)
+            send_buttons(phone, body_msg, buttons)
             if inbound_msg_id:
                 _save_reply(inbound_msg_id, body_msg)
             return
 
-        # Category 3: Extra Amenities Sub-menu
-        elif cat_id == "cat_amenities" or "amenit" in text_lower or "towel" in text_lower:
+        # Category 3: Extra Amenities
+        elif cat_id in ["cat_amenities", "amenit", "towel"] or "amenit" in text_lower or "towel" in text_lower:
             session["room_service_category"] = "Extra Amenities"
             session["stage"] = "room_service_submenu"
             hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)
 
-            sections = [
-                {
-                    "title": "Amenities Options",
-                    "rows": [
-                        {"id": "sub_amen_towels", "title": "Fresh Towels Set", "description": "Bath towels, hand towels & bath mat"},
-                        {"id": "sub_amen_water", "title": "Packaged Water Bottles", "description": "2x 1L mineral water bottles"},
-                        {"id": "sub_amen_dental", "title": "Dental & Shaving Kit", "description": "Toothbrush, paste, razor & comb"},
-                        {"id": "sub_rs_other", "title": "Other Amenity Need", "description": "Specify other amenities needed"},
-                    ]
-                }
+            body_msg = f"🧴 *Guest Amenities (Room {room_number})*\n\nSelect an option below:"
+            buttons = [
+                {"id": "sub_amen_towels", "title": "Fresh Towels"},
+                {"id": "sub_amen_water", "title": "Water Bottles"},
+                {"id": "sub_amen_more", "title": "Other Options"},
             ]
-            body_msg = f"🧴 *Guest Amenities Sub-Menu (Room {room_number})*\n\nSelect an option below:"
-            send_interactive_list(to=phone, body_text=body_msg, button_text="Select Option", sections=sections)
+            send_buttons(phone, body_msg, buttons)
             if inbound_msg_id:
                 _save_reply(inbound_msg_id, body_msg)
             return
 
-        # Category 4: Repairs & Maintenance Sub-menu
+        # Category 4: Repairs & Maintenance
         else:
             session["room_service_category"] = "Repairs & Tech"
             session["stage"] = "room_service_submenu"
             hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)
 
-            sections = [
-                {
-                    "title": "Repairs & Assistance",
-                    "rows": [
-                        {"id": "sub_rep_ac", "title": "AC Cooling / Remote Help", "description": "AC temperature or remote check"},
-                        {"id": "sub_rep_tv", "title": "TV / WiFi Tech Assist", "description": "TV connection, remote or WiFi issue"},
-                        {"id": "sub_rep_plumbing", "title": "Geyser & Plumbing", "description": "Hot water, tap or flush check"},
-                        {"id": "sub_rs_other", "title": "Other Maintenance", "description": "Specify other repair issue"},
-                    ]
-                }
+            body_msg = f"🔧 *Repairs & Assistance (Room {room_number})*\n\nSelect an option below:"
+            buttons = [
+                {"id": "sub_rep_ac", "title": "AC Assistance"},
+                {"id": "sub_rep_tv", "title": "TV / WiFi Help"},
+                {"id": "sub_rep_more", "title": "Other Options"},
             ]
-            body_msg = f"🔧 *Repairs & Tech Sub-Menu (Room {room_number})*\n\nSelect an option below:"
-            send_interactive_list(to=phone, body_text=body_msg, button_text="Select Option", sections=sections)
+            send_buttons(phone, body_msg, buttons)
             if inbound_msg_id:
                 _save_reply(inbound_msg_id, body_msg)
             return
@@ -3914,8 +3895,42 @@ def _handle_hotel_bot(phone: str, text: str, phone_number_id: str = None, inboun
     # ── Stage 2B: Room Service Sub-menu Item Chosen ───────────────────────────
     if stage == "room_service_submenu":
         chosen_id = interactive_id or text_clean.lower()
-        chosen_title = interactive_title or text_clean
         category = session.get("room_service_category", "Room Service")
+
+        # More / Other button clicked in sub-menu -> Reveal the rest of the options
+        if chosen_id in ["sub_clean_more", "sub_laund_more", "sub_amen_more", "sub_rep_more"]:
+            if category == "Room Cleaning":
+                body_msg = f"🧹 *Room Cleaning - More Options (Room {room_number})*:"
+                buttons = [
+                    {"id": "sub_clean_trash", "title": "Trash & Dusting"},
+                    {"id": "sub_rs_other", "title": "Other Request"},
+                    {"id": "btn_main_menu", "title": "Back to Menu"},
+                ]
+            elif category == "Laundry & Ironing":
+                body_msg = f"🧺 *Laundry - More Options (Room {room_number})*:"
+                buttons = [
+                    {"id": "sub_laund_dry", "title": "Dry Cleaning"},
+                    {"id": "sub_rs_other", "title": "Other Request"},
+                    {"id": "btn_main_menu", "title": "Back to Menu"},
+                ]
+            elif category == "Extra Amenities":
+                body_msg = f"🧴 *Amenities - More Options (Room {room_number})*:"
+                buttons = [
+                    {"id": "sub_amen_dental", "title": "Dental/Shave Kit"},
+                    {"id": "sub_rs_other", "title": "Other Request"},
+                    {"id": "btn_main_menu", "title": "Back to Menu"},
+                ]
+            else: # Repairs & Tech
+                body_msg = f"🔧 *Repairs - More Options (Room {room_number})*:"
+                buttons = [
+                    {"id": "sub_rep_plumbing", "title": "Plumbing/Geyser"},
+                    {"id": "sub_rs_other", "title": "Other Request"},
+                    {"id": "btn_main_menu", "title": "Back to Menu"},
+                ]
+            send_buttons(phone, body_msg, buttons)
+            if inbound_msg_id:
+                _save_reply(inbound_msg_id, body_msg)
+            return
 
         # If user selected ANY "Other" option in the sub-menu -> Ask description
         if chosen_id == "sub_rs_other" or "other" in text_lower or "custom" in text_lower:
@@ -3933,12 +3948,26 @@ def _handle_hotel_bot(phone: str, text: str, phone_number_id: str = None, inboun
             return
 
         # Standard option selected from sub-menu -> Confirm directly without asking description!
-        item_name = chosen_title
+        item_title_map = {
+            "sub_clean_full": "Full Room Cleaning",
+            "sub_clean_bed": "Bed & Linen Refresh",
+            "sub_clean_trash": "Trash & Dusting Only",
+            "sub_laund_express": "Express Laundry & Wash",
+            "sub_laund_iron": "Steam Ironing / Press",
+            "sub_laund_dry": "Dry Cleaning Service",
+            "sub_amen_towels": "Fresh Towels Set",
+            "sub_amen_water": "Packaged Water Bottles",
+            "sub_amen_dental": "Dental & Shaving Kit",
+            "sub_rep_ac": "AC Cooling / Remote Help",
+            "sub_rep_tv": "TV / WiFi Tech Assist",
+            "sub_rep_plumbing": "Geyser & Plumbing",
+        }
+        item_name = item_title_map.get(chosen_id) or interactive_title or text_clean
         session["room_service_item"] = item_name
-        session["description"] = f"Standard request: {item_name}"
+        session["description"] = f"Standard request for {item_name}"
 
-        stype = f"Room Service ({category})"
-        details = f"Category: {category} | Item: {item_name} | Room: {room_number}"
+        stype = category
+        details = f"{item_name} | Room: {room_number}"
 
         # Notify Admin & Record in CRM
         _send_hotel_admin_notification(
@@ -3954,8 +3983,7 @@ def _handle_hotel_bot(phone: str, text: str, phone_number_id: str = None, inboun
         thank_you_msg = (
             f"✅ *Thank You! Your Request Has Been Logged.* 🌟\n\n"
             f"🔑 *Room:* Room {room_number}\n"
-            f"📋 *Category:* {category}\n"
-            f"🛎️ *Selected Service:* {item_name}\n\n"
+            f"🛎️ *Service Requested:* {item_name}\n\n"
             "Our staff has been notified and dispatched to your room. "
             "Send *service* anytime if you need further assistance!"
         )
@@ -3971,10 +3999,9 @@ def _handle_hotel_bot(phone: str, text: str, phone_number_id: str = None, inboun
         description = text_clean
         session["description"] = description
         category = session.get("room_service_category", "Room Service")
-        item = session.get("room_service_item", "Custom Request")
 
-        stype = f"Room Service ({category} - Custom)"
-        details = f"Category: {category} | Item: {item} | Room: {room_number}"
+        stype = category
+        details = f"Custom Request | Room: {room_number}"
 
         # Notify Admin & Record in CRM
         _send_hotel_admin_notification(
@@ -3988,9 +4015,9 @@ def _handle_hotel_bot(phone: str, text: str, phone_number_id: str = None, inboun
         )
 
         thank_you_msg = (
-            f"✅ *Thank You! Your Custom Request Has Been Logged.* 🌟\n\n"
+            f"✅ *Thank You! Your Request Has Been Logged.* 🌟\n\n"
             f"🔑 *Room:* Room {room_number}\n"
-            f"📋 *Category:* {category}\n"
+            f"📋 *Service:* {category}\n"
             f"📝 *Instructions:* {description}\n\n"
             "Our team has received your instructions and will attend to your room shortly. "
             "Send *service* anytime if you need further assistance!"
@@ -4026,26 +4053,16 @@ def _handle_hotel_bot(phone: str, text: str, phone_number_id: str = None, inboun
             session["stage"] = "restaurant_selection"
             hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)
 
-            sections = [
-                {
-                    "title": "Featured Dining",
-                    "rows": [
-                        {"id": "rest_royal_dine", "title": "The Royal Spice", "description": "Authentic North & South Indian Fine Dining"},
-                        {"id": "rest_sky_lounge", "title": "Skyview Rooftop", "description": "Continental, Italian & Mocktails with a View"},
-                        {"id": "rest_bistro_cafe", "title": "Garden Bistro Café", "description": "Fresh Brews, Bakery, Asian Bowls & Snacks"},
-                    ]
-                }
-            ]
             body_msg = (
-                "🍽️ *Choose Your Dining Venue*\n\n"
+                f"🍽️ *Choose Your Dining Venue (Room {room_number})*\n\n"
                 "Please select from our featured hotel restaurants:"
             )
-            send_interactive_list(
-                to=phone,
-                body_text=body_msg,
-                button_text="Select Restaurant",
-                sections=sections
-            )
+            buttons = [
+                {"id": "rest_royal_dine", "title": "The Royal Spice"},
+                {"id": "rest_sky_lounge", "title": "Skyview Rooftop"},
+                {"id": "rest_more", "title": "More Venues"},
+            ]
+            send_buttons(phone, body_msg, buttons)
             if inbound_msg_id:
                 _save_reply(inbound_msg_id, body_msg)
             return
@@ -4072,66 +4089,72 @@ def _handle_hotel_bot(phone: str, text: str, phone_number_id: str = None, inboun
         hotel_sessions.set(phone, session, timeout=HOTEL_SESSION_TTL)
 
         if "Breakfast" in chosen_meal:
-            sections = [
-                {
-                    "title": "Breakfast Sub-Menu",
-                    "rows": [
-                        {"id": "dish_continental", "title": "Continental Platter", "description": "Fluffy eggs, buttered toast & fresh juice"},
-                        {"id": "dish_indian_bf", "title": "Indian Classic Thali", "description": "Masala Dosa / Idli or Poha with filter coffee"},
-                        {"id": "dish_healthy_bf", "title": "Healthy Wellness Bowl", "description": "Oatmeal porridge, fresh fruits & nuts"},
-                        {"id": "dish_other_bf", "title": "Other / Custom Dish", "description": "Specify custom dish requirement"},
-                    ]
-                }
+            buttons = [
+                {"id": "dish_continental", "title": "Continental Platter"},
+                {"id": "dish_indian_bf", "title": "Indian Thali"},
+                {"id": "dish_more_bf", "title": "Other Options"},
             ]
         elif "Lunch" in chosen_meal:
-            sections = [
-                {
-                    "title": "Lunch Sub-Menu",
-                    "rows": [
-                        {"id": "dish_deluxe_thali", "title": "Deluxe Indian Thali", "description": "Shahi Paneer, Dal Makhani, Rotis & Rice"},
-                        {"id": "dish_pasta_pizza", "title": "Italian Delight Combo", "description": "Margherita pizza slice with creamy Alfredo pasta"},
-                        {"id": "dish_biryani", "title": "Dum Biryani Special", "description": "Fragrant rice cooked with herbs & raita"},
-                        {"id": "dish_other_lunch", "title": "Other / Custom Dish", "description": "Specify custom dish requirement"},
-                    ]
-                }
+            buttons = [
+                {"id": "dish_deluxe_thali", "title": "Deluxe Thali"},
+                {"id": "dish_pasta_pizza", "title": "Pasta & Pizza"},
+                {"id": "dish_more_lunch", "title": "Other Options"},
             ]
         else: # Dinner
-            sections = [
-                {
-                    "title": "Dinner Sub-Menu",
-                    "rows": [
-                        {"id": "dish_chef_special", "title": "Chef Special Dinner", "description": "Signature curry, garlic naan, jeera rice & dessert"},
-                        {"id": "dish_sizzler", "title": "Sizzler Platter", "description": "Grilled paneer/veg patty on sizzler bed with fries"},
-                        {"id": "dish_light_meal", "title": "Light Comfort Meal", "description": "Creamy tomato soup, garlic baguette & salad"},
-                        {"id": "dish_other_dinner", "title": "Other / Custom Dish", "description": "Specify custom dish requirement"},
-                    ]
-                }
+            buttons = [
+                {"id": "dish_chef_special", "title": "Chef Special"},
+                {"id": "dish_sizzler", "title": "Sizzler Platter"},
+                {"id": "dish_more_dinner", "title": "Other Options"},
             ]
 
         body_msg = (
-            f"🍴 *{chosen_meal} Sub-Menu (Room {room_number})*\n\n"
-            "Please pick a dish combination below.\n"
-            "Select *Other / Custom Dish* if you want to type specific items:"
+            f"🍴 *{chosen_meal} Menu (Room {room_number})*\n\n"
+            "Please select a dish below:"
         )
-        send_interactive_list(
-            to=phone,
-            body_text=body_msg,
-            button_text="Select Dish",
-            sections=sections
-        )
+        send_buttons(phone, body_msg, buttons)
         if inbound_msg_id:
             _save_reply(inbound_msg_id, body_msg)
         return
 
     # ── Stage 4B (Room Food): Dish Selected from Sub-Menu ─────────────────────
     if stage == "room_dish_options":
-        dish = interactive_title or text_clean
+        dish_id = interactive_id or text_clean.lower()
+        chosen_meal_val = session.get("meal_type", "Meal")
+
+        # More / Other clicked from initial 2 dish buttons -> Show remaining options
+        if dish_id in ["dish_more_bf", "dish_more_lunch", "dish_more_dinner"]:
+            if "Breakfast" in chosen_meal_val:
+                body_msg = f"🍴 *{chosen_meal_val} - More Options (Room {room_number})*:"
+                buttons = [
+                    {"id": "dish_healthy_bf", "title": "Wellness Bowl"},
+                    {"id": "dish_other_food", "title": "Custom Dish"},
+                    {"id": "btn_main_menu", "title": "Back to Menu"},
+                ]
+            elif "Lunch" in chosen_meal_val:
+                body_msg = f"🍴 *{chosen_meal_val} - More Options (Room {room_number})*:"
+                buttons = [
+                    {"id": "dish_biryani", "title": "Dum Biryani"},
+                    {"id": "dish_other_food", "title": "Custom Dish"},
+                    {"id": "btn_main_menu", "title": "Back to Menu"},
+                ]
+            else: # Dinner
+                body_msg = f"🍴 *{chosen_meal_val} - More Options (Room {room_number})*:"
+                buttons = [
+                    {"id": "dish_light_meal", "title": "Light Meal"},
+                    {"id": "dish_other_food", "title": "Custom Dish"},
+                    {"id": "btn_main_menu", "title": "Back to Menu"},
+                ]
+            send_buttons(phone, body_msg, buttons)
+            if inbound_msg_id:
+                _save_reply(inbound_msg_id, body_msg)
+            return
+
         is_other_dish = (
-            interactive_id in ["dish_other_bf", "dish_other_lunch", "dish_other_dinner"] or
+            dish_id in ["dish_other_bf", "dish_other_lunch", "dish_other_dinner", "dish_other_food"] or
             "other" in text_lower or "custom" in text_lower
         )
 
-        # If user picked "Other / Custom Dish" -> Ask description
+        # If user picked "Custom Dish / Other" -> Ask description
         if is_other_dish:
             session["dish_option"] = "Custom Dish / Special Order"
             session["stage"] = "room_food_desc"
@@ -4147,17 +4170,27 @@ def _handle_hotel_bot(phone: str, text: str, phone_number_id: str = None, inboun
                 _save_reply(inbound_msg_id, prompt_msg)
             return
 
-        # Direct dish selection from sub-menu -> Confirm directly without asking description!
+        # Direct dish selection from buttons -> Confirm directly without asking description!
+        dish_title_map = {
+            "dish_continental": "Continental Platter",
+            "dish_indian_bf": "Indian Classic Thali",
+            "dish_healthy_bf": "Healthy Wellness Bowl",
+            "dish_deluxe_thali": "Deluxe Indian Thali",
+            "dish_pasta_pizza": "Italian Delight Combo",
+            "dish_biryani": "Dum Biryani Special",
+            "dish_chef_special": "Chef Special Dinner",
+            "dish_sizzler": "Sizzler Platter",
+            "dish_light_meal": "Light Comfort Meal",
+        }
+        dish = dish_title_map.get(dish_id) or interactive_title or text_clean
+
+        # Direct dish selection from buttons -> Confirm directly without asking description!
         chosen_meal_val = session.get("meal_type", "Meal")
         session["dish_option"] = dish
         session["description"] = f"Standard {chosen_meal_val} delivery: {dish}"
 
-        stype = "Food & Dining (In-Room)"
-        details = (
-            f"Room: {room_number} | "
-            f"Meal: {chosen_meal_val} | "
-            f"Dish: {dish}"
-        )
+        stype = "Food Delivery"
+        details = f"{dish} | Room: {room_number}"
 
         # Notify Admin & Record in CRM
         _send_hotel_admin_notification(
@@ -4191,12 +4224,8 @@ def _handle_hotel_bot(phone: str, text: str, phone_number_id: str = None, inboun
         session["description"] = description
         chosen_meal_val = session.get("meal_type", "Meal")
 
-        stype = "Food & Dining (In-Room - Custom)"
-        details = (
-            f"Room: {room_number} | "
-            f"Meal: {chosen_meal_val} | "
-            f"Order: {session.get('dish_option', 'Custom Order')}"
-        )
+        stype = "Food Delivery"
+        details = f"Custom Food Order | Room: {room_number}"
 
         # Notify Admin & Record in CRM
         _send_hotel_admin_notification(
@@ -4226,12 +4255,30 @@ def _handle_hotel_bot(phone: str, text: str, phone_number_id: str = None, inboun
 
     # ── Stage 5A (Restaurant): Restaurant Selected -> Ask Meal Type ───────────
     if stage == "restaurant_selection":
+        chosen_id = interactive_id or text_clean.lower()
+
+        # More Venues clicked -> show remaining options
+        if chosen_id in ["rest_more", "more venues"] or "more" in text_lower:
+            body_msg = (
+                f"🍽️ *More Dining Venues (Room {room_number})*\n\n"
+                "Please choose from our other restaurant & café venues:"
+            )
+            buttons = [
+                {"id": "rest_bistro_cafe", "title": "Garden Bistro Café"},
+                {"id": "rest_other", "title": "Other Venue"},
+                {"id": "btn_main_menu", "title": "Back to Menu"},
+            ]
+            send_buttons(phone, body_msg, buttons)
+            if inbound_msg_id:
+                _save_reply(inbound_msg_id, body_msg)
+            return
+
         rest_map = {
             "rest_royal_dine": "The Royal Spice",
             "rest_sky_lounge": "Skyview Rooftop",
             "rest_bistro_cafe": "Garden Bistro Café",
+            "rest_other": "Special Hotel Venue",
         }
-        chosen_id = interactive_id or text_clean.lower()
         rest_name = rest_map.get(chosen_id) or interactive_title
         if not rest_name:
             if "royal" in text_lower or "spice" in text_lower or text_clean == "1":
@@ -4377,10 +4424,14 @@ def _handle_hotel_bot(phone: str, text: str, phone_number_id: str = None, inboun
         return
 
     # Fallback if stage is unknown or stale
+    fb_msg = f"How may we assist you with our guest services for Room {room_number}?"
     buttons = [
         {"id": "svc_room_service", "title": "Room Service"},
         {"id": "svc_food", "title": "Food & Dining"},
     ]
-    send_buttons(phone, f"How may we assist you with our guest services for Room {room_number}?", buttons)
+    send_buttons(phone, fb_msg, buttons)
+    if inbound_msg_id:
+        _save_reply(inbound_msg_id, fb_msg)
+    return
 
 
