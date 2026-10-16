@@ -3628,30 +3628,39 @@ def _send_hotel_admin_notification(customer_phone: str, customer_name: str, serv
                 except Exception as e:
                     logger.warning("Failed to send hotel admin fallback text to %s: %s", notify_num, e)
 
-        # 4. Save notification in CRM database strictly under this Customer's existing Conversation
-        dispatch_tag = f"📢 [ADMIN DISPATCHED to {', '.join(HOTEL_NOTIFY_NUMBERS)}]\n{admin_text}"
-        if inbound_msg_id:
+        # 4. Save notification in CRM database under ADMIN's conversation (not customer's chat)
+        for notify_num in HOTEL_NOTIFY_NUMBERS:
+            clean_notify = notify_num.lstrip("+")
             try:
-                _save_reply(inbound_msg_id, dispatch_tag)
+                # Find or create admin Customer record
+                admin_cust = Customer.objects.filter(
+                    Q(phone=clean_notify) | Q(phone=f"+{clean_notify}") | Q(phone=clean_notify[-10:])
+                ).first()
+                if not admin_cust:
+                    admin_cust = Customer.objects.create(
+                        phone=f"+{clean_notify}",
+                        name=f"Admin ({clean_notify[-4:]})"
+                    )
+
+                # Get or create admin conversation with system phone_number_id
+                admin_conv, _ = Conversation.objects.get_or_create(
+                    customer=admin_cust,
+                    phone_number_id=phone_number_id
+                )
+
+                # Store as outbound template message in Admin's chat
+                Message.objects.create(
+                    customer=admin_cust,
+                    conversation=admin_conv,
+                    content=f"[Template: {HOTEL_ADMIN_TEMPLATE}]\n\n{admin_text}",
+                    direction="outbound",
+                    message_type="template",
+                    template_name=HOTEL_ADMIN_TEMPLATE,
+                    status="sent",
+                    client_name="Hotel Service Bot"
+                )
             except Exception as e:
-                logger.warning("Could not attach admin dispatch to customer msg %s: %s", inbound_msg_id, e)
-        else:
-            try:
-                customer = Customer.objects.filter(phone=customer_phone).first()
-                if customer:
-                    conv = Conversation.objects.filter(customer=customer).order_by("-created_at").first()
-                    if conv:
-                        Message.objects.create(
-                            customer=customer,
-                            conversation=conv,
-                            content=dispatch_tag,
-                            direction="outbound",
-                            message_type="text",
-                            status="sent",
-                            client_name="Hotel Service Bot"
-                        )
-            except Exception as e:
-                logger.warning("Fallback CRM logging failed: %s", e)
+                logger.warning("Could not record admin notification under admin %s: %s", notify_num, e)
 
     except Exception as e:
         logger.exception("Error in _send_hotel_admin_notification: %s", e)
