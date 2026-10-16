@@ -2360,6 +2360,10 @@ def customer_list(request):
             "messages__id",
             filter=Q(messages__content__iexact="mutual funds") | Q(messages__content__iexact="mf"),
         ),
+        last_hotel_id=Max(
+            "messages__id",
+            filter=Q(messages__content__iexact="service") | Q(messages__content__icontains="hotel"),
+        ),
     ).order_by("-id")
 
     if search:
@@ -2386,6 +2390,8 @@ def customer_list(request):
             bots.append((c.last_wa_id, "whatsapp"))
         if c.last_mf_id:
             bots.append((c.last_mf_id, "mutual_funds"))
+        if c.last_hotel_id:
+            bots.append((c.last_hotel_id, "hotel"))
         
         if bots:
             bot_source = max(bots, key=lambda x: x[0])[1]
