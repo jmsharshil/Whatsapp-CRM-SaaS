@@ -634,8 +634,6 @@ class IceMakeDataAPIView(APIView):
                 },
                 "ticket_data": {
                     "ticket_no": ticket_no_display,
-                    "tickets": extracted_tickets,
-                    "latest_ticket_no": extracted_tickets[0] if extracted_tickets else ticket_no,
                     "name": customer_name,
                     "registered_mobile": registered_mobile,
                     "city": td.get("city", ""),
