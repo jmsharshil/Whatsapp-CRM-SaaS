@@ -108,6 +108,8 @@ from CRM.veda_hyundai_views import handle_veda_hyundai_message
 from CRM.veda_hyundai_utils import veda_hyundai_PHONE_NUMBER_ID
 from CRM.mahindra_views import handle_mahindra_message
 from CRM.mahindra_utils import mahindra_PHONE_NUMBER_ID
+from CRM.rk_voyagers_views import handle_rk_voyagers_message
+from CRM.rk_voyagers_utils import rk_voyagers_PHONE_NUMBER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -674,6 +676,7 @@ class WhatsAppWebhookView(APIView):
                         kia_phone_id = kia_PHONE_NUMBER_ID
                         veda_hyundai_phone_id = veda_hyundai_PHONE_NUMBER_ID
                         mahindra_phone_id = mahindra_PHONE_NUMBER_ID
+                        rk_voyagers_phone_id = rk_voyagers_PHONE_NUMBER_ID
                         
                         if gigatel_phone_id and phone_number_id == gigatel_phone_id:
                             logger.info("[Webhook] Routing message to Gigatel Bot")
@@ -742,6 +745,9 @@ class WhatsAppWebhookView(APIView):
                         elif mahindra_phone_id and phone_number_id == mahindra_phone_id:
                             logger.info("[Webhook] Routing message to Mahindra Bot")
                             handle_mahindra_message(msg)
+                        elif rk_voyagers_phone_id and phone_number_id == rk_voyagers_phone_id:
+                            logger.info("[Webhook] Routing message to RK Voyagers Bot")
+                            handle_rk_voyagers_message(msg)
                         elif phone_number_id == "1168578376348442":
                             logger.info(f"[Webhook] Saving message for disabled bot number {phone_number_id}")
 
