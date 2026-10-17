@@ -425,6 +425,14 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         td["engineer_phone"] = engineer_info["phone"] if engineer_info else ""
         session.ticket_data = td
         
+        # Maintain history of all tickets generated in this conversation
+        th = session.ticket_history or []
+        if not isinstance(th, list):
+            th = []
+        if ticket_no and ticket_no not in th:
+            th.append(ticket_no)
+        session.ticket_history = th
+        
         # Mark conversation as confirmed → CRM shows as Lead
         conv_obj.status = "confirmed"
         session.save()  # saves bot_state, bot_metadata, AND status together
@@ -567,27 +575,53 @@ class IceMakeDataAPIView(APIView):
             registered_mobile = td.get("mobile", "")
             customer_name = td.get("name", "")
 
-            # Fallback: extract from messages if missing
-            if not ticket_no or not assigned_engineer:
-                import re
-                for msg in reversed(list(conv.messages.all())):
-                    if msg.direction == "outbound" and "TEMPLATE: ICEMAKE" in (msg.content or "").upper():
-                        content_str = msg.content or ""
-                        if not ticket_no:
-                            t_match = re.search(r'Ticket\s*:\s*([A-Za-z0-9]+)', content_str)
-                            if not t_match:
-                                t_match = re.search(r'Complaint Number:\s*\*?([A-Za-z0-9]+)\*?', content_str)
-                            if t_match: ticket_no = t_match.group(1).strip()
-                        if not assigned_engineer:
-                            e_match = re.search(r'Assigned Engineer:\s*([^\n]+)', content_str)
-                            if e_match: assigned_engineer = e_match.group(1).strip()
-                        if not registered_mobile:
-                            m_match = re.search(r'Customer Mobile:\s*([^\n]+)', content_str)
-                            if m_match: registered_mobile = m_match.group(1).strip()
-                        if not customer_name:
-                            n_match = re.search(r'Customer Name:\s*([^\n]+)', content_str)
-                            if n_match: customer_name = n_match.group(1).strip()
-                        
+            # Extract all tickets generated across the entire conversation (latest first)
+            import re
+            extracted_tickets = []
+            
+            # 1. From stored session ticket_history if available
+            stored_th = bot_meta.get("ticket_history", [])
+            if isinstance(stored_th, list):
+                for t in reversed(stored_th):
+                    if t and t not in extracted_tickets:
+                        extracted_tickets.append(str(t).strip())
+
+            # 2. Check latest ticket from ticket_data
+            if ticket_no and ticket_no not in extracted_tickets:
+                extracted_tickets.insert(0, str(ticket_no).strip())
+
+            # 3. Read prefetched messages (already in memory via prefetch_related, 0 extra DB query)
+            all_msgs = list(conv.messages.all())
+
+            # Scan messages from latest to oldest for all tickets
+            for msg in reversed(all_msgs):
+                content_str = msg.content or ""
+                # Check for ticket patterns (WC... or Complaint Number: ...)
+                found_tids = re.findall(r'(?:Ticket\s*:\s*|Complaint Number:\s*\*?|(?:^|\b))(WC\d+)', content_str, re.IGNORECASE)
+                for tid in found_tids:
+                    tid_clean = tid.strip()
+                    if tid_clean and tid_clean not in extracted_tickets:
+                        extracted_tickets.append(tid_clean)
+                
+                # Fallback extraction for engineer, mobile, name if missing
+                if msg.direction == "outbound" and "TEMPLATE: ICEMAKE" in content_str.upper():
+                    if not assigned_engineer:
+                        e_match = re.search(r'Assigned Engineer:\s*([^\n]+)', content_str)
+                        if e_match: assigned_engineer = e_match.group(1).strip()
+                    if not registered_mobile:
+                        m_match = re.search(r'Customer Mobile:\s*([^\n]+)', content_str)
+                        if m_match: registered_mobile = m_match.group(1).strip()
+                    if not customer_name:
+                        n_match = re.search(r'Customer Name:\s*([^\n]+)', content_str)
+                        if n_match: customer_name = n_match.group(1).strip()
+
+            # Ensure latest ticket is at the top / first
+            if extracted_tickets:
+                # Primary ticket_no as formatted listout (latest first)
+                ticket_no_display = ", ".join(extracted_tickets)
+            else:
+                ticket_no_display = ticket_no
+
             conv_data = {
                 "id": conv.id,
                 "status": conv.status,
@@ -599,7 +633,9 @@ class IceMakeDataAPIView(APIView):
                     "whatsapp_number": conv.customer.phone if conv.customer else "",
                 },
                 "ticket_data": {
-                    "ticket_no": ticket_no,
+                    "ticket_no": ticket_no_display,
+                    "tickets": extracted_tickets,
+                    "latest_ticket_no": extracted_tickets[0] if extracted_tickets else ticket_no,
                     "name": customer_name,
                     "registered_mobile": registered_mobile,
                     "city": td.get("city", ""),
@@ -613,7 +649,7 @@ class IceMakeDataAPIView(APIView):
                 "messages": []
             }
 
-            for msg in conv.messages.all():
+            for msg in all_msgs:
                 conv_data["messages"].append({
                     "id": msg.id,
                     "direction": msg.direction,
