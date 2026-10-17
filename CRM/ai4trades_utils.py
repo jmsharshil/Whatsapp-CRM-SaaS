@@ -3,6 +3,7 @@ import logging
 import os
 import requests
 import io
+import re
 from django.conf import settings
 from openai import AzureOpenAI
 
@@ -67,11 +68,12 @@ def get_azure_openai_client():
 # ─────────────────────────────────────────────────────────────
 # Meta WhatsApp API Dispatcher
 # ─────────────────────────────────────────────────────────────
-def _meta_post_ai4trades(payload: dict) -> bool:
+def _meta_post_ai4trades(payload: dict, customer_obj=None, conv_obj=None, client_account_obj=None) -> bool:
     ai4trades_phone_id = getattr(settings, 'AI4TRADES_PHONE_NUMBER_ID', AI4TRADES_PHONE_NUMBER_ID)
     
-    from CRM.models import ClientAccount
-    client_account_obj = ClientAccount.objects.filter(phone_number_id=ai4trades_phone_id).first()
+    from CRM.models import ClientAccount, Customer, Conversation, Message
+    if not client_account_obj:
+        client_account_obj = ClientAccount.objects.filter(phone_number_id=ai4trades_phone_id).first()
     token = client_account_obj.access_token if (client_account_obj and client_account_obj.access_token) else getattr(settings, "META_PERMANENT_TOKEN", "")
     
     url = META_SEND_URL.format(phone_id=ai4trades_phone_id)
@@ -88,7 +90,7 @@ def _meta_post_ai4trades(payload: dict) -> bool:
 
         logger.info("[ai4trades] Meta API success: %s", r.text)
 
-        # Save outbound message to DB
+        # Save outbound message to DB under the EXACT same conversation and customer
         try:
             resp_data = r.json()
             meta_id = ""
@@ -112,13 +114,28 @@ def _meta_post_ai4trades(payload: dict) -> bool:
             else:
                 content = f"[{msg_type.capitalize()}]"
 
-            from CRM.models import Customer, Conversation, Message
-            customer_obj, _ = Customer.objects.get_or_create(phone=to_number, defaults={'name': to_number})
-            conv_obj, _ = Conversation.objects.get_or_create(
-                customer=customer_obj,
-                phone_number_id=ai4trades_phone_id,
-                defaults={'client': client_account_obj}
-            )
+            if not customer_obj:
+                # Find matching customer regardless of + prefix
+                clean_phone = to_number.lstrip('+')
+                customer_obj = Customer.objects.filter(phone__in=[clean_phone, f"+{clean_phone}"]).first()
+                if not customer_obj:
+                    customer_obj, _ = Customer.objects.get_or_create(phone=f"+{clean_phone}", defaults={'name': to_number})
+
+            if not conv_obj:
+                conv_obj = Conversation.objects.filter(
+                    customer=customer_obj,
+                    phone_number_id=ai4trades_phone_id
+                ).first()
+                if not conv_obj:
+                    conv_obj, _ = Conversation.objects.get_or_create(
+                        customer=customer_obj,
+                        phone_number_id=ai4trades_phone_id,
+                        defaults={'client': client_account_obj}
+                    )
+
+            if client_account_obj and not conv_obj.client:
+                conv_obj.client = client_account_obj
+                conv_obj.save(update_fields=['client'])
 
             db_msg_type = msg_type if msg_type in ['text', 'template', 'image', 'document', 'video'] else 'text'
 
@@ -142,7 +159,7 @@ def _meta_post_ai4trades(payload: dict) -> bool:
         return False
 
 
-def send_ai4trades_text(to: str, text: str) -> bool:
+def send_ai4trades_text(to: str, text: str, customer_obj=None, conv_obj=None, client_account_obj=None) -> bool:
     """Send normal text message."""
     to_clean = to.lstrip('+')
     payload = {
@@ -155,10 +172,10 @@ def send_ai4trades_text(to: str, text: str) -> bool:
             "body": text
         }
     }
-    return _meta_post_ai4trades(payload)
+    return _meta_post_ai4trades(payload, customer_obj=customer_obj, conv_obj=conv_obj, client_account_obj=client_account_obj)
 
 
-def send_ai4trades_welcome_template(to: str) -> bool:
+def send_ai4trades_welcome_template(to: str, customer_obj=None, conv_obj=None, client_account_obj=None) -> bool:
     """Send Meta WhatsApp approved 'welcome' template."""
     return _meta_post_ai4trades({
         "messaging_product": "whatsapp",
@@ -169,7 +186,7 @@ def send_ai4trades_welcome_template(to: str) -> bool:
             "name": "welcome",
             "language": {"code": "en"}
         }
-    })
+    }, customer_obj=customer_obj, conv_obj=conv_obj, client_account_obj=client_account_obj)
 
 
 def send_ai4trades_otp_template(to: str, otp_code: str) -> bool:
@@ -376,6 +393,18 @@ STRICT COMPLIANCE RULES (MANDATORY):
             temperature=0.3
         )
         answer = response.choices[0].message.content.strip()
+        
+        # Format markdown for clean WhatsApp rendering
+        # 1. Replace markdown headers ### or ## with *bold*
+        answer = re.sub(r'^(?:#{1,6})\s*(.+)$', r'*\1*', answer, flags=re.MULTILINE)
+        # 2. Replace markdown double asterisks **text** with single asterisks *text*
+        answer = re.sub(r'\*\*(.*?)\*\*', r'*\1*', answer)
+        # 3. Clean up awkward bullets like "· 📊 *Title*" or "* ·" into clean "• "
+        answer = re.sub(r'^[ \t]*[•·\-*]\s*(?=[•·\-*])', '', answer, flags=re.MULTILINE)
+        answer = re.sub(r'^[ \t]*[-*]\s+', r'• ', answer, flags=re.MULTILINE)
+        # 4. Clean up consecutive blank lines
+        answer = re.sub(r'\n{3,}', '\n\n', answer).strip()
+        
         return answer
     except Exception as e:
         logger.error("[ai4trades] LLM error: %s", e)

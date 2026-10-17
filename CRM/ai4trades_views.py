@@ -158,6 +158,9 @@ def handle_ai4trades_message(msg: dict, contact: dict = None):
         phone_number_id=ai4trades_phone_id, 
         defaults={'client': client_account_obj}
     )
+    if client_account_obj and not conv_obj.client:
+        conv_obj.client = client_account_obj
+        conv_obj.save(update_fields=['client'])
     inbound_message = Message.objects.create(
         conversation=conv_obj,
         client=client_account_obj,
@@ -182,12 +185,20 @@ def handle_ai4trades_message(msg: dict, contact: dict = None):
     # 1. First interaction: send Meta welcome template
     if is_initial_interaction:
         logger.info("[ai4trades] First message from %s. Sending welcome template...", number)
-        sent = send_ai4trades_welcome_template(to=number)
+        sent = send_ai4trades_welcome_template(
+            to=number,
+            customer_obj=customer_obj,
+            conv_obj=conv_obj,
+            client_account_obj=client_account_obj
+        )
         if not sent:
             logger.warning("[ai4trades] Welcome template failed to send. Sending fallback welcome text.")
             send_ai4trades_text(
                 to=number,
-                text="👋 *Welcome to AI4Trades!*\n\nHow can we help you today? Please feel free to ask any questions or queries regarding our services!"
+                text="👋 *Welcome to AI4Trades!*\n\nHow can we help you today? Please feel free to ask any questions or queries regarding our services!",
+                customer_obj=customer_obj,
+                conv_obj=conv_obj,
+                client_account_obj=client_account_obj
             )
         
         conv_obj.bot_state = "AWAITING_QUERY"
@@ -215,8 +226,14 @@ def handle_ai4trades_message(msg: dict, contact: dict = None):
         conversation_history=chat_history
     )
 
-    # Send the AI answer back to WhatsApp
-    send_ai4trades_text(to=number, text=ai_answer)
+    # Send the AI answer back to WhatsApp (saved to same conversation as outbound)
+    send_ai4trades_text(
+        to=number,
+        text=ai_answer,
+        customer_obj=customer_obj,
+        conv_obj=conv_obj,
+        client_account_obj=client_account_obj
+    )
 
 
 # ─────────────────────────────────────────────────────────────
