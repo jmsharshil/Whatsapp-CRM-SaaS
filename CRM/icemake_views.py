@@ -575,80 +575,85 @@ class IceMakeDataAPIView(APIView):
             registered_mobile = td.get("mobile", "")
             customer_name = td.get("name", "")
 
-            # Extract all tickets generated across the entire conversation (latest first)
+            # Extract all distinct tickets with their specific details from messages
             import re
-            extracted_tickets = []
-            
-            # 1. From stored session ticket_history if available
-            stored_th = bot_meta.get("ticket_history", [])
-            if isinstance(stored_th, list):
-                for t in reversed(stored_th):
-                    if t and t not in extracted_tickets:
-                        extracted_tickets.append(str(t).strip())
-
-            # 2. Check latest ticket from ticket_data
-            if ticket_no and ticket_no not in extracted_tickets:
-                extracted_tickets.insert(0, str(ticket_no).strip())
-
-            # 3. Read prefetched messages (already in memory via prefetch_related, 0 extra DB query)
             all_msgs = list(conv.messages.all())
 
-            # Scan messages from latest to oldest for all tickets
-            for msg in reversed(all_msgs):
-                content_str = msg.content or ""
-                # Check for ticket patterns (WC... or Complaint Number: ...)
-                found_tids = re.findall(r'(?:Ticket\s*:\s*|Complaint Number:\s*\*?|(?:^|\b))(WC\d+)', content_str, re.IGNORECASE)
-                for tid in found_tids:
-                    tid_clean = tid.strip()
-                    if tid_clean and tid_clean not in extracted_tickets:
-                        extracted_tickets.append(tid_clean)
-                
-                # Fallback extraction for engineer, mobile, name if missing
-                if msg.direction == "outbound" and "TEMPLATE: ICEMAKE" in content_str.upper():
-                    if not assigned_engineer:
-                        e_match = re.search(r'Assigned Engineer:\s*([^\n]+)', content_str)
-                        if e_match: assigned_engineer = e_match.group(1).strip()
-                    if not registered_mobile:
-                        m_match = re.search(r'Customer Mobile:\s*([^\n]+)', content_str)
-                        if m_match: registered_mobile = m_match.group(1).strip()
-                    if not customer_name:
-                        n_match = re.search(r'Customer Name:\s*([^\n]+)', content_str)
-                        if n_match: customer_name = n_match.group(1).strip()
+            # Map ticket_no -> ticket details
+            tickets_detail_map = {}
 
-            # Ensure latest ticket is at the top / first
-            if extracted_tickets:
-                # Primary ticket_no as formatted listout (latest first)
-                ticket_no_display = ", ".join(extracted_tickets)
-            else:
-                ticket_no_display = ticket_no
-
-            conv_data = {
-                "id": conv.id,
-                "status": conv.status,
-                "bot_state": conv.bot_state,
-                "stage": stage,
-                "created_at": conv.created_at.astimezone(ist_tz).isoformat() if conv.created_at else None,
-                "customer": {
-                    "name": conv.customer.name if conv.customer else "",
-                    "whatsapp_number": conv.customer.phone if conv.customer else "",
-                },
-                "ticket_data": {
-                    "ticket_no": ticket_no_display,
-                    "name": customer_name,
-                    "registered_mobile": registered_mobile,
-                    "city": td.get("city", ""),
-                    "state": td.get("state", ""),
-                    "pincode": td.get("pincode", ""),
-                    "complaint_type": td.get("complaint_type", ""),
-                    "issue_desc": td.get("issue_desc", ""),
-                    "assigned_engineer": assigned_engineer,
-                    "engineer_phone": td.get("engineer_phone", ""),
-                },
-                "messages": []
-            }
-
+            # Scan messages to extract ticket details from engineer notifications or customer confirmations
             for msg in all_msgs:
-                conv_data["messages"].append({
+                content_str = msg.content or ""
+                # Look for ticket in message
+                t_match = re.search(r'(?:Ticket\s*:\s*|Complaint Number:\s*\*?|(?:^|\b))(WC\d+)', content_str, re.IGNORECASE)
+                if t_match:
+                    tid = t_match.group(1).strip()
+                    if tid not in tickets_detail_map:
+                        tickets_detail_map[tid] = {
+                            "ticket_no": tid,
+                            "name": "",
+                            "registered_mobile": "",
+                            "city": "",
+                            "state": "",
+                            "pincode": "",
+                            "complaint_type": "",
+                            "issue_desc": "",
+                            "assigned_engineer": "",
+                            "engineer_phone": "",
+                            "created_at": msg.timestamp.astimezone(ist_tz).isoformat() if msg.timestamp else None,
+                        }
+                    
+                    # If this is the engineer template, it has full complaint snapshot for this specific ticket
+                    if "TEMPLATE: ICEMAKE" in content_str.upper() or "Assigned Engineer:" in content_str:
+                        eng_match = re.search(r'Assigned Engineer:\s*([^\n]+)', content_str)
+                        if eng_match: tickets_detail_map[tid]["assigned_engineer"] = eng_match.group(1).strip()
+
+                        cust_match = re.search(r'Customer Name:\s*([^\n]+)', content_str)
+                        if cust_match: tickets_detail_map[tid]["name"] = cust_match.group(1).strip()
+
+                        mob_match = re.search(r'Customer Mobile:\s*([^\n]+)', content_str)
+                        if mob_match: tickets_detail_map[tid]["registered_mobile"] = mob_match.group(1).strip()
+
+                        cs_match = re.search(r'City / State:\s*([^\n]+)', content_str)
+                        if cs_match:
+                            cs_val = cs_match.group(1).strip()
+                            parts = cs_val.split("/")
+                            tickets_detail_map[tid]["city"] = parts[0].strip() if len(parts) > 0 else ""
+                            tickets_detail_map[tid]["state"] = parts[1].strip() if len(parts) > 1 else ""
+
+                        iss_match = re.search(r'Issue Type:\s*([^\n]+)', content_str)
+                        if iss_match: tickets_detail_map[tid]["complaint_type"] = iss_match.group(1).strip()
+
+                        desc_match = re.search(r'Issue Description:\s*([^\n]+)', content_str)
+                        if desc_match: tickets_detail_map[tid]["issue_desc"] = desc_match.group(1).strip()
+
+            # Include current ticket from session ticket_data if present
+            current_tid = td.get("ticket_no")
+            if current_tid:
+                if current_tid not in tickets_detail_map:
+                    tickets_detail_map[current_tid] = {
+                        "ticket_no": current_tid,
+                        "name": customer_name,
+                        "registered_mobile": registered_mobile,
+                        "city": td.get("city", ""),
+                        "state": td.get("state", ""),
+                        "pincode": td.get("pincode", ""),
+                        "complaint_type": td.get("complaint_type", ""),
+                        "issue_desc": td.get("issue_desc", ""),
+                        "assigned_engineer": assigned_engineer,
+                        "engineer_phone": td.get("engineer_phone", ""),
+                        "created_at": conv.created_at.astimezone(ist_tz).isoformat() if conv.created_at else None,
+                    }
+                else:
+                    # Fill any missing details from td
+                    for k in ["name", "registered_mobile", "city", "state", "pincode", "complaint_type", "issue_desc", "assigned_engineer", "engineer_phone"]:
+                        if not tickets_detail_map[current_tid].get(k):
+                            tickets_detail_map[current_tid][k] = td.get(k, "") or (customer_name if k == "name" else (assigned_engineer if k == "assigned_engineer" else ""))
+
+            # Format common messages payload once
+            formatted_messages = [
+                {
                     "id": msg.id,
                     "direction": msg.direction,
                     "type": msg.message_type,
@@ -656,9 +661,75 @@ class IceMakeDataAPIView(APIView):
                     "status": msg.status,
                     "timestamp": msg.timestamp.astimezone(ist_tz).isoformat() if msg.timestamp else None,
                     "meta_message_id": msg.meta_message_id,
-                })
+                }
+                for msg in all_msgs
+            ]
 
-            conversations_data.append(conv_data)
+            # If tickets exist, create a separate row/entry for each ticket (latest first)
+            if tickets_detail_map:
+                # Sort tickets newest first
+                sorted_tickets = sorted(
+                    tickets_detail_map.values(),
+                    key=lambda x: (x.get("created_at") or "", x.get("ticket_no") or ""),
+                    reverse=True
+                )
+
+                for item in sorted_tickets:
+                    t_tid = item["ticket_no"]
+                    conv_data = {
+                        "id": f"{conv.id}_{t_tid}",
+                        "conversation_id": conv.id,
+                        "status": conv.status,
+                        "bot_state": conv.bot_state,
+                        "stage": stage,
+                        "created_at": item.get("created_at") or (conv.created_at.astimezone(ist_tz).isoformat() if conv.created_at else None),
+                        "customer": {
+                            "name": conv.customer.name if conv.customer else "",
+                            "whatsapp_number": conv.customer.phone if conv.customer else "",
+                        },
+                        "ticket_data": {
+                            "ticket_no": t_tid,
+                            "name": item.get("name") or customer_name,
+                            "registered_mobile": item.get("registered_mobile") or registered_mobile,
+                            "city": item.get("city") or td.get("city", ""),
+                            "state": item.get("state") or td.get("state", ""),
+                            "pincode": item.get("pincode") or td.get("pincode", ""),
+                            "complaint_type": item.get("complaint_type") or td.get("complaint_type", ""),
+                            "issue_desc": item.get("issue_desc") or td.get("issue_desc", ""),
+                            "assigned_engineer": item.get("assigned_engineer") or assigned_engineer,
+                            "engineer_phone": item.get("engineer_phone") or td.get("engineer_phone", ""),
+                        },
+                        "messages": formatted_messages
+                    }
+                    conversations_data.append(conv_data)
+            else:
+                # No ticket generated yet (conversation in-progress)
+                conv_data = {
+                    "id": conv.id,
+                    "conversation_id": conv.id,
+                    "status": conv.status,
+                    "bot_state": conv.bot_state,
+                    "stage": stage,
+                    "created_at": conv.created_at.astimezone(ist_tz).isoformat() if conv.created_at else None,
+                    "customer": {
+                        "name": conv.customer.name if conv.customer else "",
+                        "whatsapp_number": conv.customer.phone if conv.customer else "",
+                    },
+                    "ticket_data": {
+                        "ticket_no": "",
+                        "name": customer_name,
+                        "registered_mobile": registered_mobile,
+                        "city": td.get("city", ""),
+                        "state": td.get("state", ""),
+                        "pincode": td.get("pincode", ""),
+                        "complaint_type": td.get("complaint_type", ""),
+                        "issue_desc": td.get("issue_desc", ""),
+                        "assigned_engineer": assigned_engineer,
+                        "engineer_phone": td.get("engineer_phone", ""),
+                    },
+                    "messages": formatted_messages
+                }
+                conversations_data.append(conv_data)
 
         return Response({
             "client": {
