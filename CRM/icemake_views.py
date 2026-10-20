@@ -369,6 +369,40 @@ def handle_icemake_message(msg: dict, contact: dict = None):
             description=(td.get("issue_desc", "No description provided") or "No description provided").replace('\n', ' '),
             assigned_engineer=(engineer_info["name"] or "Support Team").replace('\n', ' ')
         )
+
+        # Record this outgoing alert in the Engineer's Conversation so it jumps to the top of the list
+        try:
+            eng_raw_phone = engineer_info.get("phone", "")
+            if eng_raw_phone:
+                eng_cust, _ = get_or_create_icemake_customer(
+                    eng_raw_phone,
+                    default_name=engineer_info.get("name", "Service Engineer")
+                )
+                eng_conv, _ = Conversation.objects.get_or_create(
+                    customer=eng_cust,
+                    phone_number_id=ICEMAKE_PHONE_NUMBER_ID,
+                    defaults={'client': client_account_obj}
+                )
+                alert_text = (
+                    f"Ticket: {ticket_no or '-'}\n"
+                    f"Customer Name: {(td.get('name', 'Customer') or 'Customer').replace(chr(10), ' ')}\n"
+                    f"Customer Mobile: {(td.get('mobile', number) or number).replace(chr(10), ' ')}\n"
+                    f"City / State: {(city_state or '-').replace(chr(10), ' ')}\n"
+                    f"Issue Type: {(issue_type or '-').replace(chr(10), ' ')}\n"
+                    f"Description: {(td.get('issue_desc', 'No description provided') or 'No description provided').replace(chr(10), ' ')}\n"
+                    f"Assigned Engineer: {(engineer_info['name'] or 'Support Team').replace(chr(10), ' ')}"
+                )
+                Message.objects.create(
+                    conversation=eng_conv,
+                    client=client_account_obj,
+                    customer=eng_cust,
+                    direction="outbound",
+                    message_type="template",
+                    content=alert_text,
+                    status="delivered"
+                )
+        except Exception as e:
+            logger.warning("[IceMake] Failed to record outbound alert in engineer conversation: %s", e)
         
         session.state = "TICKET_GENERATED"
         # Save ticket and engineer details back into the session data
@@ -515,13 +549,17 @@ class IceMakeDataAPIView(APIView):
             eng_phones_10 = set()
             engineer_phones = set()
             engineer_names = set()
+            engineer_name_lookup = {}
             for info in STATE_ENGINEER_MAPPING.values():
                 if isinstance(info, dict):
                     p_raw = re.sub(r"[^\d]", "", str(info.get("phone", "")))
                     if len(p_raw) >= 10:
-                        eng_phones_10.add(p_raw[-10:])
-                        engineer_phones.add(p_raw[-10:])
-                        engineer_phones.add(f"91{p_raw[-10:]}")
+                        p10 = p_raw[-10:]
+                        eng_phones_10.add(p10)
+                        engineer_phones.add(p10)
+                        engineer_phones.add(f"91{p10}")
+                        if info.get("name"):
+                            engineer_name_lookup[p10] = info["name"]
                     nm = (info.get("name") or "").strip().lower()
                     if nm:
                         engineer_names.add(nm)
@@ -652,6 +690,7 @@ class IceMakeDataAPIView(APIView):
 
                 # Case 1: Engineer conversation -> strictly ONE single row showing latest activity
                 if is_engineer_conv:
+                    eng_name = engineer_name_lookup.get(cust_phone_10) or (conv.customer.name if conv.customer else "") or assigned_engineer or "Service Engineer"
                     latest_ticket_data = {
                         "ticket_no": ticket_no,
                         "name": customer_name,
@@ -661,7 +700,7 @@ class IceMakeDataAPIView(APIView):
                         "pincode": td.get("pincode", ""),
                         "complaint_type": td.get("complaint_type", ""),
                         "issue_desc": td.get("issue_desc", ""),
-                        "assigned_engineer": assigned_engineer or (conv.customer.name if conv.customer else ""),
+                        "assigned_engineer": eng_name,
                         "engineer_phone": cust_phone,
                     }
                     # Parse latest ticket alert sent to this engineer
@@ -693,12 +732,23 @@ class IceMakeDataAPIView(APIView):
                                     latest_ticket_data["assigned_engineer"] = eng_val
                             break
 
-                    conversations_data.append(build_conv_item(
+                    eng_conv_item = build_conv_item(
                         item_id=conv.id,
                         item_ticket_no=latest_ticket_data["ticket_no"],
                         t_info=latest_ticket_data,
                         created_iso=conv_created_iso
-                    ))
+                    )
+                    # For Engineer row: make sure chat participant reflects the Engineer
+                    eng_conv_item["customer_name"] = f"{eng_name} (Service Engineer)"
+                    eng_conv_item["customer_phone"] = cust_phone
+                    eng_conv_item["customer"] = {
+                        "name": f"{eng_name} (Service Engineer)",
+                        "whatsapp_number": cust_phone,
+                    }
+                    eng_conv_item["ticket_customer_name"] = latest_ticket_data.get("name") or customer_name
+                    eng_conv_item["ticket_customer_phone"] = latest_ticket_data.get("registered_mobile") or registered_mobile
+
+                    conversations_data.append(eng_conv_item)
                     continue
 
                 # Case 2: Regular Customer conversation -> extract distinct customer tickets
