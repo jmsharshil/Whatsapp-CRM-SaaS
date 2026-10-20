@@ -718,17 +718,33 @@ class IceMakeDataAPIView(APIView):
                                 parts = cs_match.group(1).split("/")
                                 latest_ticket_data["city"] = parts[0].strip() if len(parts) > 0 else ""
                                 latest_ticket_data["state"] = parts[1].strip() if len(parts) > 1 else ""
+                            
+                            # In templates:
+                            # 🏠 Address: <Product Category / Address>
+                            # ⚙️ Product (Name|Issue): <Product issue description / Name>
+                            # 🛠️ Issue Type: <Assigned Engineer / Issue type>
+                            # 📝 Description: <Description>
+                            addr_match = re.search(r'🏠\s*Address:\s*([^\n]+)', c_str)
                             p_match = re.search(r'(?:⚙️\s*Product (?:Name|Issue)|Issue Type):\s*([^\n]+)', c_str)
-                            if p_match: latest_ticket_data["complaint_type"] = p_match.group(1).strip()
                             d_match = re.search(r'(?:📝\s*Description|Issue Description):\s*([^\n]+)', c_str)
-                            if d_match:
-                                desc_val = d_match.group(1).strip()
-                                if not desc_val.startswith("{{"):
-                                    latest_ticket_data["issue_desc"] = desc_val
-                            eng_match = re.search(r'Assigned Engineer:\s*([^\n]+)', c_str)
+
+                            product_category = addr_match.group(1).strip() if addr_match else ""
+                            product_issue = p_match.group(1).strip() if p_match else ""
+                            raw_desc = d_match.group(1).strip() if d_match else ""
+                            if raw_desc.startswith("{{"):
+                                raw_desc = ""
+
+                            if product_category and product_category.lower() not in ["none", "-"]:
+                                latest_ticket_data["complaint_type"] = product_category
+                                latest_ticket_data["issue_desc"] = product_issue or raw_desc
+                            else:
+                                latest_ticket_data["complaint_type"] = product_issue
+                                latest_ticket_data["issue_desc"] = raw_desc
+
+                            eng_match = re.search(r'(?:Assigned Engineer|🛠️\s*Issue Type):\s*([^\n]+)', c_str)
                             if eng_match:
                                 eng_val = eng_match.group(1).strip()
-                                if not eng_val.startswith("{{"):
+                                if not eng_val.startswith("{{") and eng_val.lower().startswith("mr"):
                                     latest_ticket_data["assigned_engineer"] = eng_val
                             break
 
@@ -839,6 +855,16 @@ class IceMakeDataAPIView(APIView):
                     )
                     for item in sorted_tickets:
                         t_tid = item["ticket_no"]
+                        if not item.get("assigned_engineer"):
+                            st_key = (item.get("state") or td.get("state") or "").strip().lower()
+                            if st_key in STATE_ENGINEER_MAPPING:
+                                item["assigned_engineer"] = STATE_ENGINEER_MAPPING[st_key].get("name", "")
+                                if not item.get("engineer_phone"):
+                                    item["engineer_phone"] = STATE_ENGINEER_MAPPING[st_key].get("phone", "")
+                            elif "gujarat" in st_key or "gj" in st_key:
+                                item["assigned_engineer"] = "Mr Rutvik"
+                                item["engineer_phone"] = "919727721447"
+
                         conversations_data.append(build_conv_item(
                             item_id=f"{conv.id}_{t_tid}",
                             item_ticket_no=t_tid,
