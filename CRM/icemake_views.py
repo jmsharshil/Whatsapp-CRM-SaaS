@@ -557,6 +557,13 @@ class IceMakeDataAPIView(APIView):
         import datetime
         ist_tz = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
 
+        # Set of engineer phone numbers to identify engineer conversations
+        engineer_phones = {
+            info["phone"].strip() 
+            for info in STATE_ENGINEER_MAPPING.values() 
+            if isinstance(info, dict) and info.get("phone")
+        }
+
         conversations_data = []
         for conv in page.object_list:
             bot_meta = conv.bot_metadata if isinstance(conv.bot_metadata, dict) else {}
@@ -575,18 +582,93 @@ class IceMakeDataAPIView(APIView):
             registered_mobile = td.get("mobile", "")
             customer_name = td.get("name", "")
 
-            # Extract all distinct tickets with their specific details from messages
+            cust_phone = (conv.customer.phone or "").strip() if conv.customer else ""
+            is_engineer_conv = (cust_phone in engineer_phones)
+
             import re
             all_msgs = list(conv.messages.all())
 
-            # Map ticket_no -> ticket details
+            # Format common messages payload once
+            formatted_messages = [
+                {
+                    "id": msg.id,
+                    "direction": msg.direction,
+                    "type": msg.message_type,
+                    "content": msg.content,
+                    "status": msg.status,
+                    "timestamp": msg.timestamp.astimezone(ist_tz).isoformat() if msg.timestamp else None,
+                    "meta_message_id": msg.meta_message_id,
+                }
+                for msg in all_msgs
+            ]
+
+            # Case 1: Engineer's conversation -> keep as ONE single entry showing latest activity
+            if is_engineer_conv:
+                # Find the latest ticket alert sent to this engineer
+                latest_ticket_data = {
+                    "ticket_no": ticket_no,
+                    "name": customer_name,
+                    "registered_mobile": registered_mobile,
+                    "city": td.get("city", ""),
+                    "state": td.get("state", ""),
+                    "pincode": td.get("pincode", ""),
+                    "complaint_type": td.get("complaint_type", ""),
+                    "issue_desc": td.get("issue_desc", ""),
+                    "assigned_engineer": assigned_engineer,
+                    "engineer_phone": td.get("engineer_phone", ""),
+                }
+                # Check recent messages for the most recent ticket details
+                for msg in reversed(all_msgs):
+                    c_str = msg.content or ""
+                    t_match = re.search(r'Ticket\s*:\s*(WC\d+|C\d+)', c_str, re.IGNORECASE)
+                    if t_match:
+                        latest_ticket_data["ticket_no"] = t_match.group(1).strip()
+                        c_name = re.search(r'Customer Name:\s*([^\n]+)', c_str)
+                        if c_name: latest_ticket_data["name"] = c_name.group(1).strip()
+                        c_mob = re.search(r'Customer Mobile:\s*([^\n]+)', c_str)
+                        if c_mob: latest_ticket_data["registered_mobile"] = c_mob.group(1).strip()
+                        cs_match = re.search(r'City / State:\s*([^\n]+)', c_str)
+                        if cs_match:
+                            parts = cs_match.group(1).split("/")
+                            latest_ticket_data["city"] = parts[0].strip() if len(parts) > 0 else ""
+                            latest_ticket_data["state"] = parts[1].strip() if len(parts) > 1 else ""
+                        p_match = re.search(r'(?:⚙️\s*Product (?:Name|Issue)|Issue Type):\s*([^\n]+)', c_str)
+                        if p_match: latest_ticket_data["complaint_type"] = p_match.group(1).strip()
+                        d_match = re.search(r'(?:📝\s*Description|Issue Description):\s*([^\n]+)', c_str)
+                        if d_match:
+                            desc_val = d_match.group(1).strip()
+                            if not desc_val.startswith("{{"):
+                                latest_ticket_data["issue_desc"] = desc_val
+                        eng_match = re.search(r'Assigned Engineer:\s*([^\n]+)', c_str)
+                        if eng_match:
+                            eng_val = eng_match.group(1).strip()
+                            if not eng_val.startswith("{{"):
+                                latest_ticket_data["assigned_engineer"] = eng_val
+                        break
+
+                conv_data = {
+                    "id": conv.id,
+                    "conversation_id": conv.id,
+                    "status": conv.status,
+                    "bot_state": conv.bot_state,
+                    "stage": stage,
+                    "created_at": conv.created_at.astimezone(ist_tz).isoformat() if conv.created_at else None,
+                    "customer": {
+                        "name": conv.customer.name if conv.customer else "",
+                        "whatsapp_number": cust_phone,
+                    },
+                    "ticket_data": latest_ticket_data,
+                    "messages": formatted_messages
+                }
+                conversations_data.append(conv_data)
+                continue
+
+            # Case 2: Regular Customer conversation -> extract distinct customer tickets
             tickets_detail_map = {}
 
-            # Scan messages to extract ticket details from engineer notifications or customer confirmations
             for msg in all_msgs:
                 content_str = msg.content or ""
-                # Look for ticket in message
-                t_match = re.search(r'(?:Ticket\s*:\s*|Complaint Number:\s*\*?|(?:^|\b))(WC\d+)', content_str, re.IGNORECASE)
+                t_match = re.search(r'(?:Ticket\s*:\s*|Complaint Number:\s*\*?|(?:^|\b))(WC\d+|C\d+)', content_str, re.IGNORECASE)
                 if t_match:
                     tid = t_match.group(1).strip()
                     if tid not in tickets_detail_map:
@@ -603,11 +685,13 @@ class IceMakeDataAPIView(APIView):
                             "engineer_phone": "",
                             "created_at": msg.timestamp.astimezone(ist_tz).isoformat() if msg.timestamp else None,
                         }
-                    
-                    # If this is the engineer template, it has full complaint snapshot for this specific ticket
-                    if "TEMPLATE: ICEMAKE" in content_str.upper() or "Assigned Engineer:" in content_str:
+
+                    if "TEMPLATE: ICEMAKE" in content_str.upper() or "Assigned Engineer:" in content_str or "Customer Name:" in content_str:
                         eng_match = re.search(r'Assigned Engineer:\s*([^\n]+)', content_str)
-                        if eng_match: tickets_detail_map[tid]["assigned_engineer"] = eng_match.group(1).strip()
+                        if eng_match:
+                            eng_val = eng_match.group(1).strip()
+                            if not eng_val.startswith("{{"):
+                                tickets_detail_map[tid]["assigned_engineer"] = eng_val
 
                         cust_match = re.search(r'Customer Name:\s*([^\n]+)', content_str)
                         if cust_match: tickets_detail_map[tid]["name"] = cust_match.group(1).strip()
@@ -617,18 +701,20 @@ class IceMakeDataAPIView(APIView):
 
                         cs_match = re.search(r'City / State:\s*([^\n]+)', content_str)
                         if cs_match:
-                            cs_val = cs_match.group(1).strip()
-                            parts = cs_val.split("/")
+                            parts = cs_match.group(1).strip().split("/")
                             tickets_detail_map[tid]["city"] = parts[0].strip() if len(parts) > 0 else ""
                             tickets_detail_map[tid]["state"] = parts[1].strip() if len(parts) > 1 else ""
 
-                        iss_match = re.search(r'Issue Type:\s*([^\n]+)', content_str)
+                        iss_match = re.search(r'(?:⚙️\s*Product (?:Name|Issue)|Issue Type):\s*([^\n]+)', content_str)
                         if iss_match: tickets_detail_map[tid]["complaint_type"] = iss_match.group(1).strip()
 
-                        desc_match = re.search(r'Issue Description:\s*([^\n]+)', content_str)
-                        if desc_match: tickets_detail_map[tid]["issue_desc"] = desc_match.group(1).strip()
+                        desc_match = re.search(r'(?:📝\s*Description|Issue Description):\s*([^\n]+)', content_str)
+                        if desc_match:
+                            desc_val = desc_match.group(1).strip()
+                            if not desc_val.startswith("{{"):
+                                tickets_detail_map[tid]["issue_desc"] = desc_val
 
-            # Include current ticket from session ticket_data if present
+            # Current ticket from session ticket_data
             current_tid = td.get("ticket_no")
             if current_tid:
                 if current_tid not in tickets_detail_map:
@@ -646,28 +732,15 @@ class IceMakeDataAPIView(APIView):
                         "created_at": conv.created_at.astimezone(ist_tz).isoformat() if conv.created_at else None,
                     }
                 else:
-                    # Fill any missing details from td
+                    # Only fill in empty fields for the current ticket
                     for k in ["name", "registered_mobile", "city", "state", "pincode", "complaint_type", "issue_desc", "assigned_engineer", "engineer_phone"]:
                         if not tickets_detail_map[current_tid].get(k):
-                            tickets_detail_map[current_tid][k] = td.get(k, "") or (customer_name if k == "name" else (assigned_engineer if k == "assigned_engineer" else ""))
+                            val = td.get(k, "") or (customer_name if k == "name" else (assigned_engineer if k == "assigned_engineer" else ""))
+                            if val:
+                                tickets_detail_map[current_tid][k] = val
 
-            # Format common messages payload once
-            formatted_messages = [
-                {
-                    "id": msg.id,
-                    "direction": msg.direction,
-                    "type": msg.message_type,
-                    "content": msg.content,
-                    "status": msg.status,
-                    "timestamp": msg.timestamp.astimezone(ist_tz).isoformat() if msg.timestamp else None,
-                    "meta_message_id": msg.meta_message_id,
-                }
-                for msg in all_msgs
-            ]
-
-            # If tickets exist, create a separate row/entry for each ticket (latest first)
+            # If tickets exist, create a separate row/entry for each distinct ticket
             if tickets_detail_map:
-                # Sort tickets newest first
                 sorted_tickets = sorted(
                     tickets_detail_map.values(),
                     key=lambda x: (x.get("created_at") or "", x.get("ticket_no") or ""),
@@ -685,7 +758,7 @@ class IceMakeDataAPIView(APIView):
                         "created_at": item.get("created_at") or (conv.created_at.astimezone(ist_tz).isoformat() if conv.created_at else None),
                         "customer": {
                             "name": conv.customer.name if conv.customer else "",
-                            "whatsapp_number": conv.customer.phone if conv.customer else "",
+                            "whatsapp_number": cust_phone,
                         },
                         "ticket_data": {
                             "ticket_no": t_tid,
@@ -695,7 +768,7 @@ class IceMakeDataAPIView(APIView):
                             "state": item.get("state") or td.get("state", ""),
                             "pincode": item.get("pincode") or td.get("pincode", ""),
                             "complaint_type": item.get("complaint_type") or td.get("complaint_type", ""),
-                            "issue_desc": item.get("issue_desc") or td.get("issue_desc", ""),
+                            "issue_desc": item.get("issue_desc") or "",
                             "assigned_engineer": item.get("assigned_engineer") or assigned_engineer,
                             "engineer_phone": item.get("engineer_phone") or td.get("engineer_phone", ""),
                         },
@@ -703,7 +776,7 @@ class IceMakeDataAPIView(APIView):
                     }
                     conversations_data.append(conv_data)
             else:
-                # No ticket generated yet (conversation in-progress)
+                # In-progress conversation without ticket yet
                 conv_data = {
                     "id": conv.id,
                     "conversation_id": conv.id,
@@ -713,7 +786,7 @@ class IceMakeDataAPIView(APIView):
                     "created_at": conv.created_at.astimezone(ist_tz).isoformat() if conv.created_at else None,
                     "customer": {
                         "name": conv.customer.name if conv.customer else "",
-                        "whatsapp_number": conv.customer.phone if conv.customer else "",
+                        "whatsapp_number": cust_phone,
                     },
                     "ticket_data": {
                         "ticket_no": "",
