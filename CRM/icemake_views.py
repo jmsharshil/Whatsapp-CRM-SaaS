@@ -755,14 +755,23 @@ class IceMakeDataAPIView(APIView):
                         created_iso=conv_created_iso
                     )
                     # For Engineer row: make sure chat participant reflects the Engineer
-                    eng_conv_item["customer_name"] = f"{eng_name} (Service Engineer)"
+                    eng_title = f"{eng_name} (Service Engineer)"
+                    eng_conv_item["customer_name"] = eng_title
                     eng_conv_item["customer_phone"] = cust_phone
+                    eng_conv_item["registered_mobile"] = cust_phone
                     eng_conv_item["customer"] = {
-                        "name": f"{eng_name} (Service Engineer)",
+                        "name": eng_title,
                         "whatsapp_number": cust_phone,
                     }
                     eng_conv_item["ticket_customer_name"] = latest_ticket_data.get("name") or customer_name
                     eng_conv_item["ticket_customer_phone"] = latest_ticket_data.get("registered_mobile") or registered_mobile
+
+                    # Set ticket_data so that frontend dashboard DETAILS column renders the Engineer
+                    if "ticket_data" in eng_conv_item:
+                        eng_conv_item["ticket_data"]["name"] = eng_title
+                        eng_conv_item["ticket_data"]["registered_mobile"] = cust_phone
+                        eng_conv_item["ticket_data"]["customer_name"] = eng_conv_item["ticket_customer_name"]
+                        eng_conv_item["ticket_data"]["customer_phone"] = eng_conv_item["ticket_customer_phone"]
 
                     conversations_data.append(eng_conv_item)
                     continue
