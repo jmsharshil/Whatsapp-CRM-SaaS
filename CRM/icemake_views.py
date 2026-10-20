@@ -501,6 +501,7 @@ class IceMakeDataAPIView(APIView):
                 params["page"] = p
                 return f"{base_url}?{params.urlencode()}"
 
+            import re
             import datetime
             ist_tz = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
 
@@ -511,8 +512,38 @@ class IceMakeDataAPIView(APIView):
                 if isinstance(info, dict) and info.get("phone")
             }
 
-            conversations_data = []
+            # Deduplicate conversations by normalized phone number to merge +91 and 91 numbers
+            seen_clean_phones = {}
+            filtered_convs = []
             for conv in page.object_list:
+                raw_p = (conv.customer.phone or "").strip() if conv.customer else ""
+                clean_p = re.sub(r"[^\d]", "", raw_p)
+                if len(clean_p) == 10:
+                    clean_p = f"91{clean_p}"
+
+                if clean_p and clean_p in seen_clean_phones:
+                    # Append messages from secondary duplicate conversation into primary conversation
+                    primary_conv = seen_clean_phones[clean_p]
+                    if not hasattr(primary_conv, "_merged_messages"):
+                        primary_conv._merged_messages = list(primary_conv.messages.all())
+                    existing_msg_ids = {m.id for m in primary_conv._merged_messages}
+                    for extra_msg in conv.messages.all():
+                        if extra_msg.id not in existing_msg_ids:
+                            primary_conv._merged_messages.append(extra_msg)
+                            existing_msg_ids.add(extra_msg.id)
+                    # Use ticket_data if primary didn't have one
+                    c_td = conv.bot_metadata.get("ticket_data", {}) if isinstance(conv.bot_metadata, dict) else {}
+                    p_td = primary_conv.bot_metadata.get("ticket_data", {}) if isinstance(primary_conv.bot_metadata, dict) else {}
+                    if c_td and not p_td.get("ticket_no"):
+                        primary_conv.bot_metadata = conv.bot_metadata
+                else:
+                    conv._merged_messages = list(conv.messages.all())
+                    if clean_p:
+                        seen_clean_phones[clean_p] = conv
+                    filtered_convs.append(conv)
+
+            conversations_data = []
+            for conv in filtered_convs:
                 bot_meta = conv.bot_metadata if isinstance(conv.bot_metadata, dict) else {}
                 td = bot_meta.get("ticket_data", {}) or {}
 
@@ -536,8 +567,7 @@ class IceMakeDataAPIView(APIView):
 
                 is_engineer_conv = (clean_cust_phone in engineer_phones)
 
-                import re
-                all_msgs = list(conv.messages.all())
+                all_msgs = getattr(conv, "_merged_messages", list(conv.messages.all()))
 
                 # Format common messages payload once
                 formatted_messages = [
