@@ -112,7 +112,18 @@ def _meta_post_icemake(payload: dict) -> bool:
         try:
             to_phone = payload.get("to")
             if to_phone:
-                customer_obj, _ = Customer.objects.get_or_create(phone=to_phone, defaults={'name': to_phone})
+                from CRM.models import Customer, Conversation, ClientAccount
+                from CRM.META.webhook_views import _normalize_e164_phone
+                from django.db.models import Q
+                import re
+                e164 = _normalize_e164_phone(to_phone)
+                raw = str(to_phone or "").strip()
+                digits = re.sub(r"[^\d]", "", raw)
+
+                customer_obj = Customer.objects.filter(Q(phone=e164) | Q(phone=raw) | Q(phone=digits)).first()
+                if not customer_obj:
+                    customer_obj = Customer.objects.create(phone=e164 or raw, name=raw)
+
                 client_account_obj = ClientAccount.objects.filter(phone_number_id=ICEMAKE_PHONE_NUMBER_ID).first()
                 conv_obj, _ = Conversation.objects.get_or_create(
                     customer=customer_obj,

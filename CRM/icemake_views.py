@@ -60,60 +60,24 @@ class ConversationSession:
                 self._conv.bot_metadata = {}
             self._conv.bot_metadata[key] = value
 
-def download_media_from_whatsapp(media_id: str, access_token: str) -> str:
-    try:
-        url = f"https://graph.facebook.com/v20.0/{media_id}"
-        headers = {"Authorization": f"Bearer {access_token}"}
-        res = requests.get(url, headers=headers, timeout=10)
-        if res.status_code != 200:
-            logger.error("[IceMake] Failed to get media URL for %s: %s", media_id, res.text)
-            return ""
-        media_url = res.json().get("url")
-        if not media_url:
-            return ""
-        
-        file_res = requests.get(media_url, headers=headers, timeout=15)
-        if file_res.status_code != 200:
-            logger.error("[IceMake] Failed to download media %s", media_id)
-            return ""
-            
-        content_type = file_res.headers.get("Content-Type", "").split(";")[0].strip()
-        ext_map = {
-            "image/jpeg": "jpg",
-            "image/jpg": "jpg",
-            "image/png": "png",
-            "image/webp": "webp",
-            "image/gif": "gif",
-            "video/mp4": "mp4",
-            "video/3gpp": "3gp",
-            "video/quicktime": "mov",
-            "audio/mp4": "m4a",
-            "audio/aac": "aac",
-            "audio/amr": "amr",
-            "audio/ogg": "ogg",
-            "audio/opus": "opus",
-            "audio/mpeg": "mp3",
-            "application/pdf": "pdf",
-            "application/msword": "doc",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
-            "application/vnd.ms-excel": "xls",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
-            "application/vnd.ms-powerpoint": "ppt",
-            "text/plain": "txt",
-        }
-        
-        ext = ext_map.get(content_type)
-        if not ext:
-            ext = content_type.split("/")[-1]
-            if not ext or len(ext) > 6 or not ext.isalnum():
-                ext = "bin"
-            
-        file_name = f"icemake_media/{uuid.uuid4().hex}.{ext}"
-        saved_path = default_storage.save(file_name, ContentFile(file_res.content))
-        return default_storage.url(saved_path)
-    except Exception as e:
-        logger.error("[IceMake] Error downloading media: %s", e)
-        return ""
+def get_or_create_icemake_customer(raw_phone: str, default_name: str = ""):
+    from CRM.META.webhook_views import _normalize_e164_phone
+    from django.db.models import Q
+    e164 = _normalize_e164_phone(raw_phone)
+    raw = str(raw_phone or "").strip()
+    digits = re.sub(r"[^\d]", "", raw)
+
+    # Check both standardized e164 (+91...) and plain digits (91...) for existing records
+    customer_obj = Customer.objects.filter(Q(phone=e164) | Q(phone=raw) | Q(phone=digits)).first()
+    created = False
+    if not customer_obj:
+        customer_obj = Customer.objects.create(phone=e164 or raw, name=default_name or e164 or raw)
+        created = True
+    elif default_name and (customer_obj.name == customer_obj.phone or not customer_obj.name or customer_obj.name.startswith("91")):
+        customer_obj.name = default_name
+        customer_obj.save(update_fields=['name'])
+
+    return customer_obj, created
 
 
 def handle_icemake_message(msg: dict, contact: dict = None):
@@ -123,7 +87,7 @@ def handle_icemake_message(msg: dict, contact: dict = None):
     
     profile_name = contact.get("profile", {}).get("name", "") if contact else ""
 
-    customer_obj, created = Customer.objects.get_or_create(phone=number, defaults={'name': profile_name or number})
+    customer_obj, created = get_or_create_icemake_customer(number, default_name=profile_name or number)
     if not created and profile_name and (customer_obj.name == number or not customer_obj.name or customer_obj.name.startswith("91")):
         customer_obj.name = profile_name
         customer_obj.save(update_fields=['name'])
@@ -148,24 +112,6 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         body = msg.get("button", {}).get("payload", "").strip()
         display_body = msg.get("button", {}).get("text", body).strip()
     elif msg_type in ["image", "video", "audio", "document", "sticker"]:
-        # Do not download media for IceMake, only store text tag
-        # media_id = msg.get(msg_type, {}).get("id")
-        # if media_id:
-        #     icemake_phone_id = getattr(settings, 'ICEMAKE_PHONE_NUMBER_ID', ICEMAKE_PHONE_NUMBER_ID)
-        #     client_account_obj = ClientAccount.objects.filter(phone_number_id=icemake_phone_id).first()
-        #     token = client_account_obj.access_token if client_account_obj and client_account_obj.access_token else getattr(settings, "META_PERMANENT_TOKEN", "")
-        #     dl_url = download_media_from_whatsapp(media_id, token)
-        #     if dl_url:
-        #         prefix = f"[{msg_type.upper()}]"
-        #         body = f"{prefix} {dl_url}"
-        #         display_body = body
-        #     else:
-        #         body = f"[{msg_type}]"
-        #         display_body = f"[{msg_type}]"
-        # else:
-        #     body = f"[{msg_type}]"
-        #     display_body = f"[{msg_type}]"
-        
         body = "-"
         display_body = body
             
@@ -559,13 +505,45 @@ class IceMakeDataAPIView(APIView):
 
         # Set of engineer phone numbers to identify engineer conversations
         engineer_phones = {
-            info["phone"].strip() 
+            re.sub(r"[^\d]", "", str(info["phone"]))
             for info in STATE_ENGINEER_MAPPING.values() 
             if isinstance(info, dict) and info.get("phone")
         }
 
-        conversations_data = []
+        # Deduplicate/merge conversations for the same customer (e.g. +91 vs 91)
+        seen_phones = {}
+        merged_object_list = []
         for conv in page.object_list:
+            raw_p = (conv.customer.phone or "").strip() if conv.customer else ""
+            clean_p = re.sub(r"[^\d]", "", raw_p)
+            if len(clean_p) == 10:
+                clean_p = f"91{clean_p}"
+            
+            if clean_p and clean_p in seen_phones:
+                # Merge messages into the existing conversation
+                existing_conv = seen_phones[clean_p]
+                existing_msgs = list(existing_conv.messages.all())
+                new_msgs = list(conv.messages.all())
+                # Combine messages avoiding duplicate message IDs
+                existing_ids = {m.id for m in existing_msgs}
+                for nm in new_msgs:
+                    if nm.id not in existing_ids:
+                        existing_msgs.append(nm)
+                existing_msgs.sort(key=lambda m: m.timestamp.isoformat() if m.timestamp else "")
+                existing_conv._merged_messages = existing_msgs
+                # Merge ticket_data if the newer/other conversation has more data
+                c_td = conv.bot_metadata.get("ticket_data", {}) if isinstance(conv.bot_metadata, dict) else {}
+                e_td = existing_conv.bot_metadata.get("ticket_data", {}) if isinstance(existing_conv.bot_metadata, dict) else {}
+                if c_td and not e_td.get("ticket_no"):
+                    existing_conv.bot_metadata = conv.bot_metadata
+            else:
+                conv._merged_messages = list(conv.messages.all())
+                if clean_p:
+                    seen_phones[clean_p] = conv
+                merged_object_list.append(conv)
+
+        conversations_data = []
+        for conv in merged_object_list:
             bot_meta = conv.bot_metadata if isinstance(conv.bot_metadata, dict) else {}
             td = bot_meta.get("ticket_data", {}) or {}
 
@@ -583,10 +561,14 @@ class IceMakeDataAPIView(APIView):
             customer_name = td.get("name", "")
 
             cust_phone = (conv.customer.phone or "").strip() if conv.customer else ""
-            is_engineer_conv = (cust_phone in engineer_phones)
+            clean_cust_phone = re.sub(r"[^\d]", "", cust_phone)
+            if len(clean_cust_phone) == 10:
+                clean_cust_phone = f"91{clean_cust_phone}"
+
+            is_engineer_conv = (clean_cust_phone in engineer_phones)
 
             import re
-            all_msgs = list(conv.messages.all())
+            all_msgs = getattr(conv, "_merged_messages", list(conv.messages.all()))
 
             # Format common messages payload once
             formatted_messages = [
@@ -666,26 +648,37 @@ class IceMakeDataAPIView(APIView):
             # Case 2: Regular Customer conversation -> extract distinct customer tickets
             tickets_detail_map = {}
 
+            # First, check if conv metadata has current ticket
+            current_tid = td.get("ticket_no", "").strip()
+
+            # Scan messages chronologically to extract tickets
+            last_known_issue = ""
             for msg in all_msgs:
                 content_str = msg.content or ""
+
+                # Track customer inbound issue messages prior to ticket confirmation
+                if msg.direction == "inbound" and len(content_str) > 10 and not content_str.lower().startswith(("hi", "hello", "yes", "no")):
+                    last_known_issue = content_str
+
                 t_match = re.search(r'(?:Ticket\s*:\s*|Complaint Number:\s*\*?|(?:^|\b))(WC\d+|C\d+)', content_str, re.IGNORECASE)
                 if t_match:
                     tid = t_match.group(1).strip()
                     if tid not in tickets_detail_map:
                         tickets_detail_map[tid] = {
                             "ticket_no": tid,
-                            "name": "",
-                            "registered_mobile": "",
+                            "name": customer_name,
+                            "registered_mobile": registered_mobile,
                             "city": "",
                             "state": "",
                             "pincode": "",
                             "complaint_type": "",
-                            "issue_desc": "",
+                            "issue_desc": last_known_issue,
                             "assigned_engineer": "",
                             "engineer_phone": "",
                             "created_at": msg.timestamp.astimezone(ist_tz).isoformat() if msg.timestamp else None,
                         }
 
+                    # If this message or nearby has ticket details
                     if "TEMPLATE: ICEMAKE" in content_str.upper() or "Assigned Engineer:" in content_str or "Customer Name:" in content_str:
                         eng_match = re.search(r'Assigned Engineer:\s*([^\n]+)', content_str)
                         if eng_match:
@@ -714,8 +707,7 @@ class IceMakeDataAPIView(APIView):
                             if not desc_val.startswith("{{"):
                                 tickets_detail_map[tid]["issue_desc"] = desc_val
 
-            # Current ticket from session ticket_data
-            current_tid = td.get("ticket_no")
+            # Apply current ticket data from session to current_tid ONLY
             if current_tid:
                 if current_tid not in tickets_detail_map:
                     tickets_detail_map[current_tid] = {
@@ -732,12 +724,11 @@ class IceMakeDataAPIView(APIView):
                         "created_at": conv.created_at.astimezone(ist_tz).isoformat() if conv.created_at else None,
                     }
                 else:
-                    # Only fill in empty fields for the current ticket
+                    # Current ticket gets latest accurate fields from session td
                     for k in ["name", "registered_mobile", "city", "state", "pincode", "complaint_type", "issue_desc", "assigned_engineer", "engineer_phone"]:
-                        if not tickets_detail_map[current_tid].get(k):
-                            val = td.get(k, "") or (customer_name if k == "name" else (assigned_engineer if k == "assigned_engineer" else ""))
-                            if val:
-                                tickets_detail_map[current_tid][k] = val
+                        val = td.get(k, "")
+                        if val:
+                            tickets_detail_map[current_tid][k] = val
 
             # If tickets exist, create a separate row/entry for each distinct ticket
             if tickets_detail_map:
@@ -764,13 +755,13 @@ class IceMakeDataAPIView(APIView):
                             "ticket_no": t_tid,
                             "name": item.get("name") or customer_name,
                             "registered_mobile": item.get("registered_mobile") or registered_mobile,
-                            "city": item.get("city") or td.get("city", ""),
-                            "state": item.get("state") or td.get("state", ""),
-                            "pincode": item.get("pincode") or td.get("pincode", ""),
-                            "complaint_type": item.get("complaint_type") or td.get("complaint_type", ""),
+                            "city": item.get("city") or "",
+                            "state": item.get("state") or "",
+                            "pincode": item.get("pincode") or "",
+                            "complaint_type": item.get("complaint_type") or "",
                             "issue_desc": item.get("issue_desc") or "",
                             "assigned_engineer": item.get("assigned_engineer") or assigned_engineer,
-                            "engineer_phone": item.get("engineer_phone") or td.get("engineer_phone", ""),
+                            "engineer_phone": item.get("engineer_phone") or "",
                         },
                         "messages": formatted_messages
                     }
