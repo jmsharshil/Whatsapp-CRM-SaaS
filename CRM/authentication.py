@@ -33,33 +33,30 @@ class PhoneNumberIdAuthentication(BaseAuthentication):
         if not phone_number_id:
             return None  # Let next authentication class (e.g. JWTAuthentication) handle it
 
-        user = self.get_user_for_phone_number_id(phone_number_id)
-        if not user:
-            raise AuthenticationFailed(f"No account or organization found matching phone_number_id '{phone_number_id}'")
-
-        # Attach phone_number_id directly to request for easy access in views
-        request.phone_number_id = phone_number_id
-        return (user, phone_number_id)
-
-    def get_user_for_phone_number_id(self, phone_number_id):
-        # 1. Check in ClientAccount
-        client = ClientAccount.objects.select_related('tech_provider__owner').filter(phone_number_id=phone_number_id).first()
-        if client:
-            # Check for owner/member user linked to this client
-            member = ClientMember.objects.select_related('user').filter(client=client).order_by('id').first()
-            if member and member.user:
-                return member.user
-            # Fallback to tech_provider owner
-            if client.tech_provider and client.tech_provider.owner:
-                return client.tech_provider.owner
-
-        # 2. Check in WABAAccount (Tech Provider / Organization level)
+        # 1. Search in WABAAccount (Organization / Tech Provider level)
         waba = WABAAccount.objects.select_related('organization__owner').filter(phone_number_id=phone_number_id).first()
         if waba and waba.organization and waba.organization.owner:
-            return waba.organization.owner
+            user = waba.organization.owner
+            request.organization = waba.organization
+            request.waba_account = waba
+            request.client_account = None
+            request.phone_number_id = phone_number_id
+            return (user, phone_number_id)
 
-        # If no account matched, return None so AuthenticationFailed is raised
-        return None
+        # 2. Search in ClientAccount (Client level)
+        client = ClientAccount.objects.select_related('tech_provider__owner').filter(phone_number_id=phone_number_id).first()
+        if client:
+            member = ClientMember.objects.select_related('user').filter(client=client).order_by('id').first()
+            user = member.user if (member and member.user) else (client.tech_provider.owner if client.tech_provider else None)
+            if user:
+                request.organization = client.tech_provider
+                request.client_account = client
+                request.waba_account = None
+                request.phone_number_id = phone_number_id
+                return (user, phone_number_id)
+
+        # If no account matched, raise AuthenticationFailed
+        raise AuthenticationFailed(f"No account or organization found matching phone_number_id '{phone_number_id}'")
 
     def authenticate_header(self, request):
         return self.keyword
