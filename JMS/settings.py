@@ -193,6 +193,7 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
+        "CRM.authentication.PhoneNumberIdAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     )
 }
