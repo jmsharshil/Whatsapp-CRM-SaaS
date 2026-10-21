@@ -370,39 +370,7 @@ def handle_icemake_message(msg: dict, contact: dict = None):
             assigned_engineer=(engineer_info["name"] or "Support Team").replace('\n', ' ')
         )
 
-        # Record this outgoing alert in the Engineer's Conversation so it jumps to the top of the list
-        try:
-            eng_raw_phone = engineer_info.get("phone", "")
-            if eng_raw_phone:
-                eng_cust, _ = get_or_create_icemake_customer(
-                    eng_raw_phone,
-                    default_name=engineer_info.get("name", "Service Engineer")
-                )
-                eng_conv, _ = Conversation.objects.get_or_create(
-                    customer=eng_cust,
-                    phone_number_id=ICEMAKE_PHONE_NUMBER_ID,
-                    defaults={'client': client_account_obj}
-                )
-                alert_text = (
-                    f"Ticket: {ticket_no or '-'}\n"
-                    f"Customer Name: {(td.get('name', 'Customer') or 'Customer').replace(chr(10), ' ')}\n"
-                    f"Customer Mobile: {(td.get('mobile', number) or number).replace(chr(10), ' ')}\n"
-                    f"City / State: {(city_state or '-').replace(chr(10), ' ')}\n"
-                    f"Issue Type: {(issue_type or '-').replace(chr(10), ' ')}\n"
-                    f"Description: {(td.get('issue_desc', 'No description provided') or 'No description provided').replace(chr(10), ' ')}\n"
-                    f"Assigned Engineer: {(engineer_info['name'] or 'Support Team').replace(chr(10), ' ')}"
-                )
-                Message.objects.create(
-                    conversation=eng_conv,
-                    client=client_account_obj,
-                    customer=eng_cust,
-                    direction="outbound",
-                    message_type="template",
-                    content=alert_text,
-                    status="delivered"
-                )
-        except Exception as e:
-            logger.warning("[IceMake] Failed to record outbound alert in engineer conversation: %s", e)
+
         
         session.state = "TICKET_GENERATED"
         # Save ticket and engineer details back into the session data
