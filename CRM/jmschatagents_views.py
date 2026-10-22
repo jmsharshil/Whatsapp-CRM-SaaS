@@ -2367,6 +2367,10 @@ def customer_list(request):
             "messages__id",
             filter=Q(messages__direction="inbound") & Q(messages__content__iexact="service"),
         ),
+        last_mody_id=Max(
+            "messages__id",
+            filter=Q(messages__direction="inbound") & Q(messages__content__iexact="mody"),
+        ),
     ).order_by("-id")
 
     if search:
@@ -2395,6 +2399,8 @@ def customer_list(request):
             bots.append((c.last_mf_id, "mutual_funds"))
         if c.last_hotel_id:
             bots.append((c.last_hotel_id, "hotel"))
+        if c.last_mody_id:
+            bots.append((c.last_mody_id, "mody"))
         
         if bots:
             bot_source = max(bots, key=lambda x: x[0])[1]
@@ -4508,13 +4514,15 @@ def _mody_send_welcome(phone: str, inbound_msg_id: int = None, client_name: str 
     mody_sessions.set(phone, session, timeout=MODY_SESSION_TTL)
 
     welcome_text = (
-        f"🚗 *Welcome to Mody Toyota!* 🌟\n\n"
-        f"Hello {cust_name}, we are delighted to assist you today.\n\n"
-        "How can we help you? Please choose an option below:"
+        f"🚘 *Welcome to Mody Toyota!* 🌟\n\n"
+        f"Hello {cust_name}, thank you for reaching out to us.\n\n"
+        "Your trusted partner for Toyota sales, certified maintenance, and reliable customer care. "
+        "We are committed to delivering Quality, Durability & Peace of Mind for every journey.\n\n"
+        "How can we assist you today? Please choose an option below:"
     )
     buttons = [
         {"id": "mody_buy_new_car", "title": "Buy New Car"},
-        {"id": "mody_service", "title": "Service"},
+        {"id": "mody_service", "title": "Toyota Service"},
     ]
     send_buttons(phone, welcome_text, buttons)
     if inbound_msg_id:
@@ -4596,7 +4604,7 @@ def _handle_mody_bot(phone: str, text: str, phone_number_id: str = None, inbound
             _mody_render_stage(phone, session, inbound_msg_id)
             return
 
-        elif selected in ["mody_service", "service"] or "service" in text_lower:
+        elif selected in ["mody_service", "toyota service", "car service"] or "toyota service" in text_lower or "car service" in text_lower:
             _push_stage_and_set("srv_select_action")
             _mody_render_stage(phone, session, inbound_msg_id)
             return
@@ -4609,8 +4617,8 @@ def _handle_mody_bot(phone: str, text: str, phone_number_id: str = None, inbound
     # [TEAL FLOW] BUY NEW CAR
     # ═════════════════════════════════════════════════════════════════════════
 
-    # --- Select Car Model Page 1 & Page 2 ---
-    if stage in ["buy_select_model_1", "buy_select_model_2"]:
+    # --- Select Car Model (Pages 1, 2, 3) ---
+    if stage in ["buy_select_model_1", "buy_select_model_2", "buy_select_model_3"]:
         selected = interactive_id or text_clean
 
         if selected == "mody_car_other_1" or "other" in text_lower or "more" in text_lower:
@@ -4619,16 +4627,26 @@ def _handle_mody_bot(phone: str, text: str, phone_number_id: str = None, inbound
             _mody_render_stage(phone, session, inbound_msg_id)
             return
 
-        # Model mapping
+        if selected == "mody_car_other_2":
+            session["stage"] = "buy_select_model_3"
+            mody_sessions.set(phone, session, timeout=MODY_SESSION_TTL)
+            _mody_render_stage(phone, session, inbound_msg_id)
+            return
+
+        # Model mapping (Toyota official lineup from Mody Autonation)
         car_map = {
-            "car_hycross": "Innova Hycross",
-            "car_fortuner": "Fortuner",
-            "car_hyryder": "Urban Cruiser Hyryder",
             "car_glanza": "Glanza",
-            "car_innova_crysta": "Innova Crysta",
+            "car_taisor": "Urban Cruiser Taisor",
+            "car_hyryder": "Urban Cruiser Hyryder",
+            "car_rumion": "Rumion",
+            "car_hycross": "Innova Hycross",
+            "car_crysta": "Innova Crysta",
+            "car_fortuner": "Fortuner",
+            "car_legender": "Fortuner Legender",
             "car_hilux": "Hilux",
-            "car_camry": "Camry Hybrid",
+            "car_camry": "New Camry Hybrid",
             "car_vellfire": "Vellfire",
+            "car_lc300": "Land Cruiser 300",
         }
         chosen_car = car_map.get(selected) or interactive_title or text_clean
         session["car_model"] = chosen_car
@@ -4683,90 +4701,35 @@ def _handle_mody_bot(phone: str, text: str, phone_number_id: str = None, inbound
         _mody_render_stage(phone, session, inbound_msg_id)
         return
 
-    # --- Collect Details: Name ---
+    # --- Collect Details: Full Name (Mobile automatically taken from WhatsApp session) ---
     if stage == "buy_collect_name":
         entered_name = text_clean
         if len(entered_name) < 2 or re.match(r"^\d+$", entered_name):
-            err_msg = "⚠️ Please enter a valid full name:"
+            err_msg = "⚠️ Please enter your *Full Name*:"
             send_text(phone, err_msg)
             if inbound_msg_id:
                 _save_reply(inbound_msg_id, err_msg)
             return
         session["cust_name"] = entered_name
-        _push_stage_and_set("buy_collect_mobile")
+        session["cust_mobile"] = phone.lstrip("+")
+        _push_stage_and_set("buy_finance_exchange")
         _mody_render_stage(phone, session, inbound_msg_id)
         return
 
-    # --- Collect Details: Mobile ---
-    if stage == "buy_collect_mobile":
-        if not _is_valid_indian_mobile(text_clean):
-            err_msg = (
-                "⚠️ *Invalid Mobile Number.*\n\n"
-                "Please enter a valid 10-digit mobile number (e.g. *9876543210*):"
-            )
-            buttons = [
-                {"id": "btn_mody_back", "title": "Back"},
-                {"id": "btn_mody_main_menu", "title": "Main Menu"},
-            ]
-            send_buttons(phone, err_msg, buttons)
-            if inbound_msg_id:
-                _save_reply(inbound_msg_id, err_msg)
-            return
-        session["cust_mobile"] = _clean_indian_mobile(text_clean)
-        _push_stage_and_set("buy_collect_city")
-        _mody_render_stage(phone, session, inbound_msg_id)
-        return
+    # --- Quick Preferences: Finance / Exchange / Direct Confirm ---
+    if stage == "buy_finance_exchange":
+        pref_id = interactive_id or text_lower
+        if pref_id in ["pref_finance", "finance"]:
+            session["finance_pref"] = "Yes, Need Finance"
+            session["car_exchange"] = "No Exchange"
+        elif pref_id in ["pref_exchange", "exchange"]:
+            session["finance_pref"] = "Self-Funded"
+            session["car_exchange"] = "Yes, Car Exchange"
+        else: # Direct quote / standard inquiry
+            session["finance_pref"] = "Standard / Discuss on Call"
+            session["car_exchange"] = "Not Required"
 
-    # --- Collect Details: City ---
-    if stage == "buy_collect_city":
-        city_map = {
-            "city_ahmedabad": "Ahmedabad",
-            "city_mumbai": "Mumbai",
-            "city_other": "Other City",
-        }
-        if interactive_id in city_map:
-            session["cust_city"] = city_map[interactive_id]
-        else:
-            session["cust_city"] = text_clean.title()
-        _push_stage_and_set("buy_extra_fuel")
-        _mody_render_stage(phone, session, inbound_msg_id)
-        return
-
-    # --- Extra Questions: Fuel Type ---
-    if stage == "buy_extra_fuel":
-        fuel_map = {
-            "fuel_hybrid": "Strong Hybrid",
-            "fuel_petrol": "Petrol",
-            "fuel_other": "Diesel / CNG / Any",
-        }
-        chosen_fuel = fuel_map.get(interactive_id) or interactive_title or text_clean
-        session["fuel_pref"] = chosen_fuel
-        _push_stage_and_set("buy_extra_exchange")
-        _mody_render_stage(phone, session, inbound_msg_id)
-        return
-
-    # --- Extra Questions: Car Exchange ---
-    if stage == "buy_extra_exchange":
-        exchange_map = {
-            "exch_yes": "Yes, exchange existing car",
-            "exch_no": "No exchange",
-        }
-        chosen_exch = exchange_map.get(interactive_id) or interactive_title or text_clean
-        session["car_exchange"] = chosen_exch
-        _push_stage_and_set("buy_extra_finance")
-        _mody_render_stage(phone, session, inbound_msg_id)
-        return
-
-    # --- Extra Questions: Finance Assistance ---
-    if stage == "buy_extra_finance":
-        fin_map = {
-            "fin_yes": "Yes, finance required",
-            "fin_no": "Self-funding / No finance",
-        }
-        chosen_fin = fin_map.get(interactive_id) or interactive_title or text_clean
-        session["finance_pref"] = chosen_fin
-
-        # Confirmation & Lead submission
+        # Confirmation & Lead submission (Fast 3-step completion!)
         _mody_confirm_buy_lead(phone, session, inbound_msg_id)
         _push_stage_and_set("anything_else")
         _mody_render_stage(phone, session, inbound_msg_id)
@@ -5043,13 +5006,13 @@ def _mody_render_stage(phone: str, session: dict, inbound_msg_id: int = None):
     # ── BUY NEW CAR RENDERING ──
     if stage == "buy_select_model_1":
         body = (
-            "🚘 *Select Toyota Model (1/2)*\n\n"
-            "Please choose the Toyota vehicle you are interested in:"
+            "🚘 *Discover the Toyota Range*\n\n"
+            "Please select the Toyota vehicle you are interested in:"
         )
         buttons = [
             {"id": "car_hycross", "title": "Innova Hycross"},
-            {"id": "car_fortuner", "title": "Fortuner"},
-            {"id": "mody_car_other_1", "title": "Other Models ⏩"},
+            {"id": "car_fortuner", "title": "Fortuner / Legender"},
+            {"id": "mody_car_other_1", "title": "More Models ⏩"},
         ]
         send_buttons(phone, body, buttons)
         if inbound_msg_id:
@@ -5058,13 +5021,28 @@ def _mody_render_stage(phone: str, session: dict, inbound_msg_id: int = None):
 
     if stage == "buy_select_model_2":
         body = (
-            "🚘 *Select Toyota Model (2/2)*\n\n"
-            "Please choose from our other premium models:"
+            "🚘 *Explore Toyota SUVs & Hatchbacks*\n\n"
+            "Please choose from our popular models:"
         )
         buttons = [
             {"id": "car_hyryder", "title": "UC Hyryder"},
+            {"id": "car_taisor", "title": "UC Taisor"},
+            {"id": "mody_car_other_2", "title": "More Models ⏩"},
+        ]
+        send_buttons(phone, body, buttons)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "buy_select_model_3":
+        body = (
+            "🚘 *Premium & Utility Range*\n\n"
+            "Please choose from our premium lineup:"
+        )
+        buttons = [
             {"id": "car_glanza", "title": "Glanza"},
-            {"id": "btn_mody_back", "title": "Back"},
+            {"id": "car_hilux", "title": "Hilux / Camry"},
+            {"id": "btn_mody_main_menu", "title": "Main Menu"},
         ]
         send_buttons(phone, body, buttons)
         if inbound_msg_id:
@@ -5080,7 +5058,7 @@ def _mody_render_stage(phone: str, session: dict, inbound_msg_id: int = None):
         buttons = [
             {"id": "act_test_drive", "title": "Test Drive"},
             {"id": "act_quote", "title": "Get Quote"},
-            {"id": "act_callback", "title": "Callback"},
+            {"id": "act_callback", "title": "Request Callback"},
         ]
         send_buttons(phone, body, buttons)
         if inbound_msg_id:
@@ -5098,7 +5076,7 @@ def _mody_render_stage(phone: str, session: dict, inbound_msg_id: int = None):
         buttons = [
             {"id": "td_date_today", "title": f"Today ({d1})"},
             {"id": "td_date_tomorrow", "title": f"Tomorrow ({d2})"},
-            {"id": "td_date_other", "title": "Other Date ⏩"},
+            {"id": "td_date_other", "title": "This Weekend"},
         ]
         send_buttons(phone, body, buttons)
         if inbound_msg_id:
@@ -5125,7 +5103,7 @@ def _mody_render_stage(phone: str, session: dict, inbound_msg_id: int = None):
         model = session.get("car_model", "Toyota")
         action = session.get("buy_action", "Request")
         body = (
-            f"📋 *{action} — {model}*\n\n"
+            f"📋 *{action} — Toyota {model}*\n\n"
             "Please type your *Full Name*:"
         )
         send_text(phone, body)
@@ -5133,71 +5111,16 @@ def _mody_render_stage(phone: str, session: dict, inbound_msg_id: int = None):
             _save_reply(inbound_msg_id, body)
         return
 
-    if stage == "buy_collect_mobile":
+    if stage == "buy_finance_exchange":
         name = session.get("cust_name", "Sir/Madam")
         body = (
-            f"📱 Thank you, *{name}*!\n\n"
-            "Please enter your *10-digit Mobile Number* to receive official quotes and test drive booking confirmation:"
-        )
-        send_text(phone, body)
-        if inbound_msg_id:
-            _save_reply(inbound_msg_id, body)
-        return
-
-    if stage == "buy_collect_city":
-        body = (
-            "📍 *Select Your City / Dealership Location:*\n\n"
-            "Please choose your preferred city:"
+            f"✨ Thank you, *{name}*!\n\n"
+            "Would you like finance assistance or old car exchange with your inquiry?"
         )
         buttons = [
-            {"id": "city_ahmedabad", "title": "Ahmedabad"},
-            {"id": "city_mumbai", "title": "Mumbai"},
-            {"id": "city_other", "title": "Other City"},
-        ]
-        send_buttons(phone, body, buttons)
-        if inbound_msg_id:
-            _save_reply(inbound_msg_id, body)
-        return
-
-    if stage == "buy_extra_fuel":
-        body = (
-            "⛽ *Fuel & Powertrain Preference:*\n\n"
-            "What is your preferred powertrain?"
-        )
-        buttons = [
-            {"id": "fuel_hybrid", "title": "Strong Hybrid"},
-            {"id": "fuel_petrol", "title": "Petrol"},
-            {"id": "fuel_other", "title": "Other / Any"},
-        ]
-        send_buttons(phone, body, buttons)
-        if inbound_msg_id:
-            _save_reply(inbound_msg_id, body)
-        return
-
-    if stage == "buy_extra_exchange":
-        body = (
-            "🔄 *Car Exchange Facility:*\n\n"
-            "Would you like to exchange your current old vehicle with best market evaluation?"
-        )
-        buttons = [
-            {"id": "exch_yes", "title": "Yes, Exchange"},
-            {"id": "exch_no", "title": "No Exchange"},
-            {"id": "btn_mody_back", "title": "Back"},
-        ]
-        send_buttons(phone, body, buttons)
-        if inbound_msg_id:
-            _save_reply(inbound_msg_id, body)
-        return
-
-    if stage == "buy_extra_finance":
-        body = (
-            "💳 *Toyota Financial Services:*\n\n"
-            "Do you require assistance with attractive low-EMI car finance options?"
-        )
-        buttons = [
-            {"id": "fin_yes", "title": "Yes, Need Finance"},
-            {"id": "fin_no", "title": "No, Self-Funded"},
-            {"id": "btn_mody_back", "title": "Back"},
+            {"id": "pref_finance", "title": "Need Finance"},
+            {"id": "pref_exchange", "title": "Exchange Car"},
+            {"id": "pref_standard", "title": "Just Best Price"},
         ]
         send_buttons(phone, body, buttons)
         if inbound_msg_id:
@@ -5225,7 +5148,10 @@ def _mody_render_stage(phone: str, session: dict, inbound_msg_id: int = None):
             "🔍 *Check Vehicle Service Status*\n\n"
             "Please type your vehicle *Registration Number* (e.g. *GJ01AB1234*):"
         )
-        send_text(phone, body)
+        buttons = [
+            {"id": "btn_mody_main_menu", "title": "Main Menu"},
+        ]
+        send_buttons(phone, body, buttons)
         if inbound_msg_id:
             _save_reply(inbound_msg_id, body)
         return
@@ -5235,19 +5161,22 @@ def _mody_render_stage(phone: str, session: dict, inbound_msg_id: int = None):
             "👨‍🔧 *Connect With Service Advisor*\n\n"
             "Please briefly describe your service requirement or concern:"
         )
-        send_text(phone, body)
+        buttons = [
+            {"id": "btn_mody_main_menu", "title": "Main Menu"},
+        ]
+        send_buttons(phone, body, buttons)
         if inbound_msg_id:
             _save_reply(inbound_msg_id, body)
         return
 
     if stage == "srv_vehicle_model":
         body = (
-            "🚘 *Select Your Toyota Model (1/2)*\n\n"
-            "Which vehicle are you bringing for service?"
+            "🚘 *Select Your Toyota Model*\n\n"
+            "Which vehicle are you bringing for certified service?"
         )
         buttons = [
             {"id": "srv_m_innova", "title": "Innova / Hycross"},
-            {"id": "srv_m_fortuner", "title": "Fortuner"},
+            {"id": "srv_m_fortuner", "title": "Fortuner / Legender"},
             {"id": "srv_car_other_1", "title": "Other Models ⏩"},
         ]
         send_buttons(phone, body, buttons)
@@ -5257,13 +5186,13 @@ def _mody_render_stage(phone: str, session: dict, inbound_msg_id: int = None):
 
     if stage == "srv_vehicle_model_2":
         body = (
-            "🚘 *Select Your Toyota Model (2/2)*\n\n"
+            "🚘 *More Toyota Models*\n\n"
             "Please choose from these models:"
         )
         buttons = [
-            {"id": "srv_m_hyryder", "title": "Hyryder"},
-            {"id": "srv_m_glanza", "title": "Glanza"},
-            {"id": "btn_mody_back", "title": "Back"},
+            {"id": "srv_m_hyryder", "title": "Hyryder / Taisor"},
+            {"id": "srv_m_glanza", "title": "Glanza / Rumion"},
+            {"id": "btn_mody_main_menu", "title": "Main Menu"},
         ]
         send_buttons(phone, body, buttons)
         if inbound_msg_id:
@@ -5276,7 +5205,10 @@ def _mody_render_stage(phone: str, session: dict, inbound_msg_id: int = None):
             f"🔢 *Vehicle Registration Number ({car})*\n\n"
             "Please type your vehicle registration number (e.g. *GJ01AB1234*):"
         )
-        send_text(phone, body)
+        buttons = [
+            {"id": "btn_mody_main_menu", "title": "Main Menu"},
+        ]
+        send_buttons(phone, body, buttons)
         if inbound_msg_id:
             _save_reply(inbound_msg_id, body)
         return
@@ -5338,7 +5270,7 @@ def _mody_render_stage(phone: str, session: dict, inbound_msg_id: int = None):
         buttons = [
             {"id": "srv_pk_yes", "title": "Yes, Need Pickup"},
             {"id": "srv_pk_no", "title": "No, Self Drop"},
-            {"id": "btn_mody_back", "title": "Back"},
+            {"id": "btn_mody_main_menu", "title": "Main Menu"},
         ]
         send_buttons(phone, body, buttons)
         if inbound_msg_id:
@@ -5400,8 +5332,6 @@ def _mody_confirm_buy_lead(phone: str, session: dict, inbound_msg_id: int = None
     action = session.get("buy_action", "Inquiry")
     name = session.get("cust_name", "Valued Customer")
     mobile = session.get("cust_mobile", phone.lstrip("+"))
-    city = session.get("cust_city", "N/A")
-    fuel = session.get("fuel_pref", "N/A")
     exchange = session.get("car_exchange", "N/A")
     finance = session.get("finance_pref", "N/A")
 
@@ -5414,15 +5344,13 @@ def _mody_confirm_buy_lead(phone: str, session: dict, inbound_msg_id: int = None
     conf_msg = (
         "🎉 *Thank You! Your Request Has Been Received.* 🚗✨\n\n"
         "Here are your request details:\n"
-        f"🚘 *Model:* Toyota {model}\n"
-        f"🎯 *Action:* {action}\n"
+        f"🚘 *Vehicle:* Toyota {model}\n"
+        f"🎯 *Interest:* {action}\n"
         f"{td_info}"
-        f"👤 *Name:* {name}\n"
-        f"📱 *Mobile:* {mobile}\n"
-        f"📍 *City:* {city}\n"
-        f"⛽ *Fuel Preference:* {fuel}\n"
-        f"🔄 *Exchange:* {exchange}\n"
-        f"💳 *Finance:* {finance}\n\n"
+        f"👤 *Customer Name:* {name}\n"
+        f"📱 *Contact:* +{mobile}\n"
+        f"💳 *Finance:* {finance}\n"
+        f"🔄 *Exchange:* {exchange}\n\n"
         "✅ *Lead sent to sales team.* Our Senior Sales Consultant from Mody Toyota will get in touch with you shortly!"
     )
     send_text(phone, conf_msg)
