@@ -54,10 +54,12 @@ from CRM.jmschatagents_views import (
     mf_sessions,
     shopify_sessions,
     hotel_sessions,
+    mody_sessions,
     # Constants
     INDUSTRY_TRIGGERS,
     SHOPIFY_BOT_TRIGGER,
     HOTEL_BOT_TRIGGER,
+    MODY_BOT_TRIGGER,
     FAREWELL_KEYWORDS,
     WA_BOT_TRIGGER,
     MF_BOT_TRIGGER,
@@ -70,6 +72,7 @@ from CRM.jmschatagents_views import (
     _handle_mf_bot,
     _handle_shopify_bot,
     _handle_hotel_bot,
+    _handle_mody_bot,
     # Session key helper
     _sess_key,
     # DB helper
@@ -276,6 +279,16 @@ def _extract_text_for_routing(msg: dict) -> str | None:
         return msg.get("document", {}).get("caption", "").strip() or None
     if msg_type == "button":
         return msg.get("button", {}).get("text", "").strip()
+    if msg_type == "location":
+        loc = msg.get("location", {})
+        lat = loc.get("latitude")
+        lon = loc.get("longitude")
+        name = loc.get("name") or ""
+        address = loc.get("address") or ""
+        loc_str = f"Location Pin: {lat},{lon}"
+        if name or address:
+            loc_str += f" ({name} {address})".strip()
+        return loc_str
     return None
 
 
@@ -307,7 +320,7 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
     # ── Extract text ──────────────────────────────────────────────────────
     msg_type = msg.get("type", "")
     text = _extract_text_for_routing(msg)
-    if not text and msg_type != "image":
+    if not text and msg_type not in ["image", "location"]:
         return
     text = text or ""
 
@@ -321,6 +334,7 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
     wa_sess = wa_sessions.get(raw_phone)
     shopify_sess = shopify_sessions.get(raw_phone)
     hotel_sess = hotel_sessions.get(raw_phone)
+    mody_sess = mody_sessions.get(raw_phone)
     jms_sess = jms_sessions.get(raw_phone)
 
     # ── Route decision ────────────────────────────────────────────────────
@@ -331,6 +345,7 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
     go_jms = False
     go_shopify = False
     go_hotel = False
+    go_mody = False
     go_navratri = False
     skip_all = False
 
@@ -351,6 +366,8 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
             shopify_sessions.delete(raw_phone)
         if keep_bot != "hotel":
             hotel_sessions.delete(raw_phone)
+        if keep_bot != "mody":
+            mody_sessions.delete(raw_phone)
         if keep_bot != "jms":
             jms_sessions.delete(raw_phone)
 
@@ -373,6 +390,9 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
     elif text_lower == HOTEL_BOT_TRIGGER:
         go_hotel = True
         _clear_other_sessions("hotel")
+    elif text_lower == MODY_BOT_TRIGGER:
+        go_mody = True
+        _clear_other_sessions("mody")
     elif text_lower == "jms":
         go_jms = True
         _clear_other_sessions("jms")
@@ -402,6 +422,8 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
             go_shopify = True
         elif hotel_sess and hotel_sess.get("stage"):
             go_hotel = True
+        elif mody_sess and mody_sess.get("stage"):
+            go_mody = True
         elif jms_sess and jms_sess.get("stage", "idle") != "idle":
             go_jms = True
         else:
@@ -553,6 +575,13 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
             _handle_hotel_bot(raw_phone, text, phone_number_id, inbound_msg_id=inbound_msg_id, raw_msg=msg, client_name=client_name)
         except Exception as e:
             logger.exception("Hotel bot error: %s", e)
+
+    elif go_mody:
+        logger.info("[Webhook/JMS] → MODY TOYOTA BOT for %s", raw_phone)
+        try:
+            _handle_mody_bot(raw_phone, text, phone_number_id, inbound_msg_id=inbound_msg_id, raw_msg=msg, client_name=client_name)
+        except Exception as e:
+            logger.exception("Mody Toyota bot error: %s", e)
             
     elif go_jms:
         logger.info("[Webhook/JMS] → JMS-TECH BOT for %s", raw_phone)

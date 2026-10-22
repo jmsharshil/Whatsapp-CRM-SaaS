@@ -206,14 +206,17 @@ wa_sessions  = SafeCache(prefix="wa_sess:",   default_ttl=60 * 15)   # WhatsApp-
 ind_sessions = SafeCache(prefix="ind_sess:",  default_ttl=60 * 60)   # Industry bot
 shopify_sessions = SafeCache(prefix="shopify_sess:", default_ttl=60 * 15) # Shopify bot
 hotel_sessions = SafeCache(prefix="hotel_sess:", default_ttl=60 * 30)     # Hotel service bot
+mody_sessions  = SafeCache(prefix="mody_sess:",  default_ttl=60 * 30)     # Mody Toyota bot
 
 JMS_SESSION_TTL = 60 * 60
 WA_SESSION_TTL  = 60 * 15
 IND_SESSION_TTL = 60 * 60
 SHOPIFY_SESSION_TTL = 60 * 15
 HOTEL_SESSION_TTL = 60 * 30
+MODY_SESSION_TTL  = 60 * 30
 SHOPIFY_BOT_TRIGGER = "shopify"
 HOTEL_BOT_TRIGGER = "service"
+MODY_BOT_TRIGGER = "mody"
 HOTEL_NOTIFY_NUMBERS = ["919898271321", "917874566064"]
 HOTEL_ADMIN_TEMPLATE = "hotel_service_request"
 
@@ -4448,5 +4451,1014 @@ def _handle_hotel_bot(phone: str, text: str, phone_number_id: str = None, inboun
     if inbound_msg_id:
         _save_reply(inbound_msg_id, fb_msg)
     return
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────────────────
+#  BOT: MODY TOYOTA BOT (trigger: "mody")
+#  Features:
+#    - Left Branch: Buy New Car (Model -> Action -> Details -> Extra -> Conf)
+#    - Right Branch: Service (Model/Reg -> Booking Type/Date/Slot -> Pickup -> Conf)
+#    - Shared "Anything else?" step at end
+#    - Back button & Main Menu button on every step
+#    - WhatsApp reply buttons with "Other / More" pagination (no meta template/list)
+#    - Mobile & Reg number validation with re-prompting
+# ─────────────────────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _is_valid_indian_mobile(text: str) -> bool:
+    """Validate 10-digit mobile number, optionally prefixed by +91 or 91 or 0."""
+    cleaned = re.sub(r"[\s\-\+]", "", text.strip())
+    if cleaned.startswith("91") and len(cleaned) == 12:
+        cleaned = cleaned[2:]
+    elif cleaned.startswith("0") and len(cleaned) == 11:
+        cleaned = cleaned[1:]
+    return bool(re.match(r"^[6-9]\d{9}$", cleaned))
+
+
+def _clean_indian_mobile(text: str) -> str:
+    cleaned = re.sub(r"[\s\-\+]", "", text.strip())
+    if cleaned.startswith("91") and len(cleaned) == 12:
+        return cleaned[2:]
+    if cleaned.startswith("0") and len(cleaned) == 11:
+        return cleaned[1:]
+    return cleaned
+
+
+def _is_valid_vehicle_reg(text: str) -> bool:
+    """
+    Validate vehicle registration number (e.g. GJ01AB1234, MH02C5678, DL3CAB1234, etc.)
+    Allows spaces / hyphens. Minimum 6 alphanumeric characters.
+    """
+    cleaned = re.sub(r"[\s\-]", "", text.strip().upper())
+    # Format: 2 state letters + 1-2 district digits + 0-3 series letters + 1-4 digits
+    # Or Bharat series (e.g. 22BH1234AA)
+    pattern = r"^[A-Z]{2}[0-9]{1,2}[A-Z]{0,3}[0-9]{1,4}$|^[0-9]{2}BH[0-9]{4}[A-Z]{1,2}$"
+    return bool(re.match(pattern, cleaned)) and len(cleaned) >= 6
+
+
+def _mody_send_welcome(phone: str, inbound_msg_id: int = None, client_name: str = ""):
+    cust_name = client_name or "Valued Customer"
+    session = {
+        "stage": "welcome",
+        "phone": phone,
+        "client_name": cust_name,
+        "history": [],
+    }
+    mody_sessions.set(phone, session, timeout=MODY_SESSION_TTL)
+
+    welcome_text = (
+        f"🚗 *Welcome to Mody Toyota!* 🌟\n\n"
+        f"Hello {cust_name}, we are delighted to assist you today.\n\n"
+        "How can we help you? Please choose an option below:"
+    )
+    buttons = [
+        {"id": "mody_buy_new_car", "title": "Buy New Car"},
+        {"id": "mody_service", "title": "Service"},
+    ]
+    send_buttons(phone, welcome_text, buttons)
+    if inbound_msg_id:
+        _save_reply(inbound_msg_id, welcome_text)
+
+
+def _handle_mody_bot(phone: str, text: str, phone_number_id: str = None, inbound_msg_id: int = None, raw_msg: dict = None, client_name: str = ""):
+    """
+    State machine for Mody Toyota WhatsApp Bot.
+    Triggers on 'mody' or continues through session stages.
+    """
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+    session = mody_sessions.get(phone)
+
+    # Extract interactive ID and Title if sent via button reply
+    interactive_id = ""
+    interactive_title = ""
+    if raw_msg and raw_msg.get("type") == "interactive":
+        interactive = raw_msg.get("interactive", {})
+        itype = interactive.get("type", "")
+        if itype == "button_reply":
+            interactive_id = interactive.get("button_reply", {}).get("id", "")
+            interactive_title = interactive.get("button_reply", {}).get("title", "")
+        elif itype == "list_reply":
+            interactive_id = interactive.get("list_reply", {}).get("id", "")
+            interactive_title = interactive.get("list_reply", {}).get("title", "")
+
+    # Quick exit / cancel check
+    if text_lower in ["cancel", "exit", "quit"]:
+        mody_sessions.delete(phone)
+        bye_msg = "Thank you for contacting Mody Toyota! Send *mody* anytime to start again. Have a great day! 🚗✨"
+        send_text(phone, bye_msg)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, bye_msg)
+        return
+
+    # Trigger or explicit Main Menu check
+    is_main_menu = (
+        interactive_id == "btn_mody_main_menu" or
+        text_lower in ["main menu", "menu", "mody", "start", "restart"]
+    )
+    if is_main_menu or not session:
+        _mody_send_welcome(phone, inbound_msg_id=inbound_msg_id, client_name=client_name)
+        return
+
+    # Handle universal BACK button navigation
+    if interactive_id == "btn_mody_back" or text_lower == "back":
+        history = session.get("history", [])
+        if not history:
+            _mody_send_welcome(phone, inbound_msg_id=inbound_msg_id, client_name=client_name)
+            return
+        previous_stage = history.pop()
+        session["stage"] = previous_stage
+        session["history"] = history
+        mody_sessions.set(phone, session, timeout=MODY_SESSION_TTL)
+
+        # Re-render previous stage
+        _mody_render_stage(phone, session, inbound_msg_id)
+        return
+
+    stage = session.get("stage", "welcome")
+
+    def _push_stage_and_set(new_stage: str):
+        hist = session.get("history", [])
+        if stage and stage not in ["welcome", new_stage]:
+            hist.append(stage)
+        session["history"] = hist
+        session["stage"] = new_stage
+        mody_sessions.set(phone, session, timeout=MODY_SESSION_TTL)
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # STAGE: WELCOME -> Select "Buy New Car" or "Service"
+    # ═════════════════════════════════════════════════════════════════════════
+    if stage == "welcome":
+        selected = interactive_id or text_lower
+        if selected in ["mody_buy_new_car", "buy new car"] or "buy" in text_lower or "new car" in text_lower:
+            _push_stage_and_set("buy_select_model_1")
+            _mody_render_stage(phone, session, inbound_msg_id)
+            return
+
+        elif selected in ["mody_service", "service"] or "service" in text_lower:
+            _push_stage_and_set("srv_select_action")
+            _mody_render_stage(phone, session, inbound_msg_id)
+            return
+
+        else:
+            _mody_send_welcome(phone, inbound_msg_id=inbound_msg_id, client_name=client_name)
+            return
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # [TEAL FLOW] BUY NEW CAR
+    # ═════════════════════════════════════════════════════════════════════════
+
+    # --- Select Car Model Page 1 & Page 2 ---
+    if stage in ["buy_select_model_1", "buy_select_model_2"]:
+        selected = interactive_id or text_clean
+
+        if selected == "mody_car_other_1" or "other" in text_lower or "more" in text_lower:
+            session["stage"] = "buy_select_model_2"
+            mody_sessions.set(phone, session, timeout=MODY_SESSION_TTL)
+            _mody_render_stage(phone, session, inbound_msg_id)
+            return
+
+        # Model mapping
+        car_map = {
+            "car_hycross": "Innova Hycross",
+            "car_fortuner": "Fortuner",
+            "car_hyryder": "Urban Cruiser Hyryder",
+            "car_glanza": "Glanza",
+            "car_innova_crysta": "Innova Crysta",
+            "car_hilux": "Hilux",
+            "car_camry": "Camry Hybrid",
+            "car_vellfire": "Vellfire",
+        }
+        chosen_car = car_map.get(selected) or interactive_title or text_clean
+        session["car_model"] = chosen_car
+        _push_stage_and_set("buy_choose_action")
+        _mody_render_stage(phone, session, inbound_msg_id)
+        return
+
+    # --- Choose Action: Test drive, quote, callback ---
+    if stage == "buy_choose_action":
+        action_map = {
+            "act_test_drive": "Book Test Drive",
+            "act_quote": "Get Price Quote",
+            "act_callback": "Request Callback",
+        }
+        chosen_action = action_map.get(interactive_id) or interactive_title or text_clean
+        session["buy_action"] = chosen_action
+
+        if interactive_id == "act_test_drive" or "test drive" in chosen_action.lower():
+            _push_stage_and_set("buy_td_date")
+            _mody_render_stage(phone, session, inbound_msg_id)
+            return
+        else:
+            _push_stage_and_set("buy_collect_name")
+            _mody_render_stage(phone, session, inbound_msg_id)
+            return
+
+    # --- Test Drive: Preferred Date ---
+    if stage == "buy_td_date":
+        d1 = datetime.now().strftime("%d-%b (%a)")
+        d2 = (datetime.now() + timedelta(days=1)).strftime("%d-%b (%a)")
+        td_date_map = {
+            "td_date_today": f"Today ({d1})",
+            "td_date_tomorrow": f"Tomorrow ({d2})",
+            "td_date_other": "Other Date / Weekend",
+        }
+        chosen_td_date = td_date_map.get(interactive_id) or interactive_title or text_clean
+        session["td_date"] = chosen_td_date
+        _push_stage_and_set("buy_td_time")
+        _mody_render_stage(phone, session, inbound_msg_id)
+        return
+
+    # --- Test Drive: Preferred Time Slot ---
+    if stage == "buy_td_time":
+        td_time_map = {
+            "td_time_morning": "Morning (10:00 AM – 01:00 PM)",
+            "td_time_afternoon": "Afternoon (01:00 PM – 04:00 PM)",
+            "td_time_evening": "Evening (04:00 PM – 07:00 PM)",
+        }
+        chosen_td_time = td_time_map.get(interactive_id) or interactive_title or text_clean
+        session["td_time"] = chosen_td_time
+        _push_stage_and_set("buy_collect_name")
+        _mody_render_stage(phone, session, inbound_msg_id)
+        return
+
+    # --- Collect Details: Name ---
+    if stage == "buy_collect_name":
+        entered_name = text_clean
+        if len(entered_name) < 2 or re.match(r"^\d+$", entered_name):
+            err_msg = "⚠️ Please enter a valid full name:"
+            send_text(phone, err_msg)
+            if inbound_msg_id:
+                _save_reply(inbound_msg_id, err_msg)
+            return
+        session["cust_name"] = entered_name
+        _push_stage_and_set("buy_collect_mobile")
+        _mody_render_stage(phone, session, inbound_msg_id)
+        return
+
+    # --- Collect Details: Mobile ---
+    if stage == "buy_collect_mobile":
+        if not _is_valid_indian_mobile(text_clean):
+            err_msg = (
+                "⚠️ *Invalid Mobile Number.*\n\n"
+                "Please enter a valid 10-digit mobile number (e.g. *9876543210*):"
+            )
+            buttons = [
+                {"id": "btn_mody_back", "title": "Back"},
+                {"id": "btn_mody_main_menu", "title": "Main Menu"},
+            ]
+            send_buttons(phone, err_msg, buttons)
+            if inbound_msg_id:
+                _save_reply(inbound_msg_id, err_msg)
+            return
+        session["cust_mobile"] = _clean_indian_mobile(text_clean)
+        _push_stage_and_set("buy_collect_city")
+        _mody_render_stage(phone, session, inbound_msg_id)
+        return
+
+    # --- Collect Details: City ---
+    if stage == "buy_collect_city":
+        city_map = {
+            "city_ahmedabad": "Ahmedabad",
+            "city_mumbai": "Mumbai",
+            "city_other": "Other City",
+        }
+        if interactive_id in city_map:
+            session["cust_city"] = city_map[interactive_id]
+        else:
+            session["cust_city"] = text_clean.title()
+        _push_stage_and_set("buy_extra_fuel")
+        _mody_render_stage(phone, session, inbound_msg_id)
+        return
+
+    # --- Extra Questions: Fuel Type ---
+    if stage == "buy_extra_fuel":
+        fuel_map = {
+            "fuel_hybrid": "Strong Hybrid",
+            "fuel_petrol": "Petrol",
+            "fuel_other": "Diesel / CNG / Any",
+        }
+        chosen_fuel = fuel_map.get(interactive_id) or interactive_title or text_clean
+        session["fuel_pref"] = chosen_fuel
+        _push_stage_and_set("buy_extra_exchange")
+        _mody_render_stage(phone, session, inbound_msg_id)
+        return
+
+    # --- Extra Questions: Car Exchange ---
+    if stage == "buy_extra_exchange":
+        exchange_map = {
+            "exch_yes": "Yes, exchange existing car",
+            "exch_no": "No exchange",
+        }
+        chosen_exch = exchange_map.get(interactive_id) or interactive_title or text_clean
+        session["car_exchange"] = chosen_exch
+        _push_stage_and_set("buy_extra_finance")
+        _mody_render_stage(phone, session, inbound_msg_id)
+        return
+
+    # --- Extra Questions: Finance Assistance ---
+    if stage == "buy_extra_finance":
+        fin_map = {
+            "fin_yes": "Yes, finance required",
+            "fin_no": "Self-funding / No finance",
+        }
+        chosen_fin = fin_map.get(interactive_id) or interactive_title or text_clean
+        session["finance_pref"] = chosen_fin
+
+        # Confirmation & Lead submission
+        _mody_confirm_buy_lead(phone, session, inbound_msg_id)
+        _push_stage_and_set("anything_else")
+        _mody_render_stage(phone, session, inbound_msg_id)
+        return
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # [CORAL FLOW] SERVICE FLOW
+    # ═════════════════════════════════════════════════════════════════════════
+
+    # --- Service action: Book, Status, Advisor ---
+    if stage == "srv_select_action":
+        srv_action_map = {
+            "srv_book": "Book Service",
+            "srv_status": "Service Status",
+            "srv_advisor": "Connect with Advisor",
+        }
+        chosen_action = srv_action_map.get(interactive_id) or interactive_title or text_clean
+        session["service_action"] = chosen_action
+
+        if interactive_id == "srv_status":
+            _push_stage_and_set("srv_status_check")
+            _mody_render_stage(phone, session, inbound_msg_id)
+            return
+        elif interactive_id == "srv_advisor":
+            _push_stage_and_set("srv_advisor_connect")
+            _mody_render_stage(phone, session, inbound_msg_id)
+            return
+        else:
+            # Default: Book service -> Collect vehicle model & reg number
+            _push_stage_and_set("srv_vehicle_model")
+            _mody_render_stage(phone, session, inbound_msg_id)
+            return
+
+    # --- Service Status inquiry: Enter Reg Number ---
+    if stage == "srv_status_check":
+        if not _is_valid_vehicle_reg(text_clean):
+            err_msg = (
+                "⚠️ *Invalid Vehicle Registration Number.*\n\n"
+                "Please enter a valid registration number (e.g. *GJ01AB1234* or *MH02CD5678*):"
+            )
+            buttons = [
+                {"id": "btn_mody_back", "title": "Back"},
+                {"id": "btn_mody_main_menu", "title": "Main Menu"},
+            ]
+            send_buttons(phone, err_msg, buttons)
+            if inbound_msg_id:
+                _save_reply(inbound_msg_id, err_msg)
+            return
+        reg_no = text_clean.upper()
+        status_msg = (
+            f"🔍 *Service Status for {reg_no}*\n\n"
+            "Your vehicle is currently in *Periodic Inspection & Maintenance* stage.\n"
+            "Estimated completion: *Today by 5:30 PM*.\n\n"
+            "Our Service Advisor will reach out once your car is ready for delivery."
+        )
+        send_text(phone, status_msg)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, status_msg)
+        _push_stage_and_set("anything_else")
+        _mody_render_stage(phone, session, inbound_msg_id)
+        return
+
+    # --- Advisor Connect: Collect inquiry / mobile ---
+    if stage == "srv_advisor_connect":
+        session["advisor_note"] = text_clean
+        adv_msg = (
+            "📞 *Dedicated Service Advisor Assigned*\n\n"
+            "A Mody Toyota Service Advisor has been notified with your request. "
+            "They will call you on this number within 15–30 minutes."
+        )
+        send_text(phone, adv_msg)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, adv_msg)
+        _push_stage_and_set("anything_else")
+        _mody_render_stage(phone, session, inbound_msg_id)
+        return
+
+    # --- Vehicle Details: Model (Page 1 & 2) ---
+    if stage in ["srv_vehicle_model", "srv_vehicle_model_2"]:
+        selected = interactive_id or text_clean
+        if selected == "srv_car_other_1" or "other" in text_lower or "more" in text_lower:
+            session["stage"] = "srv_vehicle_model_2"
+            mody_sessions.set(phone, session, timeout=MODY_SESSION_TTL)
+            _mody_render_stage(phone, session, inbound_msg_id)
+            return
+
+        car_map = {
+            "srv_m_innova": "Innova / Hycross",
+            "srv_m_fortuner": "Fortuner",
+            "srv_m_hyryder": "Hyryder",
+            "srv_m_glanza": "Glanza",
+            "srv_m_yaris": "Yaris / Etios",
+            "srv_m_other": "Other Toyota Model",
+        }
+        chosen_car = car_map.get(selected) or interactive_title or text_clean
+        session["srv_car_model"] = chosen_car
+        _push_stage_and_set("srv_reg_number")
+        _mody_render_stage(phone, session, inbound_msg_id)
+        return
+
+    # --- Vehicle Details: Registration Number ---
+    if stage == "srv_reg_number":
+        if not _is_valid_vehicle_reg(text_clean):
+            err_msg = (
+                "⚠️ *Invalid Vehicle Registration Number.*\n\n"
+                "Please enter a valid registration number (e.g. *GJ01AB1234* or *MH02CD5678*):"
+            )
+            buttons = [
+                {"id": "btn_mody_back", "title": "Back"},
+                {"id": "btn_mody_main_menu", "title": "Main Menu"},
+            ]
+            send_buttons(phone, err_msg, buttons)
+            if inbound_msg_id:
+                _save_reply(inbound_msg_id, err_msg)
+            return
+        session["srv_reg_number"] = text_clean.upper()
+        _push_stage_and_set("srv_booking_type")
+        _mody_render_stage(phone, session, inbound_msg_id)
+        return
+
+    # --- Service Booking: Service Type ---
+    if stage == "srv_booking_type":
+        srv_types = {
+            "srv_type_periodic": "Periodic Maintenance",
+            "srv_type_repair": "General Repair / Checkup",
+            "srv_type_body": "Body & Paint Work",
+        }
+        chosen_type = srv_types.get(interactive_id) or interactive_title or text_clean
+        session["srv_type"] = chosen_type
+        _push_stage_and_set("srv_booking_date")
+        _mody_render_stage(phone, session, inbound_msg_id)
+        return
+
+    # --- Service Booking: Date ---
+    if stage == "srv_booking_date":
+        date_map = {
+            "srv_date_tomorrow": (datetime.now() + timedelta(days=1)).strftime("%d-%b-%Y (%A)"),
+            "srv_date_day_after": (datetime.now() + timedelta(days=2)).strftime("%d-%b-%Y (%A)"),
+            "srv_date_weekend": "Upcoming Weekend",
+        }
+        chosen_date = date_map.get(interactive_id) or interactive_title or text_clean
+        session["srv_date"] = chosen_date
+        _push_stage_and_set("srv_booking_time_slot")
+        _mody_render_stage(phone, session, inbound_msg_id)
+        return
+
+    # --- Service Booking: Time Slot ---
+    if stage == "srv_booking_time_slot":
+        slot_map = {
+            "srv_slot_morning": "Morning (09:30 AM – 12:00 PM)",
+            "srv_slot_afternoon": "Afternoon (12:00 PM – 03:00 PM)",
+            "srv_slot_evening": "Evening (03:00 PM – 06:00 PM)",
+        }
+        chosen_slot = slot_map.get(interactive_id) or interactive_title or text_clean
+        session["srv_time_slot"] = chosen_slot
+        _push_stage_and_set("srv_pickup_choice")
+        _mody_render_stage(phone, session, inbound_msg_id)
+        return
+
+    # --- Pickup & Drop: Yes or No ---
+    if stage == "srv_pickup_choice":
+        if interactive_id in ["srv_pk_yes", "yes"] or "yes" in text_lower:
+            session["srv_pickup"] = "Yes, Pickup & Drop Required"
+            _push_stage_and_set("srv_pickup_name")
+            _mody_render_stage(phone, session, inbound_msg_id)
+            return
+        else:
+            session["srv_pickup"] = "No, Self Drop at Workshop"
+            session["srv_contact_name"] = session.get("client_name") or "Valued Customer"
+            session["srv_contact_mobile"] = phone.lstrip("+")
+            # Complete Service Booking
+            _mody_confirm_service_booking(phone, session, inbound_msg_id)
+            _push_stage_and_set("anything_else")
+            _mody_render_stage(phone, session, inbound_msg_id)
+            return
+
+    # --- Pickup & Drop: Contact Name ---
+    if stage == "srv_pickup_name":
+        entered_name = text_clean
+        if len(entered_name) < 2 or re.match(r"^\d+$", entered_name):
+            err_msg = "⚠️ Please enter a valid contact name for pickup:"
+            send_text(phone, err_msg)
+            if inbound_msg_id:
+                _save_reply(inbound_msg_id, err_msg)
+            return
+        session["srv_contact_name"] = entered_name
+        _push_stage_and_set("srv_pickup_mobile")
+        _mody_render_stage(phone, session, inbound_msg_id)
+        return
+
+    # --- Pickup & Drop: Mobile ---
+    if stage == "srv_pickup_mobile":
+        if not _is_valid_indian_mobile(text_clean):
+            err_msg = (
+                "⚠️ *Invalid Mobile Number.*\n\n"
+                "Please enter a valid 10-digit mobile number for pickup coordination (e.g. *9876543210*):"
+            )
+            buttons = [
+                {"id": "btn_mody_back", "title": "Back"},
+                {"id": "btn_mody_main_menu", "title": "Main Menu"},
+            ]
+            send_buttons(phone, err_msg, buttons)
+            if inbound_msg_id:
+                _save_reply(inbound_msg_id, err_msg)
+            return
+        session["srv_contact_mobile"] = _clean_indian_mobile(text_clean)
+        _push_stage_and_set("srv_pickup_address")
+        _mody_render_stage(phone, session, inbound_msg_id)
+        return
+
+    # --- Pickup & Drop: Address or Live Location Pin ---
+    if stage == "srv_pickup_address":
+        # Check if sent via location or text
+        entered_addr = text_clean
+        if raw_msg and raw_msg.get("type") == "location":
+            loc = raw_msg.get("location", {})
+            lat = loc.get("latitude")
+            lon = loc.get("longitude")
+            name = loc.get("name") or ""
+            addr = loc.get("address") or ""
+            entered_addr = f"📍 Location Pin: https://maps.google.com/?q={lat},{lon}"
+            if name or addr:
+                entered_addr += f" ({name}, {addr})".strip()
+        elif len(entered_addr) < 4:
+            err_msg = (
+                "⚠️ *Please provide a complete pickup address.*\n\n"
+                "Type your House/Flat No, Landmark & Area, or share your WhatsApp Location Pin:"
+            )
+            buttons = [
+                {"id": "btn_mody_back", "title": "Back"},
+                {"id": "btn_mody_main_menu", "title": "Main Menu"},
+            ]
+            send_buttons(phone, err_msg, buttons)
+            if inbound_msg_id:
+                _save_reply(inbound_msg_id, err_msg)
+            return
+
+        session["srv_pickup_address"] = entered_addr
+
+        # Complete Service Booking
+        _mody_confirm_service_booking(phone, session, inbound_msg_id)
+        _push_stage_and_set("anything_else")
+        _mody_render_stage(phone, session, inbound_msg_id)
+        return
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # SHARED: "ANYTHING ELSE?" STEP
+    # ═════════════════════════════════════════════════════════════════════════
+    if stage == "anything_else":
+        if interactive_id in ["btn_anything_yes", "yes"] or "yes" in text_lower:
+            _mody_send_welcome(phone, inbound_msg_id=inbound_msg_id, client_name=client_name)
+            return
+        else:
+            mody_sessions.delete(phone)
+            thank_msg = (
+                "🙏 *Thank you for choosing Mody Toyota!*\n\n"
+                "Our team is always here for you. Wishing you safe travels and joyful journeys! 🚗✨\n\n"
+                "Send *mody* anytime whenever you need us."
+            )
+            send_text(phone, thank_msg)
+            if inbound_msg_id:
+                _save_reply(inbound_msg_id, thank_msg)
+            return
+
+    # Fallback
+    _mody_send_welcome(phone, inbound_msg_id=inbound_msg_id, client_name=client_name)
+
+
+# ── Mody Toyota Stage Render Helper ──────────────────────────────────────────
+
+def _mody_render_stage(phone: str, session: dict, inbound_msg_id: int = None):
+    stage = session.get("stage", "welcome")
+
+    # ── BUY NEW CAR RENDERING ──
+    if stage == "buy_select_model_1":
+        body = (
+            "🚘 *Select Toyota Model (1/2)*\n\n"
+            "Please choose the Toyota vehicle you are interested in:"
+        )
+        buttons = [
+            {"id": "car_hycross", "title": "Innova Hycross"},
+            {"id": "car_fortuner", "title": "Fortuner"},
+            {"id": "mody_car_other_1", "title": "Other Models ⏩"},
+        ]
+        send_buttons(phone, body, buttons)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "buy_select_model_2":
+        body = (
+            "🚘 *Select Toyota Model (2/2)*\n\n"
+            "Please choose from our other premium models:"
+        )
+        buttons = [
+            {"id": "car_hyryder", "title": "UC Hyryder"},
+            {"id": "car_glanza", "title": "Glanza"},
+            {"id": "btn_mody_back", "title": "Back"},
+        ]
+        send_buttons(phone, body, buttons)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "buy_choose_action":
+        model = session.get("car_model", "Toyota")
+        body = (
+            f"✨ *Great Choice! Toyota {model}*\n\n"
+            "What action would you like to take today?"
+        )
+        buttons = [
+            {"id": "act_test_drive", "title": "Test Drive"},
+            {"id": "act_quote", "title": "Get Quote"},
+            {"id": "act_callback", "title": "Callback"},
+        ]
+        send_buttons(phone, body, buttons)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "buy_td_date":
+        model = session.get("car_model", "Toyota")
+        d1 = datetime.now().strftime("%d %b")
+        d2 = (datetime.now() + timedelta(days=1)).strftime("%d %b")
+        body = (
+            f"🚗 *Test Drive Date — Toyota {model}*\n\n"
+            "Please select your preferred date for the test drive:"
+        )
+        buttons = [
+            {"id": "td_date_today", "title": f"Today ({d1})"},
+            {"id": "td_date_tomorrow", "title": f"Tomorrow ({d2})"},
+            {"id": "td_date_other", "title": "Other Date ⏩"},
+        ]
+        send_buttons(phone, body, buttons)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "buy_td_time":
+        date_sel = session.get("td_date", "Selected Date")
+        body = (
+            f"⏰ *Test Drive Time Slot ({date_sel})*\n\n"
+            "What time would suit you best?"
+        )
+        buttons = [
+            {"id": "td_time_morning", "title": "Morning (10-1)"},
+            {"id": "td_time_afternoon", "title": "Afternoon (1-4)"},
+            {"id": "td_time_evening", "title": "Evening (4-7)"},
+        ]
+        send_buttons(phone, body, buttons)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "buy_collect_name":
+        model = session.get("car_model", "Toyota")
+        action = session.get("buy_action", "Request")
+        body = (
+            f"📋 *{action} — {model}*\n\n"
+            "Please type your *Full Name*:"
+        )
+        send_text(phone, body)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "buy_collect_mobile":
+        name = session.get("cust_name", "Sir/Madam")
+        body = (
+            f"📱 Thank you, *{name}*!\n\n"
+            "Please enter your *10-digit Mobile Number* to receive official quotes and test drive booking confirmation:"
+        )
+        send_text(phone, body)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "buy_collect_city":
+        body = (
+            "📍 *Select Your City / Dealership Location:*\n\n"
+            "Please choose your preferred city:"
+        )
+        buttons = [
+            {"id": "city_ahmedabad", "title": "Ahmedabad"},
+            {"id": "city_mumbai", "title": "Mumbai"},
+            {"id": "city_other", "title": "Other City"},
+        ]
+        send_buttons(phone, body, buttons)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "buy_extra_fuel":
+        body = (
+            "⛽ *Fuel & Powertrain Preference:*\n\n"
+            "What is your preferred powertrain?"
+        )
+        buttons = [
+            {"id": "fuel_hybrid", "title": "Strong Hybrid"},
+            {"id": "fuel_petrol", "title": "Petrol"},
+            {"id": "fuel_other", "title": "Other / Any"},
+        ]
+        send_buttons(phone, body, buttons)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "buy_extra_exchange":
+        body = (
+            "🔄 *Car Exchange Facility:*\n\n"
+            "Would you like to exchange your current old vehicle with best market evaluation?"
+        )
+        buttons = [
+            {"id": "exch_yes", "title": "Yes, Exchange"},
+            {"id": "exch_no", "title": "No Exchange"},
+            {"id": "btn_mody_back", "title": "Back"},
+        ]
+        send_buttons(phone, body, buttons)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "buy_extra_finance":
+        body = (
+            "💳 *Toyota Financial Services:*\n\n"
+            "Do you require assistance with attractive low-EMI car finance options?"
+        )
+        buttons = [
+            {"id": "fin_yes", "title": "Yes, Need Finance"},
+            {"id": "fin_no", "title": "No, Self-Funded"},
+            {"id": "btn_mody_back", "title": "Back"},
+        ]
+        send_buttons(phone, body, buttons)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    # ── SERVICE FLOW RENDERING ──
+    if stage == "srv_select_action":
+        body = (
+            "🔧 *Mody Toyota Certified Service*\n\n"
+            "How can our service team assist you today?"
+        )
+        buttons = [
+            {"id": "srv_book", "title": "Book Service"},
+            {"id": "srv_status", "title": "Check Status"},
+            {"id": "srv_advisor", "title": "Service Advisor"},
+        ]
+        send_buttons(phone, body, buttons)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "srv_status_check":
+        body = (
+            "🔍 *Check Vehicle Service Status*\n\n"
+            "Please type your vehicle *Registration Number* (e.g. *GJ01AB1234*):"
+        )
+        send_text(phone, body)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "srv_advisor_connect":
+        body = (
+            "👨‍🔧 *Connect With Service Advisor*\n\n"
+            "Please briefly describe your service requirement or concern:"
+        )
+        send_text(phone, body)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "srv_vehicle_model":
+        body = (
+            "🚘 *Select Your Toyota Model (1/2)*\n\n"
+            "Which vehicle are you bringing for service?"
+        )
+        buttons = [
+            {"id": "srv_m_innova", "title": "Innova / Hycross"},
+            {"id": "srv_m_fortuner", "title": "Fortuner"},
+            {"id": "srv_car_other_1", "title": "Other Models ⏩"},
+        ]
+        send_buttons(phone, body, buttons)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "srv_vehicle_model_2":
+        body = (
+            "🚘 *Select Your Toyota Model (2/2)*\n\n"
+            "Please choose from these models:"
+        )
+        buttons = [
+            {"id": "srv_m_hyryder", "title": "Hyryder"},
+            {"id": "srv_m_glanza", "title": "Glanza"},
+            {"id": "btn_mody_back", "title": "Back"},
+        ]
+        send_buttons(phone, body, buttons)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "srv_reg_number":
+        car = session.get("srv_car_model", "Toyota")
+        body = (
+            f"🔢 *Vehicle Registration Number ({car})*\n\n"
+            "Please type your vehicle registration number (e.g. *GJ01AB1234*):"
+        )
+        send_text(phone, body)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "srv_booking_type":
+        reg = session.get("srv_reg_number", "")
+        body = (
+            f"🛠️ *Select Service Type for {reg}:*\n\n"
+            "Please select the kind of service required:"
+        )
+        buttons = [
+            {"id": "srv_type_periodic", "title": "Periodic Maint."},
+            {"id": "srv_type_repair", "title": "General Repair"},
+            {"id": "srv_type_body", "title": "Body & Paint"},
+        ]
+        send_buttons(phone, body, buttons)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "srv_booking_date":
+        d1 = (datetime.now() + timedelta(days=1)).strftime("%a, %d %b")
+        d2 = (datetime.now() + timedelta(days=2)).strftime("%a, %d %b")
+        body = (
+            "📅 *Select Preferred Service Date:*\n\n"
+            "Choose a convenient date below:"
+        )
+        buttons = [
+            {"id": "srv_date_tomorrow", "title": f"{d1}"},
+            {"id": "srv_date_day_after", "title": f"{d2}"},
+            {"id": "srv_date_weekend", "title": "This Weekend"},
+        ]
+        send_buttons(phone, body, buttons)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "srv_booking_time_slot":
+        date_val = session.get("srv_date", "Selected Date")
+        body = (
+            f"⏰ *Select Time Slot ({date_val}):*\n\n"
+            "Pick a convenient drop-off/pickup slot:"
+        )
+        buttons = [
+            {"id": "srv_slot_morning", "title": "Morning (9-12)"},
+            {"id": "srv_slot_afternoon", "title": "Afternoon (12-3)"},
+            {"id": "srv_slot_evening", "title": "Evening (3-6)"},
+        ]
+        send_buttons(phone, body, buttons)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "srv_pickup_choice":
+        body = (
+            "🚚 *Doorstep Pickup & Drop Facility*\n\n"
+            "Would you like our executive to pick up and drop your vehicle at your doorstep?"
+        )
+        buttons = [
+            {"id": "srv_pk_yes", "title": "Yes, Need Pickup"},
+            {"id": "srv_pk_no", "title": "No, Self Drop"},
+            {"id": "btn_mody_back", "title": "Back"},
+        ]
+        send_buttons(phone, body, buttons)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "srv_pickup_name":
+        body = (
+            "👤 *Pickup Coordination Contact*\n\n"
+            "Please type the *Contact Person Name* for vehicle handover:"
+        )
+        send_text(phone, body)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "srv_pickup_mobile":
+        name = session.get("srv_contact_name", "Customer")
+        body = (
+            f"📱 *Pickup Mobile Number for {name}*\n\n"
+            "Please enter the *10-digit Mobile Number*:"
+        )
+        send_text(phone, body)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    if stage == "srv_pickup_address":
+        body = (
+            "📍 *Pickup Address / Location*\n\n"
+            "Please enter your *Complete Pickup Address* (House/Flat No, Society/Building, Landmark, Area)\n\n"
+            "📌 *Tip:* You can also tap the WhatsApp attachment icon and share your *Current Location* pin directly!"
+        )
+        send_text(phone, body)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+    # ── ANYTHING ELSE? ──
+    if stage == "anything_else":
+        body = (
+            "❓ *Is there anything else we can help you with today?*"
+        )
+        buttons = [
+            {"id": "btn_anything_yes", "title": "Yes, More Help"},
+            {"id": "btn_anything_no", "title": "No, All Done"},
+            {"id": "btn_mody_main_menu", "title": "Main Menu"},
+        ]
+        send_buttons(phone, body, buttons)
+        if inbound_msg_id:
+            _save_reply(inbound_msg_id, body)
+        return
+
+
+# ── Confirmation & CRM Lead Logging ──────────────────────────────────────────
+
+def _mody_confirm_buy_lead(phone: str, session: dict, inbound_msg_id: int = None):
+    model = session.get("car_model", "Toyota")
+    action = session.get("buy_action", "Inquiry")
+    name = session.get("cust_name", "Valued Customer")
+    mobile = session.get("cust_mobile", phone.lstrip("+"))
+    city = session.get("cust_city", "N/A")
+    fuel = session.get("fuel_pref", "N/A")
+    exchange = session.get("car_exchange", "N/A")
+    finance = session.get("finance_pref", "N/A")
+
+    td_date = session.get("td_date")
+    td_time = session.get("td_time")
+    td_info = ""
+    if td_date or td_time:
+        td_info = f"📅 *Test Drive Schedule:* {td_date or 'N/A'} at {td_time or 'Preferred Time'}\n"
+
+    conf_msg = (
+        "🎉 *Thank You! Your Request Has Been Received.* 🚗✨\n\n"
+        "Here are your request details:\n"
+        f"🚘 *Model:* Toyota {model}\n"
+        f"🎯 *Action:* {action}\n"
+        f"{td_info}"
+        f"👤 *Name:* {name}\n"
+        f"📱 *Mobile:* {mobile}\n"
+        f"📍 *City:* {city}\n"
+        f"⛽ *Fuel Preference:* {fuel}\n"
+        f"🔄 *Exchange:* {exchange}\n"
+        f"💳 *Finance:* {finance}\n\n"
+        "✅ *Lead sent to sales team.* Our Senior Sales Consultant from Mody Toyota will get in touch with you shortly!"
+    )
+    send_text(phone, conf_msg)
+    if inbound_msg_id:
+        _save_reply(inbound_msg_id, conf_msg)
+
+
+def _mody_confirm_service_booking(phone: str, session: dict, inbound_msg_id: int = None):
+    model = session.get("srv_car_model", "Toyota")
+    reg = session.get("srv_reg_number", "N/A")
+    stype = session.get("srv_type", "General Service")
+    sdate = session.get("srv_date", "Upcoming")
+    slot = session.get("srv_time_slot", "Standard")
+    pickup = session.get("srv_pickup", "No")
+    cname = session.get("srv_contact_name", session.get("client_name", "Customer"))
+    cmobile = session.get("srv_contact_mobile", phone.lstrip("+"))
+    address = session.get("srv_pickup_address", "")
+
+    addr_info = ""
+    if "yes" in pickup.lower() and address:
+        addr_info = f"📍 *Pickup Address:* {address}\n"
+
+    conf_msg = (
+        "✅ *Service Appointment Request Submitted!* 🔧🚗\n\n"
+        f"🚘 *Vehicle:* {model} ({reg})\n"
+        f"🛠️ *Service Type:* {stype}\n"
+        f"📅 *Date:* {sdate}\n"
+        f"⏰ *Time Slot:* {slot}\n"
+        f"🚚 *Pickup & Drop:* {pickup}\n"
+        f"👤 *Contact:* {cname} ({cmobile})\n"
+        f"{addr_info}\n"
+        "📞 *Advisor calls to confirm:* Our dedicated Mody Toyota Service Advisor will call you shortly to confirm your booking and checklist."
+    )
+    send_text(phone, conf_msg)
+    if inbound_msg_id:
+        _save_reply(inbound_msg_id, conf_msg)
+
 
 
