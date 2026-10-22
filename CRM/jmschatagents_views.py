@@ -4784,7 +4784,6 @@ def _handle_mody_bot(phone: str, text: str, phone_number_id: str = None, inbound
                 "Please enter a valid registration number (e.g. *GJ01AB1234* or *MH02CD5678*):"
             )
             buttons = [
-                {"id": "btn_mody_back", "title": "Back"},
                 {"id": "btn_mody_main_menu", "title": "Main Menu"},
             ]
             send_buttons(phone, err_msg, buttons)
@@ -4882,11 +4881,10 @@ def _handle_mody_bot(phone: str, text: str, phone_number_id: str = None, inbound
     if stage == "srv_reg_number":
         if not _is_valid_vehicle_reg(text_clean):
             err_msg = (
-                "⚠️ *Invalid Vehicle Registration Number.*\n\n"
+                "*Invalid Vehicle Registration Number.*\n\n"
                 "Please enter a valid registration number (e.g. *GJ01AB1234* or *MH02CD5678*):"
             )
             buttons = [
-                {"id": "btn_mody_back", "title": "Back"},
                 {"id": "btn_mody_main_menu", "title": "Main Menu"},
             ]
             send_buttons(phone, err_msg, buttons)
@@ -4976,7 +4974,6 @@ def _handle_mody_bot(phone: str, text: str, phone_number_id: str = None, inbound
                 "Please enter a valid 10-digit mobile number for pickup coordination (e.g. *9876543210*):"
             )
             buttons = [
-                {"id": "btn_mody_back", "title": "Back"},
                 {"id": "btn_mody_main_menu", "title": "Main Menu"},
             ]
             send_buttons(phone, err_msg, buttons)
@@ -5007,7 +5004,6 @@ def _handle_mody_bot(phone: str, text: str, phone_number_id: str = None, inbound
                 "Type your House/Flat No, Landmark & Area, or share your WhatsApp Location Pin:"
             )
             buttons = [
-                {"id": "btn_mody_back", "title": "Back"},
                 {"id": "btn_mody_main_menu", "title": "Main Menu"},
             ]
             send_buttons(phone, err_msg, buttons)
