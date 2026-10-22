@@ -28,6 +28,7 @@ from .icemake_utils import (
     STATE_ENGINEER_MAPPING,
     tpl_registered_number_confirmation,
     tpl_icemake_complaint,
+    tpl_icemake_session_expired,
 )
 
 
@@ -153,7 +154,7 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         phone_number_id=ICEMAKE_PHONE_NUMBER_ID, 
         defaults={'client': client_account_obj}
     )
-    Message.objects.create(
+    inbound_msg = Message.objects.create(
         conversation=conv_obj,
         client=client_account_obj,
         customer=customer_obj,
@@ -168,8 +169,43 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         conv_obj.bot_state = "INIT"
         conv_obj.save()
 
+    import datetime
+    ist_tz = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+    now_ist = datetime.datetime.now(ist_tz)
+    today_ist_date = now_ist.date()
+
+    # Check previous interaction date before this current inbound message
+    prev_msg = conv_obj.messages.filter(id__lt=inbound_msg.id).order_by("-timestamp").first()
+
     session = ConversationSession(conv_obj)
-    
+
+    # Check if interaction crossed midnight (12:00 AM IST) compared to previous message
+    session_expired = False
+    if prev_msg and prev_msg.timestamp:
+        prev_ist_date = prev_msg.timestamp.astimezone(ist_tz).date()
+        if prev_ist_date < today_ist_date:
+            session_expired = True
+
+    # If midnight crossed, reset session and ALWAYS send session expired template first
+    if session_expired:
+        session.state = "SESSION_EXPIRED"
+        session.ticket_data = {}
+        session.save()
+        tpl_icemake_session_expired(number)
+        return
+
+    # If user is in SESSION_EXPIRED state, they must send a greeting (hi/hello/hey/menu) to restart
+    if session.state == "SESSION_EXPIRED":
+        if bool(re.search(r'^(hi|hello|hey|menu)$', body.lower())):
+            session.state = "AWAITING_WELCOME_CONTINUE"
+            session.ticket_data = {}
+            session.save()
+            tpl_ice_support_welcome(number)
+            return
+        else:
+            tpl_icemake_session_expired(number)
+            return
+
     is_trigger = (session.state == "INIT") or bool(re.search(r'^(hi|hello|hey|menu)$', body.lower()))
     if is_trigger:
         session.state = "AWAITING_WELCOME_CONTINUE"
@@ -616,10 +652,14 @@ class IceMakeDataAPIView(APIView):
                     if t_eng.startswith("{{"):
                         t_eng = ""
 
+                    final_ticket_no = "-"
+                    if item_ticket_no and str(item_ticket_no).strip().upper().startswith("WC"):
+                        final_ticket_no = str(item_ticket_no).strip()
+
                     return {
                         "id": item_id,
                         "conversation_id": conv.id,
-                        "ticket_no": item_ticket_no or "",
+                        "ticket_no": final_ticket_no,
                         "customer_name": t_info.get("name") or (conv.customer.name if conv.customer else ""),
                         "customer_phone": cust_phone,
                         "registered_mobile": t_info.get("registered_mobile") or registered_mobile or cust_phone,
@@ -640,7 +680,7 @@ class IceMakeDataAPIView(APIView):
                             "whatsapp_number": cust_phone,
                         },
                         "ticket_data": {
-                            "ticket_no": item_ticket_no or "",
+                            "ticket_no": final_ticket_no,
                             "name": t_info.get("name") or customer_name or (conv.customer.name if conv.customer else ""),
                             "registered_mobile": t_info.get("registered_mobile") or registered_mobile or cust_phone,
                             "city": t_info.get("city") or "",

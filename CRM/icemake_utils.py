@@ -228,6 +228,12 @@ def tpl_ice_support_welcome(to: str):
     ]
     return _meta_post_icemake(_icemake_template_payload(to, "ice_support_welcome", components))
 
+def tpl_icemake_session_expired(to: str):
+    """
+    Sends session expired notification when customer chats after midnight (12:00 AM IST reset).
+    """
+    return _meta_post_icemake(_icemake_template_payload(to, "icemake_session_expired"))
+
 def tpl_icemake_ask_name(to: str):
     return _meta_post_icemake(_icemake_template_payload(to, "icemake_ask_name"))
 
