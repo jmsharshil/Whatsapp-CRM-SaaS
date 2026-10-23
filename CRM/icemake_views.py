@@ -644,7 +644,7 @@ class IceMakeDataAPIView(APIView):
                 ]
 
                 # Helper to build consistent, simplified conv object
-                def build_conv_item(item_id, item_ticket_no, t_info, created_iso):
+                def build_conv_item(item_id, item_ticket_no, t_info, created_iso, msgs_list=None):
                     t_desc = t_info.get("issue_desc") or ""
                     if t_desc.startswith("{{"):
                         t_desc = ""
@@ -691,7 +691,7 @@ class IceMakeDataAPIView(APIView):
                             "assigned_engineer": t_eng,
                             "engineer_phone": t_info.get("engineer_phone") or "",
                         },
-                        "messages": formatted_messages
+                        "messages": msgs_list if msgs_list is not None else formatted_messages
                     }
 
                 conv_created_iso = conv.created_at.astimezone(ist_tz).isoformat() if conv.created_at else None
@@ -891,35 +891,75 @@ class IceMakeDataAPIView(APIView):
                 else:
                     # In-progress / prospect conversation without ticket yet.
                     # Group by session/day (midnight boundary) so each day's attempt is a separate row.
-                    prospect_dates = {}
+                    prospect_days_msgs = {}
                     for msg in all_msgs:
                         if msg.timestamp:
                             m_date = msg.timestamp.astimezone(ist_tz).date()
-                            if m_date not in prospect_dates:
-                                prospect_dates[m_date] = msg.timestamp.astimezone(ist_tz).isoformat()
-                            else:
-                                # keep earliest message timestamp of that day as created_at
-                                prospect_dates[m_date] = min(prospect_dates[m_date], msg.timestamp.astimezone(ist_tz).isoformat())
+                            if m_date not in prospect_days_msgs:
+                                prospect_days_msgs[m_date] = []
+                            prospect_days_msgs[m_date].append(msg)
 
-                    if prospect_dates:
+                    if prospect_days_msgs:
                         # Sort descending so today's prospect is on top
-                        sorted_dates = sorted(prospect_dates.keys(), reverse=True)
+                        sorted_dates = sorted(prospect_days_msgs.keys(), reverse=True)
                         for d in sorted_dates:
+                            day_msgs = prospect_days_msgs[d]
                             date_str = d.strftime("%Y%m%d")
-                            # Only the latest day's session gets the active td from memory
-                            day_td = td if d == sorted_dates[0] else {}
+                            first_msg_iso = day_msgs[0].timestamp.astimezone(ist_tz).isoformat() if (day_msgs and day_msgs[0].timestamp) else conv_created_iso
+
+                            day_formatted_msgs = [
+                                {
+                                    "id": m.id,
+                                    "direction": m.direction,
+                                    "type": m.message_type,
+                                    "content": m.content,
+                                    "status": m.status,
+                                    "timestamp": m.timestamp.astimezone(ist_tz).isoformat() if m.timestamp else None,
+                                    "meta_message_id": m.meta_message_id,
+                                }
+                                for m in day_msgs
+                            ]
+
+                            # Extract prospect form answers from this specific day's messages
+                            day_extracted_td = {}
+                            for i, m in enumerate(day_msgs):
+                                if m.direction == "inbound" and i > 0:
+                                    prev_m = day_msgs[i - 1]
+                                    prev_text = (prev_m.content or "").lower()
+                                    curr_text = (m.content or "").strip()
+
+                                    if "please provide your name" in prev_text or "enter a valid name" in prev_text:
+                                        day_extracted_td["name"] = curr_text
+                                    elif "please provide your city" in prev_text or "enter a valid city" in prev_text:
+                                        day_extracted_td["city"] = curr_text
+                                    elif "please enter your 6-digit postal pincode" in prev_text or "pincode" in prev_text:
+                                        day_extracted_td["pincode"] = curr_text
+                                    elif "registered 10-digit mobile number" in prev_text or "at least 10 digits" in prev_text:
+                                        day_extracted_td["registered_mobile"] = curr_text
+                                        day_extracted_td["mobile"] = curr_text
+                                    elif "briefly describe the issue" in prev_text or "issue description" in prev_text:
+                                        day_extracted_td["issue_desc"] = curr_text
+
+                            # If this is the latest day, merge with active session memory
+                            if d == sorted_dates[0] and td:
+                                for k, v in td.items():
+                                    if v and k not in ["ticket_no", "state_page"]:
+                                        day_extracted_td[k] = v
+
                             conversations_data.append(build_conv_item(
                                 item_id=f"{conv.id}_{date_str}",
                                 item_ticket_no="",
-                                t_info=day_td,
-                                created_iso=prospect_dates[d]
+                                t_info=day_extracted_td,
+                                created_iso=first_msg_iso,
+                                msgs_list=day_formatted_msgs
                             ))
                     else:
                         conversations_data.append(build_conv_item(
                             item_id=conv.id,
                             item_ticket_no="",
                             t_info=td,
-                            created_iso=conv_created_iso
+                            created_iso=conv_created_iso,
+                            msgs_list=formatted_messages
                         ))
 
             return Response({
