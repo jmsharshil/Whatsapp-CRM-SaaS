@@ -889,13 +889,38 @@ class IceMakeDataAPIView(APIView):
                             created_iso=item.get("created_at") or conv_created_iso
                         ))
                 else:
-                    # In-progress conversation without ticket yet
-                    conversations_data.append(build_conv_item(
-                        item_id=conv.id,
-                        item_ticket_no="",
-                        t_info=td,
-                        created_iso=conv_created_iso
-                    ))
+                    # In-progress / prospect conversation without ticket yet.
+                    # Group by session/day (midnight boundary) so each day's attempt is a separate row.
+                    prospect_dates = {}
+                    for msg in all_msgs:
+                        if msg.timestamp:
+                            m_date = msg.timestamp.astimezone(ist_tz).date()
+                            if m_date not in prospect_dates:
+                                prospect_dates[m_date] = msg.timestamp.astimezone(ist_tz).isoformat()
+                            else:
+                                # keep earliest message timestamp of that day as created_at
+                                prospect_dates[m_date] = min(prospect_dates[m_date], msg.timestamp.astimezone(ist_tz).isoformat())
+
+                    if prospect_dates:
+                        # Sort descending so today's prospect is on top
+                        sorted_dates = sorted(prospect_dates.keys(), reverse=True)
+                        for d in sorted_dates:
+                            date_str = d.strftime("%Y%m%d")
+                            # Only the latest day's session gets the active td from memory
+                            day_td = td if d == sorted_dates[0] else {}
+                            conversations_data.append(build_conv_item(
+                                item_id=f"{conv.id}_{date_str}",
+                                item_ticket_no="",
+                                t_info=day_td,
+                                created_iso=prospect_dates[d]
+                            ))
+                    else:
+                        conversations_data.append(build_conv_item(
+                            item_id=conv.id,
+                            item_ticket_no="",
+                            t_info=td,
+                            created_iso=conv_created_iso
+                        ))
 
             return Response({
                 "client": {
