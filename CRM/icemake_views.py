@@ -1,7 +1,7 @@
 import json
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from django.conf import settings
 
 from CRM.models import Customer, Conversation, Message, ClientAccount, ConversationState
@@ -169,9 +169,8 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         conv_obj.bot_state = "INIT"
         conv_obj.save()
 
-    import datetime
-    ist_tz = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
-    now_ist = datetime.datetime.now(ist_tz)
+    ist_tz = timezone(timedelta(hours=5, minutes=30))
+    now_ist = datetime.now(ist_tz)
     today_ist_date = now_ist.date()
 
     # Check previous interaction date before this current inbound message
@@ -545,9 +544,7 @@ class IceMakeDataAPIView(APIView):
                 params["page"] = p
                 return f"{base_url}?{params.urlencode()}"
 
-            import re
-            import datetime
-            ist_tz = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+            ist_tz = timezone(timedelta(hours=5, minutes=30))
 
             # Engineer identification: normalized 10-digit suffixes & 91-prefixed numbers, plus engineer names
             eng_phones_10 = set()
