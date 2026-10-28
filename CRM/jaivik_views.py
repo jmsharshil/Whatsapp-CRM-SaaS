@@ -27,15 +27,28 @@ def _jaivik_headers() -> dict:
         "Content-Type": "application/json",
     }
 
+def _jaivik_send_payload_sync(payload: dict) -> tuple[bool, str, str]:
+    """Send payload to Jaivik Meta WhatsApp API synchronously and return (success, msg_id, error)."""
+    try:
+        res = requests.post(_jaivik_api_url(), json=payload, headers=_jaivik_headers(), timeout=15)
+        data = res.json()
+        if res.status_code < 300 and "messages" in data and len(data["messages"]) > 0:
+            msg_id = data["messages"][0].get("id", "")
+            return True, msg_id, ""
+        else:
+            err = data.get("error", {})
+            err_msg = err.get("message") or res.text
+            logger.error(f"[Jaivik] Error sending message: {err_msg}")
+            return False, "", err_msg
+    except Exception as e:
+        logger.error(f"[Jaivik] Exception sending message: {e}")
+        return False, "", str(e)
+
+
 def _jaivik_send_payload(payload: dict):
+    """Fire-and-forget payload sender for bot responses."""
     def _send():
-        try:
-            res = requests.post(_jaivik_api_url(), json=payload, headers=_jaivik_headers(), timeout=15)
-            if res.status_code >= 300:
-                logger.error(f"[Jaivik] Error sending message: {res.text}")
-        except Exception as e:
-            logger.error(f"[Jaivik] Exception sending message: {e}")
-    
+        _jaivik_send_payload_sync(payload)
     threading.Thread(target=_send, daemon=True).start()
 
 
@@ -63,8 +76,37 @@ def jaivik_send_image(to: str, image_url: str, caption: str = ""):
     _jaivik_send_payload(payload)
 
 
-def jaivik_send_template(to: str, template_name: str, language_code: str = "en", components: list = None):
+def jaivik_send_video(to: str, video_url: str, caption: str = ""):
     if not to: return
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": f"91{to.lstrip('+')}" if len(to.lstrip('+')) == 10 else to.lstrip('+'),
+        "type": "video",
+        "video": {"link": video_url, "caption": caption},
+    }
+    return _jaivik_send_payload_sync(payload)
+
+
+def jaivik_send_document(to: str, document_url: str, filename: str = "", caption: str = ""):
+    if not to: return
+    doc_obj = {"link": document_url}
+    if filename:
+        doc_obj["filename"] = filename
+    if caption:
+        doc_obj["caption"] = caption
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": f"91{to.lstrip('+')}" if len(to.lstrip('+')) == 10 else to.lstrip('+'),
+        "type": "document",
+        "document": doc_obj,
+    }
+    return _jaivik_send_payload_sync(payload)
+
+
+def jaivik_send_template(to: str, template_name: str, language_code: str = "en", components: list = None) -> tuple[bool, str, str]:
+    if not to: return False, "", "No recipient specified"
     template_data = {
         "name": template_name,
         "language": {"code": language_code},
@@ -79,7 +121,7 @@ def jaivik_send_template(to: str, template_name: str, language_code: str = "en",
         "type": "template",
         "template": template_data,
     }
-    _jaivik_send_payload(payload)
+    return _jaivik_send_payload_sync(payload)
 
 
 def _handle_avantika_bot(phone: str, text: str, phone_number_id: str = None, inbound_msg_id: int = None, client_name: str = "") -> bool:

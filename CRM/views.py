@@ -1246,15 +1246,28 @@ class TemplateDetailView(APIView):
             "footer_text", "buttons", "variables_count", "is_active",
         ]
 
+        import json
+        raw_buttons = request.data.get("buttons")
+        if isinstance(raw_buttons, str):
+            try:
+                request.data["buttons"] = json.loads(raw_buttons)
+            except json.JSONDecodeError:
+                pass
+
         for field in editable:
             if field in request.data:
                 setattr(template, field, request.data[field])
+
+        # If header_type changed to a media format, ensure header_text is cleared
+        if template.header_type in ("IMAGE", "VIDEO", "DOCUMENT") and "header_text" not in request.data:
+            template.header_text = ""
 
         # If it's already synced to Meta, push the edit
         if template.template_id and waba:
             # Build components from updated template fields
             # We construct a dict simulating request.data for the builder
             comp_data = {
+                "category":    template.category,
                 "header_type": template.header_type,
                 "header_text": template.header_text,
                 "body_text":   template.body_text,
@@ -1265,6 +1278,55 @@ class TemplateDetailView(APIView):
 
             import os
             token = os.environ.get("WHATSAPP_TOKEN", waba.access_token)
+
+            # Handle media upload for header (IMAGE, VIDEO, DOCUMENT)
+            example_media = request.FILES.get("example_media")
+            header_type = (template.header_type or "").upper()
+
+            if example_media and header_type in ("IMAGE", "VIDEO", "DOCUMENT"):
+                app_id = os.environ.get("META_APP_ID")
+                if not app_id:
+                    return Response({"error": "META_APP_ID is missing in server config."}, status=500)
+
+                # Step 1: Initialize session
+                init_url = f"{META_GRAPH_URL}/{app_id}/uploads"
+                init_params = {
+                    "file_length": example_media.size,
+                    "file_type": example_media.content_type,
+                }
+                init_headers = {"Authorization": f"Bearer {token}"}
+
+                try:
+                    init_resp = requests.post(init_url, params=init_params, headers=init_headers, timeout=15)
+                    if not init_resp.ok:
+                        err_msg = init_resp.json().get("error", {}).get("message", "Unknown Meta error on upload init")
+                        return Response({"error": f"Failed to initialize upload: {err_msg}"}, status=400)
+
+                    session_id = init_resp.json().get("id")
+
+                    # Step 2: Upload file data
+                    upload_url = f"{META_GRAPH_URL}/{session_id}"
+                    upload_headers = {
+                        "Authorization": f"OAuth {token}",
+                        "file_offset": "0",
+                    }
+                    upload_resp = requests.post(upload_url, headers=upload_headers, data=example_media.read(), timeout=30)
+
+                    if not upload_resp.ok:
+                        err_msg = upload_resp.json().get("error", {}).get("message", "Unknown Meta error on upload")
+                        return Response({"error": f"Failed to upload media: {err_msg}"}, status=400)
+
+                    header_handle = upload_resp.json().get("h")
+
+                    # Inject example into components
+                    for comp in components:
+                        if comp.get("type") == "HEADER" and comp.get("format") == header_type:
+                            comp["example"] = {"header_handle": [header_handle]}
+                            break
+
+                except requests.RequestException as exc:
+                    return Response({"error": f"Meta Upload API call failed: {exc}"}, status=502)
+
             meta_url = f"{META_GRAPH_URL}/{template.template_id}"
             headers = {
                 "Authorization": f"Bearer {token}",
@@ -1277,8 +1339,13 @@ class TemplateDetailView(APIView):
             try:
                 resp = requests.post(meta_url, json=meta_payload, headers=headers, timeout=15)
                 if not resp.ok:
-                    meta_error = resp.json().get("error", {}).get("message", "Unknown Meta error")
-                    return Response({"error": f"Failed to update on Meta: {meta_error}"}, status=400)
+                    err_json = resp.json().get("error", {})
+                    meta_error = err_json.get("error_user_msg") or err_json.get("message", "Unknown Meta error")
+                    err_details = err_json.get("error_data", {}).get("details")
+                    if err_details:
+                        meta_error = f"{meta_error} ({err_details})"
+                    print(f"❌ [META TEMPLATE EDIT ERROR] {resp.status_code} - {resp.json()}")
+                    return Response({"error": f"Failed to update on Meta: {meta_error}", "meta_error": err_json}, status=400)
                 
                 # Edit successful, Meta puts it back in PENDING
                 template.status = "PENDING"
@@ -2577,14 +2644,46 @@ def avantika_campaign_view(request):
     
     if request.method == "POST":
         active_template = AvantikaTemplate.objects.filter(is_active=True).first()
-        if not active_template:
-            if is_api: return JsonResponse({"error": "No active template found"}, status=404)
+        
+        # Support dynamic media type (image, video, document) with fixed hardcoded template names
+        media_type = (request.POST.get("media_type") or "image").lower().strip()
+        
+        # Hardcode fixed Meta template names per type
+        TEMPLATE_NAME_MAP = {
+            "image": "image",
+            "video": "video",
+            "document": "document"
+        }
+        meta_template_name = TEMPLATE_NAME_MAP.get(media_type, "image")
+        meta_language_code = request.POST.get("language_code") or "en"
+        media_url_input = request.POST.get("media_url", "").strip()
+        doc_filename = request.POST.get("document_filename", "").strip()
+
+        # Handle direct file upload (saved via default_storage to blob / media storage)
+        uploaded_media_file = request.FILES.get("media_file")
+        direct_media_url = ""
+        if uploaded_media_file:
+            from django.core.files.storage import default_storage
+            import time
+            ts = int(time.time())
+            folder = f"avantika/{media_type}s"
+            saved_name = default_storage.save(f"{folder}/{ts}_{uploaded_media_file.name}", uploaded_media_file)
+            f_url = default_storage.url(saved_name)
+            if f_url.startswith('/'):
+                domain = getattr(settings, "DOMAIN_URL", "https://whatsappcrmsaas-emdke9dnb4f8bne6.centralindia-01.azurewebsites.net").rstrip('/')
+                direct_media_url = f"{domain}{f_url}"
+            else:
+                direct_media_url = f_url
+            if not doc_filename:
+                doc_filename = uploaded_media_file.name
+        elif media_url_input:
+            direct_media_url = media_url_input
+
+        if media_type == "image" and not active_template and not direct_media_url:
+            if is_api: return JsonResponse({"error": "No active template or image provided"}, status=404)
             messages.error(request, "No active template found!")
             return render(request, "avantika_admin.html")
             
-        # Hardcode the template name since it is fixed
-        meta_template_name = "image"
-        
         import uuid
         run_id = str(uuid.uuid4())
             
@@ -2592,41 +2691,105 @@ def avantika_campaign_view(request):
         count = 0
         errors = []
 
+        from CRM.models import Message
+
         def process_contact(contact):
             try:
-                # Fetch a fresh instance of the template for this thread.
-                # Django's FieldFile (used in generate_avantika_image for base_image) 
-                # is not thread-safe if shared across threads because it maintains state.
-                local_template = AvantikaTemplate.objects.get(id=active_template.id)
-                
-                image_url = generate_avantika_image(contact, local_template)
-                
-                header_component = {"type": "header", "parameters": [{"type": "image", "image": {"link": image_url}}]}
+                # 1. Determine header component depending on media type
+                header_component = None
+                if media_type == "video":
+                    v_url = direct_media_url
+                    if not v_url:
+                        raise ValueError("No video file or URL provided for video campaign.")
+                    header_component = {
+                        "type": "header",
+                        "parameters": [{"type": "video", "video": {"link": v_url}}]
+                    }
+                elif media_type == "document":
+                    d_url = direct_media_url
+                    if not d_url:
+                        raise ValueError("No document file or URL provided for document campaign.")
+                    doc_obj = {"link": d_url}
+                    if doc_filename:
+                        doc_obj["filename"] = doc_filename
+                    header_component = {
+                        "type": "header",
+                        "parameters": [{"type": "document", "document": doc_obj}]
+                    }
+                else:
+                    # Default: Dynamic personalized image
+                    if direct_media_url:
+                        img_url = direct_media_url
+                    else:
+                        local_template = AvantikaTemplate.objects.get(id=active_template.id)
+                        img_url = generate_avantika_image(contact, local_template)
+                    header_component = {
+                        "type": "header",
+                        "parameters": [{"type": "image", "image": {"link": img_url}}]
+                    }
+
                 body_component = {"type": "body", "parameters": [{"type": "text", "text": contact.name.strip()}]}
                 components = [header_component, body_component]
-                jaivik_send_template(
+                
+                success, msg_id, send_err = jaivik_send_template(
                     to=contact.phone,
                     template_name=meta_template_name,
-                    language_code="en",
+                    language_code=meta_language_code,
                     components=components
                 )
-                AvantikaCampaignHistory.objects.create(
+
+                if not success:
+                    raise Exception(send_err or "Meta send failed")
+
+                # Track in Message model for webhook delivery status updates (sent, delivered, read, failed)
+                raw_phone = contact.phone if contact.phone.startswith("+") else f"+{contact.phone}"
+                db_msg = None
+                if msg_id:
+                    try:
+                        from CRM.models import Customer, Conversation, ClientAccount
+                        customer_obj, _ = Customer.objects.get_or_create(phone=raw_phone, defaults={'name': contact.name or raw_phone})
+                        client_account_obj = ClientAccount.objects.filter(phone_number_id="1232951769906831").first()
+                        conv_obj, _ = Conversation.objects.get_or_create(
+                            customer=customer_obj,
+                            phone_number_id="1232951769906831",
+                            defaults={'client': client_account_obj}
+                        )
+                        db_msg = Message.objects.create(
+                            conversation=conv_obj,
+                            client=client_account_obj,
+                            customer=customer_obj,
+                            direction="outbound",
+                            status="sent",
+                            message_type="template",
+                            template_name=meta_template_name,
+                            meta_message_id=msg_id,
+                            content=f"Jaivik Campaign ({media_type}): {meta_template_name} to {contact.name}"
+                        )
+                    except Exception as me:
+                        logger.warning(f"Could not create Message record: {me}")
+
+                # Save history record with wamid in error_message/metadata field so no schema change is required
+                local_tmpl = None
+                if active_template:
+                    try:
+                        local_tmpl = AvantikaTemplate.objects.get(id=active_template.id)
+                    except:
+                        pass
+
+                wamid_tag = f"wamid:{msg_id}" if msg_id else ""
+                history_rec = AvantikaCampaignHistory.objects.create(
                     contact=contact,
                     phone=contact.phone,
                     name=contact.name,
-                    template=local_template,
+                    template=local_tmpl,
                     campaign_run_id=run_id,
-                    status="Sent"
+                    status="Sent",
+                    error_message=wamid_tag
                 )
                 return True, None
             except Exception as e:
                 print(f"Error sending campaign to {contact.phone}: {str(e)}")
-                
-                try:
-                    fail_template = AvantikaTemplate.objects.get(id=active_template.id)
-                except:
-                    fail_template = active_template
-                    
+                fail_template = active_template
                 AvantikaCampaignHistory.objects.create(
                     contact=contact,
                     phone=contact.phone,
@@ -2642,7 +2805,6 @@ def avantika_campaign_view(request):
         from django.db import close_old_connections
         
         def process_contact_wrapper(contact):
-            # Ensure each thread gets a clean DB connection if needed
             close_old_connections()
             try:
                 return process_contact(contact)
@@ -2659,7 +2821,7 @@ def avantika_campaign_view(request):
                     errors.append(error)
                 
         if is_api:
-            return JsonResponse({"success": True, "sent_count": count, "errors": errors if errors else None})
+            return JsonResponse({"success": True, "campaign_run_id": run_id, "sent_count": count, "errors": errors if errors else None})
             
         messages.success(request, f"Campaign successfully sent to {count} contacts!")
         return redirect('avantika-template-view')
@@ -2670,11 +2832,12 @@ def avantika_campaign_view(request):
 
 @csrf_exempt
 def avantika_history_api(request):
-    """API to return history of Avantika campaign sent."""
+    """API to return history and live report of Avantika/Jaivik campaign sent."""
     auth_err = _strict_avantika_auth(request)
     if auth_err: return auth_err
     
-    from .models import AvantikaCampaignHistory
+    from .models import AvantikaCampaignHistory, Message
+    import re
     
     is_api = request.headers.get("Authorization", "").startswith("Bearer ")
 
@@ -2688,24 +2851,98 @@ def avantika_history_api(request):
     campaign_run_id = request.GET.get('campaign_run_id')
     if campaign_run_id:
         history_records = history_records.filter(campaign_run_id=campaign_run_id)
+
+    # Collect wamids from error_message field
+    wamid_map = {}
+    wamids_to_lookup = []
     
-    sent_count = history_records.filter(status="Sent").count()
-    failed_count = history_records.filter(status="Failed").count()
-    
+    history_list = list(history_records[:200]) # Latest 200 records
+    for rec in history_list:
+        err = rec.error_message or ""
+        match = re.search(r"wamid:([a-zA-Z0-9_\-\.]+)", err)
+        if match:
+            wamid = match.group(1)
+            wamid_map[rec.id] = wamid
+            wamids_to_lookup.append(wamid)
+
+    # Fetch live statuses from Message table populated by Meta Webhook
+    msg_status_lookup = {}
+    if wamids_to_lookup:
+        messages_qs = Message.objects.filter(meta_message_id__in=wamids_to_lookup).values(
+            'meta_message_id', 'status', 'delivered_at', 'read_at', 'error_message'
+        )
+        for m in messages_qs:
+            msg_status_lookup[m['meta_message_id']] = m
+
+    sent_count = 0
+    delivered_count = 0
+    read_count = 0
+    failed_count = 0
+
+    records_to_sync = []
     data = []
-    for record in history_records:
+    for record in history_list:
+        live_status = record.status
+        wamid = wamid_map.get(record.id)
+        meta_msg_info = msg_status_lookup.get(wamid) if wamid else None
+        
+        if meta_msg_info:
+            meta_status = meta_msg_info.get("status", "").lower()
+            if meta_status in ["delivered", "read", "failed", "sent"]:
+                live_status = meta_status.capitalize()
+                if live_status != record.status:
+                    record.status = live_status
+                    records_to_sync.append(record)
+
+        status_lower = live_status.lower()
+        if status_lower == "read":
+            read_count += 1
+            delivered_count += 1
+            sent_count += 1
+        elif status_lower == "delivered":
+            delivered_count += 1
+            sent_count += 1
+        elif status_lower == "sent":
+            sent_count += 1
+        elif status_lower == "failed":
+            failed_count += 1
+
+        clean_error = ""
+        if record.error_message:
+            clean_error = re.sub(r"wamid:[a-zA-Z0-9_\-\.]+", "", record.error_message).strip()
+
         data.append({
+            "id": record.id,
             "campaign_run_id": record.campaign_run_id,
             "phone": record.phone or (record.contact.phone if record.contact else ""),
             "name": record.name or (record.contact.name if record.contact else ""),
-            "status": record.status,
+            "status": live_status,
+            "wamid": wamid or "",
             "sent_at": record.sent_at.isoformat() if record.sent_at else None,
-            "error_message": record.error_message
+            "error_message": clean_error
         })
         
+    if records_to_sync:
+        try:
+            AvantikaCampaignHistory.objects.bulk_update(records_to_sync, ['status'], batch_size=100)
+        except Exception as be:
+            logger.debug(f"Non-critical bulk_update error in history api: {be}")
+
+    report = {
+        "sent": sent_count,
+        "delivered": delivered_count,
+        "read": read_count,
+        "failed": failed_count,
+        "total": len(data)
+    }
+
     return JsonResponse({
+        "success": True,
+        "report": report,
         "total_sent": sent_count,
         "total_failed": failed_count,
+        "total_delivered": delivered_count,
+        "total_read": read_count,
         "history": data
     })
 
