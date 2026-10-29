@@ -516,7 +516,13 @@ class IceMakeDataAPIView(APIView):
 
             from django.db.models import Prefetch, Max
 
-            base_qs = Conversation.objects.filter(phone_number_id=ICEMAKE_PHONE_NUMBER_ID)
+            from django.db.models import Exists, OuterRef
+            inbound_subquery = Message.objects.filter(conversation=OuterRef('pk'), direction='inbound')
+            base_qs = Conversation.objects.filter(
+                phone_number_id=ICEMAKE_PHONE_NUMBER_ID
+            ).filter(
+                Exists(inbound_subquery)
+            )
             
             last_fetched = request.GET.get("last_fetched")
             if last_fetched:
@@ -565,10 +571,26 @@ class IceMakeDataAPIView(APIView):
                     if nm:
                         engineer_names.add(nm)
 
+            # Filter out redundant notification-only conversations sent to registered alternate mobiles
+            # (e.g. customer generates ticket with registered mobile B -> template sent to B -> empty conv created for B)
+            valid_convs = []
+            for conv in page.object_list:
+                c_msgs = list(conv.messages.all())
+                has_inbound = any(m.direction == 'inbound' for m in c_msgs)
+                if not has_inbound and c_msgs:
+                    c_td = conv.bot_metadata.get('ticket_data', {}) if isinstance(conv.bot_metadata, dict) else {}
+                    only_customer_tpl = all(
+                        m.direction == 'outbound' and ('Complaint Registered Successfully' in (m.content or '') or 'TEMPLATE: ICEMAKE_CUSTOMER' in (m.content or ''))
+                        for m in c_msgs
+                    )
+                    if only_customer_tpl and not c_td.get('city') and not c_td.get('issue_desc'):
+                        continue
+                valid_convs.append(conv)
+
             # Deduplicate conversations by normalized phone number to merge +91 and 91 numbers
             seen_clean_phones = {}
             filtered_convs = []
-            for conv in page.object_list:
+            for conv in valid_convs:
                 raw_p = (conv.customer.phone or "").strip() if conv.customer else ""
                 clean_p = re.sub(r"[^\d]", "", raw_p)
                 if len(clean_p) == 10:
