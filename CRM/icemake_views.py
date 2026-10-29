@@ -882,36 +882,10 @@ class IceMakeDataAPIView(APIView):
                             if val:
                                 tickets_detail_map[current_tid][k] = val
 
-                # If tickets exist, create a separate row/entry for each distinct ticket
-                if tickets_detail_map:
-                    sorted_tickets = sorted(
-                        tickets_detail_map.values(),
-                        key=lambda x: (x.get("created_at") or "", x.get("ticket_no") or ""),
-                        reverse=True
-                    )
-                    for item in sorted_tickets:
-                        t_tid = item["ticket_no"]
-                        if not item.get("assigned_engineer"):
-                            st_key = (item.get("state") or td.get("state") or "").strip().lower()
-                            if st_key in STATE_ENGINEER_MAPPING:
-                                item["assigned_engineer"] = STATE_ENGINEER_MAPPING[st_key].get("name", "")
-                                if not item.get("engineer_phone"):
-                                    item["engineer_phone"] = STATE_ENGINEER_MAPPING[st_key].get("phone", "")
-                            elif "gujarat" in st_key or "gj" in st_key:
-                                item["assigned_engineer"] = "Mr Rutvik"
-                                item["engineer_phone"] = "919727721447"
-
-                        conversations_data.append(build_conv_item(
-                            item_id=f"{conv.id}_{t_tid}",
-                            item_ticket_no=t_tid,
-                            t_info=item,
-                            created_iso=item.get("created_at") or conv_created_iso
-                        ))
-                else:
-                    # In-progress / prospect conversation without ticket yet.
-                    # Group by session/day (midnight boundary) so each day's attempt is a separate row.
+                # Helper to process prospect messages grouped by day
+                def add_prospect_entries(p_msgs, is_active_session=False):
                     prospect_days_msgs = {}
-                    for msg in all_msgs:
+                    for msg in p_msgs:
                         if msg.timestamp:
                             m_date = msg.timestamp.astimezone(ist_tz).date()
                             if m_date not in prospect_days_msgs:
@@ -919,10 +893,13 @@ class IceMakeDataAPIView(APIView):
                             prospect_days_msgs[m_date].append(msg)
 
                     if prospect_days_msgs:
-                        # Sort descending so today's prospect is on top
                         sorted_dates = sorted(prospect_days_msgs.keys(), reverse=True)
                         for d in sorted_dates:
                             day_msgs = prospect_days_msgs[d]
+                            # Only include if user sent at least one inbound message on this day
+                            if not any(m.direction == "inbound" for m in day_msgs):
+                                continue
+
                             date_str = d.strftime("%Y%m%d")
                             first_msg_iso = day_msgs[0].timestamp.astimezone(ist_tz).isoformat() if (day_msgs and day_msgs[0].timestamp) else conv_created_iso
 
@@ -947,20 +924,24 @@ class IceMakeDataAPIView(APIView):
                                     prev_text = (prev_m.content or "").lower()
                                     curr_text = (m.content or "").strip()
 
-                                    if "please provide your name" in prev_text or "enter a valid name" in prev_text:
+                                    if any(w in prev_text for w in ["please provide your name", "enter a valid name", "share your full name", "icemake_ask_name"]):
                                         day_extracted_td["name"] = curr_text
-                                    elif "please provide your city" in prev_text or "enter a valid city" in prev_text:
+                                    elif any(w in prev_text for w in ["select your state", "icemake_state"]):
+                                        day_extracted_td["state"] = curr_text
+                                    elif any(w in prev_text for w in ["please provide your city", "enter a valid city", "enter your city", "ice_support_ask_city"]):
                                         day_extracted_td["city"] = curr_text
-                                    elif "please enter your 6-digit postal pincode" in prev_text or "pincode" in prev_text:
+                                    elif any(w in prev_text for w in ["pincode", "postal pincode", "ice_support_ask_pincode"]):
                                         day_extracted_td["pincode"] = curr_text
-                                    elif "registered 10-digit mobile number" in prev_text or "at least 10 digits" in prev_text:
+                                    elif any(w in prev_text for w in ["registered 10-digit mobile", "at least 10 digits", "registered phone number", "ice_support_ask_number"]):
                                         day_extracted_td["registered_mobile"] = curr_text
                                         day_extracted_td["mobile"] = curr_text
-                                    elif "briefly describe the issue" in prev_text or "issue description" in prev_text:
+                                    elif any(w in prev_text for w in ["select your complaint type", "icemake_complaint"]):
+                                        day_extracted_td["complaint_type"] = curr_text
+                                    elif any(w in prev_text for w in ["describe the issue", "briefly describe", "issue description", "ice_support_ask_issue"]):
                                         day_extracted_td["issue_desc"] = curr_text
 
-                            # If this is the latest day, merge with active session memory
-                            if d == sorted_dates[0] and td:
+                            # If this is the latest active day, merge with active session memory
+                            if is_active_session and d == sorted_dates[0] and td:
                                 for k, v in td.items():
                                     if v and k not in ["ticket_no", "state_page"]:
                                         day_extracted_td[k] = v
@@ -972,14 +953,48 @@ class IceMakeDataAPIView(APIView):
                                 created_iso=first_msg_iso,
                                 msgs_list=day_formatted_msgs
                             ))
-                    else:
+
+                # Check if there is an in-progress / prospect conversation after the last ticket was generated
+                # or if the conversation is a prospect without any tickets
+                if tickets_detail_map:
+                    # Find the index of the message where the latest ticket was generated
+                    last_ticket_msg_idx = -1
+                    for idx_m, m in enumerate(all_msgs):
+                        if re.search(r'(?:Ticket\s*:\s*|Complaint Number:\s*\*?|(?:^|))(WC\d+|C\d+)', m.content or '', re.IGNORECASE):
+                            last_ticket_msg_idx = idx_m
+
+                    # If user contacted again after the last ticket registration
+                    if last_ticket_msg_idx != -1 and last_ticket_msg_idx < len(all_msgs) - 1:
+                        subsequent_msgs = all_msgs[last_ticket_msg_idx + 1:]
+                        if any(m.direction == "inbound" for m in subsequent_msgs):
+                            add_prospect_entries(subsequent_msgs, is_active_session=True)
+
+                    sorted_tickets = sorted(
+                        tickets_detail_map.values(),
+                        key=lambda x: (x.get("created_at") or "", x.get("ticket_no") or ""),
+                        reverse=True
+                    )
+                    for item in sorted_tickets:
+                        t_tid = item["ticket_no"]
+                        if not item.get("assigned_engineer"):
+                            st_key = (item.get("state") or td.get("state") or "").strip().lower()
+                            if st_key in STATE_ENGINEER_MAPPING:
+                                item["assigned_engineer"] = STATE_ENGINEER_MAPPING[st_key].get("name", "")
+                                if not item.get("engineer_phone"):
+                                    item["engineer_phone"] = STATE_ENGINEER_MAPPING[st_key].get("phone", "")
+                            elif "gujarat" in st_key or "gj" in st_key:
+                                item["assigned_engineer"] = "Mr Rutvik"
+                                item["engineer_phone"] = "919727721447"
+
                         conversations_data.append(build_conv_item(
-                            item_id=conv.id,
-                            item_ticket_no="",
-                            t_info=td,
-                            created_iso=conv_created_iso,
-                            msgs_list=formatted_messages
+                            item_id=f"{conv.id}_{t_tid}",
+                            item_ticket_no=t_tid,
+                            t_info=item,
+                            created_iso=item.get("created_at") or conv_created_iso
                         ))
+                else:
+                    # Pure prospect conversation without any tickets generated
+                    add_prospect_entries(all_msgs, is_active_session=True)
 
             return Response({
                 "client": {
