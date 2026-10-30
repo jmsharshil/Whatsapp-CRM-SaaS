@@ -673,12 +673,85 @@ class WhatsAppWebhookView(APIView):
 
         for entry in payload.get("entry", []):
             for change in entry.get("changes", []):
-                if change.get("field") != "messages":
-                    continue
-
+                field = change.get("field")
                 value = change.get("value", {})
                 metadata = value.get("metadata", {})
                 phone_number_id = metadata.get("phone_number_id", "")
+
+                # ── Handle Coexistence Outbound Echoes (WhatsApp Business App) ──
+                # When business agents reply directly from the WhatsApp Business App,
+                # Meta sends smb_message_echoes with from=<business_num>, to=<customer_num>.
+                # We save this as outbound so it appears on the Right side in CRM.
+                if field == "smb_message_echoes":
+                    echoes = value.get("message_echoes", [])
+                    client = _get_client_by_phone_number_id(phone_number_id)
+                    for echo in echoes:
+                        try:
+                            to_phone = echo.get("to", "")
+                            if not to_phone:
+                                continue
+                            raw_phone = _normalize_e164_phone(to_phone)
+                            msg_id = echo.get("id", "")
+                            msg_type = echo.get("type", "text")
+
+                            content = ""
+                            if msg_type == "text":
+                                content = echo.get("text", {}).get("body", "")
+                            elif msg_type in ["image", "video", "audio", "document", "sticker"]:
+                                media_id = echo.get(msg_type, {}).get("id")
+                                caption = echo.get(msg_type, {}).get("caption", "")
+                                token = client.access_token if client and client.access_token else getattr(settings, "META_PERMANENT_TOKEN", getattr(settings, "META_ACCESS_TOKEN", ""))
+                                dl_url = download_insight_media_from_whatsapp(media_id, token) if media_id else ""
+                                prefix = f"[{msg_type.upper()}]"
+                                content = f"{prefix} {dl_url}" if dl_url else prefix
+                                if caption:
+                                    content = f"{content}\n{caption}"
+                            elif msg_type == "reaction":
+                                content = f"[Reaction: {echo.get('reaction', {}).get('emoji', '')}]"
+                            elif msg_type == "interactive":
+                                inter = echo.get("interactive", {})
+                                content = inter.get("button_reply", {}).get("title") or inter.get("list_reply", {}).get("title", "[Interactive Message]")
+                            else:
+                                content = f"[{msg_type.upper()}]"
+
+                            customer_obj = Customer.objects.filter(phone=raw_phone).first()
+                            if not customer_obj:
+                                customer_obj = Customer.objects.create(phone=raw_phone, name=raw_phone)
+
+                            conv = Conversation.objects.filter(
+                                customer=customer_obj,
+                                phone_number_id=phone_number_id
+                            ).first()
+
+                            if not conv:
+                                conv = Conversation.objects.create(
+                                    customer=customer_obj,
+                                    phone_number_id=phone_number_id,
+                                    client=client,
+                                )
+
+                            Message.objects.create(
+                                conversation=conv,
+                                client=client,
+                                customer=customer_obj,
+                                content=content,
+                                direction="outbound",
+                                message_type=msg_type if msg_type in ["text", "image", "document", "video"] else "text",
+                                status="sent",
+                                meta_message_id=msg_id,
+                            )
+                            logger.info(
+                                "[Coexistence] Saved outbound echo from Business App for to=%s id=%s phone_number_id=%s",
+                                raw_phone,
+                                msg_id,
+                                phone_number_id,
+                            )
+                        except Exception as echo_err:
+                            logger.exception("[Coexistence] Error handling smb_message_echoes: %s", echo_err)
+                    continue
+
+                if field != "messages":
+                    continue
 
                 # ── Multi-tenant routing ──────────────────────────────────
                 client = _get_client_by_phone_number_id(phone_number_id)
