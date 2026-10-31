@@ -3121,6 +3121,48 @@ class WhatsAppBusinessProfileView(APIView):
             "messaging_product": "whatsapp"
         }
 
+        # ── 1. Handle Profile Picture Re-upload (file) ──────────────────────
+        profile_pic_file = request.FILES.get("profile_picture")
+        if profile_pic_file:
+            import os
+            app_id = os.environ.get("META_APP_ID")
+            if not app_id:
+                return Response({"status": "error", "error": "META_APP_ID is missing in server environment."}, status=500)
+
+            # Step A: Initialize upload session with Meta
+            init_url = f"{META_GRAPH_URL}/{app_id}/uploads"
+            init_params = {
+                "file_length": profile_pic_file.size,
+                "file_type": profile_pic_file.content_type,
+            }
+            init_headers = {"Authorization": f"Bearer {token}"}
+
+            try:
+                init_resp = requests.post(init_url, params=init_params, headers=init_headers, timeout=15)
+                if not init_resp.ok:
+                    err_msg = init_resp.json().get("error", {}).get("message", "Meta upload init failed")
+                    return Response({"status": "error", "error": f"Failed to start image upload: {err_msg}"}, status=400)
+
+                session_id = init_resp.json().get("id")
+
+                # Step B: Upload binary image to session
+                upload_url = f"{META_GRAPH_URL}/{session_id}"
+                upload_headers = {
+                    "Authorization": f"OAuth {token}",
+                    "file_offset": "0",
+                }
+                upload_resp = requests.post(upload_url, headers=upload_headers, data=profile_pic_file.read(), timeout=30)
+                if not upload_resp.ok:
+                    err_msg = upload_resp.json().get("error", {}).get("message", "Meta image upload failed")
+                    return Response({"status": "error", "error": f"Failed to upload image: {err_msg}"}, status=400)
+
+                pic_handle = upload_resp.json().get("h")
+                if pic_handle:
+                    payload["profile_picture_handle"] = pic_handle
+            except requests.RequestException as exc:
+                return Response({"status": "error", "error": f"Meta media upload API failed: {exc}"}, status=502)
+
+        # ── 2. Handle Text Fields ───────────────────────────────────────────
         updatable_fields = ["about", "address", "description", "email", "vertical"]
         for field in updatable_fields:
             if field in request.data:
@@ -3157,7 +3199,7 @@ class WhatsAppBusinessProfileView(APIView):
 
             return Response({
                 "status": "success",
-                "message": "WhatsApp Business Profile updated successfully on Meta.",
+                "message": "WhatsApp Business Profile & Picture updated successfully on Meta.",
                 "meta_response": data
             })
         except requests.RequestException as e:
