@@ -3051,3 +3051,114 @@ class MetaTemplateAnalyticsView(APIView):
                 "error": "Failed to fetch analytics from Meta",
                 "details": str(e)
             }, status=500)
+
+
+class WhatsAppBusinessProfileView(APIView):
+    """
+    GET  /api/waba/business-profile/  -> Fetch live WhatsApp Business Profile from Meta.
+    POST /api/waba/business-profile/  -> Update live WhatsApp Business Profile on Meta.
+    Strictly checks that WABA is connected.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_waba_and_credentials(self, user):
+        org, waba, err = _get_org_and_waba(user)
+        if err:
+            return None, None, Response({
+                "status": "error",
+                "error": err.get("error", "WABA not connected. Please connect WhatsApp first.")
+            }, status=400)
+
+        import os
+        phone_number_id = getattr(waba, "phone_number_id", None)
+        token = os.environ.get("WHATSAPP_TOKEN", getattr(waba, "access_token", None))
+
+        if not phone_number_id or not token:
+            return None, None, Response({
+                "status": "error",
+                "error": "WABA phone_number_id or access_token is missing. Please re-authenticate."
+            }, status=400)
+
+        return phone_number_id, token, None
+
+    def get(self, request):
+        phone_number_id, token, err_resp = self._get_waba_and_credentials(request.user)
+        if err_resp:
+            return err_resp
+
+        fields = "about,address,description,email,profile_picture_url,websites,vertical"
+        url = f"{META_GRAPH_URL}/{phone_number_id}/whatsapp_business_profile?fields={fields}"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+
+        try:
+            resp = requests.get(url, headers=headers, timeout=15)
+            data = resp.json()
+            if not resp.ok:
+                err_msg = data.get("error", {}).get("message", "Meta Graph API error")
+                return Response({"status": "error", "error": err_msg, "meta_error": data}, status=resp.status_code)
+
+            profile_data = {}
+            if "data" in data and len(data["data"]) > 0:
+                profile_data = data["data"][0]
+
+            return Response({
+                "status": "success",
+                "phone_number_id": phone_number_id,
+                "profile": profile_data
+            })
+        except requests.RequestException as e:
+            return Response({"status": "error", "error": f"Failed to contact Meta: {str(e)}"}, status=502)
+
+    def post(self, request):
+        phone_number_id, token, err_resp = self._get_waba_and_credentials(request.user)
+        if err_resp:
+            return err_resp
+
+        payload = {
+            "messaging_product": "whatsapp"
+        }
+
+        updatable_fields = ["about", "address", "description", "email", "vertical"]
+        for field in updatable_fields:
+            if field in request.data:
+                payload[field] = str(request.data[field]).strip()
+
+        # Handle websites (list of URLs or comma-separated string)
+        if "websites" in request.data:
+            websites_input = request.data["websites"]
+            if isinstance(websites_input, list):
+                payload["websites"] = [w.strip() for w in websites_input if w.strip()]
+            elif isinstance(websites_input, str):
+                import json
+                try:
+                    parsed = json.loads(websites_input)
+                    if isinstance(parsed, list):
+                        payload["websites"] = [w.strip() for w in parsed if w.strip()]
+                    else:
+                        payload["websites"] = [w.strip() for w in websites_input.split(",") if w.strip()]
+                except Exception:
+                    payload["websites"] = [w.strip() for w in websites_input.split(",") if w.strip()]
+
+        url = f"{META_GRAPH_URL}/{phone_number_id}/whatsapp_business_profile"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=15)
+            data = resp.json()
+            if not resp.ok:
+                err_msg = data.get("error", {}).get("message", "Meta Graph API error")
+                return Response({"status": "error", "error": err_msg, "meta_error": data}, status=resp.status_code)
+
+            return Response({
+                "status": "success",
+                "message": "WhatsApp Business Profile updated successfully on Meta.",
+                "meta_response": data
+            })
+        except requests.RequestException as e:
+            return Response({"status": "error", "error": f"Failed to contact Meta: {str(e)}"}, status=502)
