@@ -1780,6 +1780,9 @@ class MetaConversationMessageListView(APIView):
                 "bot_msg": m.content if m.direction == "outbound" else None,
                 "user_timestamp": m.timestamp.isoformat() if m.direction == "inbound" else None, 
                 "bot_timestamp": m.timestamp.isoformat() if m.direction == "outbound" else None,
+                "status": m.status,
+                "direction": m.direction,
+                "message_type": m.message_type,
             }
             for m in conv.messages.order_by("timestamp")
         ]
