@@ -951,7 +951,7 @@ class IceMakeDataAPIView(APIView):
                                 item_ticket_no="",
                                 t_info=day_extracted_td,
                                 created_iso=first_msg_iso,
-                                msgs_list=day_formatted_msgs
+                                msgs_list=formatted_messages
                             ))
 
                 # Check if there is an in-progress / prospect conversation after the last ticket was generated
