@@ -3033,8 +3033,12 @@ class MetaTemplateAnalyticsView(APIView):
             # If 90 days requested, clamp to 89 days to prevent boundary error
             if selected_days >= 90:
                 selected_days = 89
+            
+            # Match Meta's date window: Last N days includes today (e.g., Last 7 days = today + past 6 days)
+            # Starting at midnight 00:00:00 of the start date
+            start_date_midnight = (now - datetime.timedelta(days=selected_days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            start_time = int(start_date_midnight.timestamp())
             end_time = int(now.timestamp())
-            start_time = int((now - datetime.timedelta(days=selected_days)).timestamp())
         
         url = f"https://graph.facebook.com/v20.0/{waba_id}"
         params = {
