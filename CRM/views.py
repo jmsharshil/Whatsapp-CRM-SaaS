@@ -2193,6 +2193,7 @@ def _serialise_client(client, *, tech_provider_token: str, fetch_meta: bool = Tr
         "waba_id":        client.waba_id,
         "waba_name":      client.waba_name,
         "phone_number":   client.phone_number,
+        "phone_number_id": client.phone_number_id,
         "member_count":   len(members),
         "members":        members,
         "daily_messages":   getattr(client, 'daily_messages', 0),
