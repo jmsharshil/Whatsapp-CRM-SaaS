@@ -3000,9 +3000,41 @@ class MetaTemplateAnalyticsView(APIView):
             except Exception as e:
                 return Response({"error": f"Failed to resolve template_name to ID: {str(e)}"}, status=500)
             
-        # Generate UNIX timestamps for the last 30 days
-        end_time = int(datetime.datetime.now().timestamp())
-        start_time = int((datetime.datetime.now() - datetime.timedelta(days=30)).timestamp())
+        # Determine date range: supports custom start_date/end_date (YYYY-MM-DD or timestamps) or days (7, 30, 60, 90)
+        days = request.GET.get('days')
+        req_start = request.GET.get('start_date')
+        req_end = request.GET.get('end_date')
+
+        now = datetime.datetime.now()
+
+        if req_start and req_end:
+            try:
+                start_dt = datetime.datetime.strptime(str(req_start).split('T')[0], '%Y-%m-%d')
+                end_dt = datetime.datetime.strptime(str(req_end).split('T')[0], '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+                start_time = int(start_dt.timestamp())
+                end_time = int(end_dt.timestamp())
+            except ValueError:
+                try:
+                    start_time = int(req_start)
+                    end_time = int(req_end)
+                except (ValueError, TypeError):
+                    return Response({'error': 'Invalid start_date or end_date format. Use YYYY-MM-DD or UNIX timestamp.'}, status=400)
+
+            # Meta limit: maximum 89 days range allowed
+            max_seconds = 89 * 86400
+            if (end_time - start_time) > max_seconds:
+                start_time = end_time - max_seconds
+        else:
+            try:
+                selected_days = int(days) if days and str(days).isdigit() else 30
+            except (ValueError, TypeError):
+                selected_days = 30
+            # Meta Graph API hard-limits template analytics to strictly < 90 days
+            # If 90 days requested, clamp to 89 days to prevent boundary error
+            if selected_days >= 90:
+                selected_days = 89
+            end_time = int(now.timestamp())
+            start_time = int((now - datetime.timedelta(days=selected_days)).timestamp())
         
         url = f"https://graph.facebook.com/v20.0/{waba_id}"
         params = {
