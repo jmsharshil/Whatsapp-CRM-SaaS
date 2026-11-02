@@ -5,7 +5,7 @@ import requests
 import io
 import re
 from django.conf import settings
-from openai import AzureOpenAI
+import anthropic
 
 try:
     import PyPDF2
@@ -39,28 +39,29 @@ _CACHED_DOC_TEXT = ""
 _CACHED_DOC_URL = ""
 
 # ─────────────────────────────────────────────────────────────
-# Azure OpenAI Client Helper
+# Anthropic Claude Client Helper
 # ─────────────────────────────────────────────────────────────
-_azure_client = None
+_claude_client = None
 
-def get_azure_openai_client():
-    global _azure_client
-    if _azure_client is None:
-        api_key = os.getenv("OPENAI_API_KEY") or getattr(settings, "OPENAI_API_KEY", "")
-        endpoint = os.getenv("ENDPOINT_URL") or getattr(settings, "ENDPOINT_URL", "")
-        api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-05-01-preview")
-        if api_key and endpoint:
+def get_claude_client():
+    global _claude_client
+    if _claude_client is None:
+        api_key = (
+            os.getenv("ANTHROPIC_API_KEY")
+            or os.getenv("CLAUDE_API_KEY")
+            or os.getenv("AI4TRADES_CLAUDE_KEY")
+            or getattr(settings, "ANTHROPIC_API_KEY", "")
+            or getattr(settings, "CLAUDE_API_KEY", "")
+            or getattr(settings, "AI4TRADES_CLAUDE_KEY", "")
+        )
+        if api_key:
             try:
-                _azure_client = AzureOpenAI(
-                    api_key=api_key,
-                    api_version=api_version,
-                    azure_endpoint=endpoint
-                )
+                _claude_client = anthropic.Anthropic(api_key=api_key)
             except Exception as e:
-                logger.error("[ai4trades] Failed to initialize AzureOpenAI: %s", e)
+                logger.error("[ai4trades] Failed to initialize Anthropic client: %s", e)
         else:
-            logger.warning("[ai4trades] OPENAI_API_KEY or ENDPOINT_URL not set in environment.")
-    return _azure_client
+            logger.warning("[ai4trades] ANTHROPIC_API_KEY not set in environment or settings.")
+    return _claude_client
 
 
 
@@ -333,10 +334,10 @@ def get_ai4trades_knowledge_content() -> str:
 
 def ask_ai4trades_assistant(user_question: str, conversation_history: list = None) -> str:
     """
-    Uses Azure OpenAI gpt-4o-mini to answer user questions adhering to Ai4Trades guidelines.
+    Uses Anthropic Claude to answer user questions adhering to Ai4Trades guidelines.
     Uses RAG retrieval to fetch top matching chunks from the knowledge base.
     """
-    client = get_azure_openai_client()
+    client = get_claude_client()
     if not client:
         return "Thank you for reaching out to AI4Trades. Our AI assistant is currently updating. An executive will get back to you shortly."
 
@@ -378,21 +379,27 @@ STRICT COMPLIANCE RULES (MANDATORY):
   * Keep answers mobile-friendly and conversational.
 """
 
-    messages = [{"role": "system", "content": system_prompt}]
-    
+    messages = []
     if conversation_history:
-        messages.extend(conversation_history)
-        
+        for msg in conversation_history:
+            role = "assistant" if msg.get("role") == "assistant" else "user"
+            content = msg.get("content", "")
+            if content:
+                messages.append({"role": role, "content": content})
+
     messages.append({"role": "user", "content": user_question})
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
+        model = os.getenv("AI4TRADES_CLAUDE_MODEL") or "claude-haiku-4-5-20251001"
+        response = client.messages.create(
+            model=model,
+            system=system_prompt,
             messages=messages,
-            max_tokens=600,
-            temperature=0.3
+            max_tokens=600
         )
-        answer = response.choices[0].message.content.strip()
+        answer = "".join(
+            block.text for block in response.content if getattr(block, "type", None) == "text"
+        ).strip()
         
         # Format markdown for clean WhatsApp rendering
         # 1. Replace markdown headers ### or ## with *bold*
