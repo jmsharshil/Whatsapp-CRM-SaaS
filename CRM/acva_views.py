@@ -177,7 +177,12 @@ def _handle_acva_message_internal(msg: dict):
     state = session.state
     body_str = body.lower()
     display_str = display_body.lower()
-    
+
+    if state == "IDLE":
+        # Do not reply if state is IDLE and they didn't say "ACVA"
+        logger.info("[ACVA] Ignored message because state is IDLE and message is not 'ACVA'")
+        return
+
     def goto_handoff():
         session.state = "COLLECT_NAME"
         session.save()
@@ -188,12 +193,6 @@ def _handle_acva_message_internal(msg: dict):
         session.collected_info = {}
         session.save()
         tpl_acva_main_menu(number)
-        return
-
-
-    elif state == "IDLE":
-        # Do not reply if state is IDLE and they didn't say "ACVA"
-        logger.info("[ACVA] Ignored message because state is IDLE and message is not 'ACVA'")
         return
 
     elif state == "INIT":
