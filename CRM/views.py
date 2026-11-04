@@ -2860,7 +2860,47 @@ def avantika_history_api(request):
     wamid_map = {}
     wamids_to_lookup = []
     
-    history_list = list(history_records[:200]) # Latest 200 records
+    total_records_count = history_records.count()
+
+    # Pagination parameters: ?page=1&page_size=50 (or ?limit=50)
+    page_number = request.GET.get('page')
+    page_size = request.GET.get('page_size') or request.GET.get('limit')
+
+    if page_number or page_size:
+        from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+        try:
+            page_size = max(1, min(int(page_size or 50), 500))
+        except (ValueError, TypeError):
+            page_size = 50
+
+        paginator = Paginator(history_records, page_size)
+        try:
+            page_obj = paginator.page(page_number or 1)
+        except PageNotAnInteger:
+            page_obj = paginator.page(1)
+        except EmptyPage:
+            page_obj = paginator.page(paginator.num_pages if paginator.num_pages > 0 else 1)
+
+        history_list = list(page_obj.object_list)
+        pagination_info = {
+            "current_page": page_obj.number,
+            "total_pages": paginator.num_pages,
+            "total_records": paginator.count,
+            "page_size": page_size,
+            "has_next": page_obj.has_next(),
+            "has_previous": page_obj.has_previous(),
+        }
+    else:
+        # Default backward-compatible fallback (latest 200 records)
+        history_list = list(history_records[:200])
+        pagination_info = {
+            "current_page": 1,
+            "total_pages": 1 if total_records_count <= 200 else (total_records_count + 199) // 200,
+            "total_records": total_records_count,
+            "page_size": len(history_list),
+            "has_next": total_records_count > 200,
+            "has_previous": False,
+        }
     for rec in history_list:
         err = rec.error_message or ""
         match = re.search(r"wamid:([a-zA-Z0-9_\-\.]+)", err)
@@ -2943,6 +2983,7 @@ def avantika_history_api(request):
     return JsonResponse({
         "success": True,
         "report": report,
+        "pagination": pagination_info,
         "total_sent": sent_count,
         "total_failed": failed_count,
         "total_delivered": delivered_count,
