@@ -150,7 +150,7 @@ def _handle_acva_message_internal(msg: dict):
         status='delivered'
     )
 
-    if conv_created or not conv_obj.bot_state:
+    if conv_created or not conv_obj.bot_state or conv_obj.bot_state == "INIT":
         conv_obj.bot_state = "IDLE"
         conv_obj.save()
 
@@ -181,6 +181,12 @@ def _handle_acva_message_internal(msg: dict):
     if state == "IDLE":
         # Do not reply if state is IDLE and they didn't say "ACVA"
         logger.info("[ACVA] Ignored message because state is IDLE and message is not 'ACVA'")
+        return
+
+    if state == "INIT" and not is_trigger:
+        session.state = "IDLE"
+        session.save()
+        logger.info("[ACVA] Ignored message because state was INIT but message is not 'ACVA'")
         return
 
     def goto_handoff():
