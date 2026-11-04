@@ -24,6 +24,9 @@ STATE_ENGINEER_MAPPING = {
     "kashmir": {"name": "Mr Manjit", "phone": "919998857391"},
     "jammu & kashmir": {"name": "Mr Manjit", "phone": "919998857391"},
     "jammu and kashmir": {"name": "Mr Manjit", "phone": "919998857391"},
+
+
+
     "chandigarh": {"name": "Mr Manjit", "phone": "919998857391"},
     
     # East
@@ -280,16 +283,42 @@ def tpl_icemake_complaint(to: str):
 def tpl_ice_support_ask_issue(to: str):
     return _meta_post_icemake(_icemake_template_payload(to, "ice_support_ask_issue"))
 
-def tpl_icemake_customer(to: str, ticket_no: str):
+
+
+
+
+
+
+def tpl_icemake_customer(to: str, customer_name: str, ticket_no: str, state: str, contact_number: str):
+
     components = [
         {
             "type": "body",
             "parameters": [
-                {"type": "text", "text": ticket_no}
+
+                {"type": "text", "text": customer_name or "Customer"},
+
+                {"type": "text", "text": ticket_no or "-"},
+
+                {"type": "text", "text": customer_name or "Customer"},
+
+                {"type": "text", "text": state or "-"},
+
+                {"type": "text", "text": contact_number or "-"},
+
             ]
+
         }
+
     ]
-    return _meta_post_icemake(_icemake_template_payload(to, "icemake_customer_", components))
+
+    return _meta_post_icemake(_icemake_template_payload(to, "icemake_customers", components))
+
+
+
+
+
+
 
 def tpl_icemake_serviceengineer(to: str, ticket: str, customer_name: str, customer_mobile: str, city_state: str, issue_type: str, description: str, assigned_engineer: str):
     components = [

@@ -369,8 +369,31 @@ def handle_icemake_message(msg: dict, contact: dict = None):
 
         
         # Notify customer (Meta doesn't allow empty strings for template params)
-        tpl_icemake_customer(number, ticket_no or "-")
+
+        cust_name = (td.get("name", "Customer") or "Customer").replace('\n', ' ')
+
+        cust_state = (td.get("state", "-") or "-").replace('\n', ' ')
+
+        cust_phone = (td.get("mobile", number) or number).replace('\n', ' ')
+
+
+
+        tpl_icemake_customer(
+
+            to=number,
+
+            customer_name=cust_name,
+
+            ticket_no=ticket_no or "-",
+
+            state=cust_state,
+
+            contact_number=cust_phone,
+
+        )
+
         
+
         registered_mobile = td.get("mobile", "").strip()
         if registered_mobile:
             reg_num_clean = re.sub(r"[^\d]", "", registered_mobile)
@@ -385,7 +408,21 @@ def handle_icemake_message(msg: dict, contact: dict = None):
             if not is_same_number and len(reg_num_clean) >= 10:
                 target_reg_num = f"91{reg_num_clean[-10:]}"
                 try:
-                    tpl_icemake_customer(target_reg_num, ticket_no or "-")
+
+                    tpl_icemake_customer(
+
+                        to=target_reg_num,
+
+                        customer_name=cust_name,
+
+                        ticket_no=ticket_no or "-",
+
+                        state=cust_state,
+
+                        contact_number=cust_phone,
+
+                    )
+
                 except Exception as e:
                     logger.warning("[IceMake] Failed to send ticket template to alt registered mobile: %s", e)
         
