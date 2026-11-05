@@ -505,8 +505,61 @@ def handle_icemake_message(msg: dict, contact: dict = None):
                 "Issue": td.get("issue_desc", ""),
             }
             conv_state.save()
+            trigger_sheet_sync(conv_obj)
         except Exception as e:
             logger.error("[IceMake] ConversationState sync error: %s", e)
+
+# Google Apps Script Webhook for real-time live sync to Google Sheet
+ICEMAKE_GOOGLE_SHEET_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzny-21KYoaQ9uFG1D_SVlAbkUlzBFRImXUYjMrfRfXICnKxx0zte7bv0O-ZoDjPdOUNQ/exec"
+
+def trigger_sheet_sync(conv_obj):
+    try:
+        sync_to_google_sheet_async(conv_obj)
+    except Exception as e:
+        logger.error("[IceMake] Google Sheet trigger error: %s", e)
+
+def sync_to_google_sheet_async(conv_obj):
+    """
+    Fire-and-forget background worker to send exact IceMakeData format to Google Sheet.
+    Runs in a detached daemon thread so WhatsApp response is instantaneous (0 ms delay).
+    """
+    import threading
+    def _worker():
+        try:
+            bot_meta = conv_obj.bot_metadata if isinstance(conv_obj.bot_metadata, dict) else {}
+            td = bot_meta.get("ticket_data", {}) or {}
+            
+            cust_phone = (conv_obj.customer.phone or "").strip() if conv_obj.customer else ""
+            customer_name = td.get("name") or (conv_obj.customer.name if conv_obj.customer else "")
+            registered_mobile = td.get("mobile") or td.get("registered_mobile") or cust_phone
+            
+            ticket_no = td.get("ticket_no", "-")
+            if ticket_no and not str(ticket_no).strip().upper().startswith("WC"):
+                ticket_no = "-"
+                
+            payload = {
+                "ticket_no": ticket_no,
+                "customer_name": customer_name,
+                "customer_phone": cust_phone,
+                "registered_mobile": registered_mobile,
+                "city": td.get("city") or "",
+                "state": td.get("state") or "",
+                "pincode": td.get("pincode") or "",
+                "complaint_type": td.get("complaint_type") or "",
+                "issue_desc": td.get("issue_desc") or "",
+                "assigned_engineer": td.get("engineer_name") or td.get("assigned_engineer") or "",
+                "engineer_phone": td.get("engineer_phone") or "",
+                "status": conv_obj.status or "",
+                "stage": conv_obj.bot_state or "",
+                "created_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%d/%m/%Y %H:%M:%S")
+            }
+            
+            # Send POST to Google Script webhook with 5s timeout
+            requests.post(ICEMAKE_GOOGLE_SHEET_WEBHOOK_URL, json=payload, timeout=5)
+        except Exception as e:
+            logger.error("[IceMake Sheet Sync Error] %s", e)
+
+    threading.Thread(target=_worker, daemon=True).start()
 
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
