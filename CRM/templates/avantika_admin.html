@@ -615,10 +615,8 @@
                             <span><i class="fa-solid fa-crosshairs" style="color: var(--primary);"></i> Click on image
                                 to place text</span>
                             <span>
-                                X: <strong id="displayXVal" style="color: var(--text-title);">{{
-                                    active_template.name_x|default:'100' }}</strong> •
-                                Y: <strong id="displayYVal" style="color: var(--text-title);">{{
-                                    active_template.name_y|default:'100' }}</strong>
+                                X: <strong id="displayXVal" style="color: var(--text-title);">{{ active_template.name_x|default:'100' }}</strong> •
+                                Y: <strong id="displayYVal" style="color: var(--text-title);">{{ active_template.name_y|default:'100' }}</strong>
                             </span>
                         </div>
                     </div>
@@ -632,8 +630,7 @@
                             </div>
                             <div class="field" style="margin-bottom: 10px;">
                                 <label>Base Image</label>
-                                <input type="file" name="base_image" id="imageInput" accept="image/*" {% if not
-                                    active_template %}required{% endif %}>
+                                <input type="file" name="base_image" id="imageInput" accept="image/*" {% if not active_template %}required{% endif %}>
                             </div>
                             <div class="grid-3">
                                 <div class="field">
