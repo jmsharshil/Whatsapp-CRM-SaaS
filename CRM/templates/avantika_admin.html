@@ -11,51 +11,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
     <style>
-        /* ── Exact Internal TTF Font Faces (1:1 Match with Python Pillow) ── */
-        @font-face {
-            font-family: 'framdcn_ttf';
-            src: local('Franklin Gothic Medium Cond'),
-                 local('FranklinGothic-MediumCond'),
-                 local('Franklin Gothic Medium');
-            font-weight: 400;
-            font-style: normal;
-        }
-
-        @font-face {
-            font-family: 'calibri_ttf';
-            src: local('Calibri');
-            font-weight: 400;
-            font-style: normal;
-        }
-
-        @font-face {
-            font-family: 'msuighur_ttf';
-            src: local('Microsoft Uighur'),
-                 local('MicrosoftUighur');
-            font-weight: 400;
-            font-style: normal;
-        }
-
-        @font-face {
-            font-family: 'sitka_ttf';
-            src: local('Sitka Text'),
-                 local('SitkaText'),
-                 local('Sitka Heading'),
-                 local('Sitka');
-            font-weight: 400;
-            font-style: normal;
-        }
-
-        @font-face {
-            font-family: 'sylfaen_ttf';
-            src: local('Sylfaen');
-            font-weight: 400;
-            font-style: normal;
-        }
-
         /* ── Exact WhatsApp Fonts & Clean Preview Reset ── */
         #nameMarker, #nameMarker * {
-            font-weight: 400 !important;
             font-synthesis: none !important;
             text-shadow: none !important;
             -webkit-text-stroke: 0 !important;
@@ -1153,23 +1110,23 @@
 
             const fontConfig = {
                 'Franklin Gothic Medium Cond': {
-                    family: '"framdcn_ttf", "Franklin Gothic Medium Cond", "Barlow Condensed", sans-serif',
-                    weight: '400'
+                    family: '"Barlow Condensed", "Arial Narrow", sans-serif',
+                    weight: '500'
                 },
                 'Calibri': {
-                    family: '"calibri_ttf", "Calibri", "Carlito", sans-serif',
+                    family: '"Calibri", "Carlito", sans-serif',
                     weight: '400'
                 },
                 'Microsoft Uighur': {
-                    family: '"msuighur_ttf", "Microsoft Uighur", sans-serif',
+                    family: '"Microsoft Uighur", sans-serif',
                     weight: '400'
                 },
                 'Sitla Heading Semi Bold': {
-                    family: '"sitka_ttf", "Sitka Text", "Noto Serif", serif',
-                    weight: '400'
+                    family: '"Sitka Text", "Noto Serif", serif',
+                    weight: '600'
                 },
                 'Sylfaen': {
-                    family: '"sylfaen_ttf", "Sylfaen", "Noto Serif", serif',
+                    family: '"Sylfaen", "Noto Serif", serif',
                     weight: '400'
                 }
             };
