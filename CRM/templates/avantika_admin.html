@@ -11,8 +11,51 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
     <style>
+        /* ── Exact Internal TTF Font Faces (1:1 Match with Python Pillow) ── */
+        @font-face {
+            font-family: 'framdcn_ttf';
+            src: local('Franklin Gothic Medium Cond'),
+                 local('FranklinGothic-MediumCond'),
+                 local('Franklin Gothic Medium');
+            font-weight: 400;
+            font-style: normal;
+        }
+
+        @font-face {
+            font-family: 'calibri_ttf';
+            src: local('Calibri');
+            font-weight: 400;
+            font-style: normal;
+        }
+
+        @font-face {
+            font-family: 'msuighur_ttf';
+            src: local('Microsoft Uighur'),
+                 local('MicrosoftUighur');
+            font-weight: 400;
+            font-style: normal;
+        }
+
+        @font-face {
+            font-family: 'sitka_ttf';
+            src: local('Sitka Text'),
+                 local('SitkaText'),
+                 local('Sitka Heading'),
+                 local('Sitka');
+            font-weight: 400;
+            font-style: normal;
+        }
+
+        @font-face {
+            font-family: 'sylfaen_ttf';
+            src: local('Sylfaen');
+            font-weight: 400;
+            font-style: normal;
+        }
+
         /* ── Exact WhatsApp Fonts & Clean Preview Reset ── */
         #nameMarker, #nameMarker * {
+            font-weight: 400 !important;
             font-synthesis: none !important;
             text-shadow: none !important;
             -webkit-text-stroke: 0 !important;
@@ -266,7 +309,6 @@
         #markerAddress,
         #markerNumber {
             line-height: 1 !important;
-            margin: 0 !important;
             padding: 0 !important;
         }
 
@@ -583,8 +625,8 @@
                                 <img id="preview" src="{{ active_template.base_image.url }}" alt="Template Preview" style="display: block;">
                                 <div id="nameMarker" class="marker" style="display: none;">
                                     <div id="markerName">Pranjal</div>
-                                    <div id="markerNumber">+91 7874566064</div>
                                     <div id="markerAddress">CTM</div>
+                                    <div id="markerNumber">+91 7874566064</div>
                                 </div>
                                 <div id="placeholderText" style="display: none; padding: 32px; color: var(--text-muted); font-weight: 600;">
                                     No image uploaded
@@ -593,8 +635,8 @@
                                 <img id="preview" src="#" alt="Template Preview" style="display: none;">
                                 <div id="nameMarker" class="marker">
                                     <div id="markerName">Pranjal</div>
-                                    <div id="markerNumber">+91 7874566064</div>
                                     <div id="markerAddress">CTM</div>
+                                    <div id="markerNumber">+91 7874566064</div>
                                 </div>
                                 <div id="placeholderText" style="padding: 32px; color: var(--text-muted); font-weight: 600; text-align: center; line-height: 1.5;">
                                     <i class="fa-regular fa-image" style="font-size: 2rem; color: var(--primary); display: block; margin-bottom: 8px;"></i>
@@ -627,12 +669,12 @@
                                     <input type="text" id="sampleNameInput" value="Pranjal" placeholder="Name">
                                 </div>
                                 <div class="field">
-                                    <label>Sample Phone</label>
-                                    <input type="text" id="samplePhoneInput" value="+91 7874566064" placeholder="Phone">
-                                </div>
-                                <div class="field">
                                     <label>Sample Address</label>
                                     <input type="text" id="sampleAddressInput" value="CTM" placeholder="Address">
+                                </div>
+                                <div class="field">
+                                    <label>Sample Phone</label>
+                                    <input type="text" id="samplePhoneInput" value="+91 7874566064" placeholder="Phone">
                                 </div>
                             </div>
                             <input type="hidden" name="name_x" id="nameX" value="{{ active_template.name_x|default:'100' }}">
@@ -657,12 +699,12 @@
                                     <input type="number" name="font_size" id="fontSizeInput" value="{{ active_template.font_size|default:'60' }}" required>
                                 </div>
                                 <div class="field">
-                                    <label>Phone Size</label>
-                                    <input type="number" name="phone_font_size" id="phoneFontSizeInput" value="{{ active_template.phone_font_size|default:'45' }}" required>
-                                </div>
-                                <div class="field">
                                     <label>Address Size</label>
                                     <input type="number" name="address_font_size" id="addressFontSizeInput" value="{{ active_template.address_font_size|default:'45' }}" required>
+                                </div>
+                                <div class="field">
+                                    <label>Phone Size</label>
+                                    <input type="number" name="phone_font_size" id="phoneFontSizeInput" value="{{ active_template.phone_font_size|default:'45' }}" required>
                                 </div>
                             </div>
                         </div>
@@ -686,18 +728,6 @@
 
                             <div class="grid-2">
                                 <div class="field">
-                                    <label>Phone Font</label>
-                                    <select id="phoneFontFamily">
-                                        <option value="Franklin Gothic Medium Cond">Franklin Gothic Medium Cond</option>
-                                        <option value="Calibri">Calibri</option>
-                                        <option value="Microsoft Uighur">Microsoft Uighur</option>
-                                        <option value="Sitla Heading Semi Bold">Sitla Heading Semi Bold</option>
-                                        <option value="Sylfaen">Sylfaen</option>
-                                    </select>
-                                    <input type="hidden" name="phone_font" id="phoneFontInput" value="{{ active_template.phone_font|default:'framdcn.ttf' }}">
-                                </div>
-
-                                <div class="field">
                                     <label>Address Font</label>
                                     <select id="addressFontFamily">
                                         <option value="Franklin Gothic Medium Cond">Franklin Gothic Medium Cond</option>
@@ -707,6 +737,18 @@
                                         <option value="Sylfaen">Sylfaen</option>
                                     </select>
                                     <input type="hidden" name="address_font" id="addressFontInput" value="{{ active_template.address_font|default:'framdcn.ttf' }}">
+                                </div>
+
+                                <div class="field">
+                                    <label>Phone Font</label>
+                                    <select id="phoneFontFamily">
+                                        <option value="Franklin Gothic Medium Cond">Franklin Gothic Medium Cond</option>
+                                        <option value="Calibri">Calibri</option>
+                                        <option value="Microsoft Uighur">Microsoft Uighur</option>
+                                        <option value="Sitla Heading Semi Bold">Sitla Heading Semi Bold</option>
+                                        <option value="Sylfaen">Sylfaen</option>
+                                    </select>
+                                    <input type="hidden" name="phone_font" id="phoneFontInput" value="{{ active_template.phone_font|default:'framdcn.ttf' }}">
                                 </div>
                             </div>
                         </div>
@@ -1111,23 +1153,23 @@
 
             const fontConfig = {
                 'Franklin Gothic Medium Cond': {
-                    family: '"Franklin Gothic Medium Cond", "Barlow Condensed", "Arial Narrow", sans-serif',
-                    weight: '500'
+                    family: '"framdcn_ttf", "Franklin Gothic Medium Cond", "Barlow Condensed", sans-serif',
+                    weight: '400'
                 },
                 'Calibri': {
-                    family: '"Calibri", "Carlito", "Segoe UI", Arial, sans-serif',
+                    family: '"calibri_ttf", "Calibri", "Carlito", sans-serif',
                     weight: '400'
                 },
                 'Microsoft Uighur': {
-                    family: '"Microsoft Uighur", "Segoe UI", Arial, sans-serif',
+                    family: '"msuighur_ttf", "Microsoft Uighur", sans-serif',
                     weight: '400'
                 },
                 'Sitla Heading Semi Bold': {
-                    family: '"Sitka Heading", "Noto Serif", Georgia, serif',
-                    weight: '600'
+                    family: '"sitka_ttf", "Sitka Text", "Noto Serif", serif',
+                    weight: '400'
                 },
                 'Sylfaen': {
-                    family: '"Sylfaen", "Noto Serif", Georgia, serif',
+                    family: '"sylfaen_ttf", "Sylfaen", "Noto Serif", serif',
                     weight: '400'
                 }
             };
