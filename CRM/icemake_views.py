@@ -510,7 +510,7 @@ def handle_icemake_message(msg: dict, contact: dict = None):
             logger.error("[IceMake] ConversationState sync error: %s", e)
 
 # Google Apps Script Webhook for real-time live sync to Google Sheet
-ICEMAKE_GOOGLE_SHEET_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzny-21KYoaQ9uFG1D_SVlAbkUlzBFRImXUYjMrfRfXICnKxx0zte7bv0O-ZoDjPdOUNQ/exec"
+ICEMAKE_GOOGLE_SHEET_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyxRtDMC1UUXv6RwewhW_6vBFjB9rqzkQawjo8gyF3OoW_LJB5OQNS53p7T91tAaGY6yQ/exec"
 
 def trigger_sheet_sync(conv_obj):
     try:
