@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Barlow+Condensed:wght@400&family=Carlito:wght@400&family=Noto+Serif:wght@400&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Barlow+Condensed:wght@300;400&family=Carlito:wght@400&family=Noto+Serif:wght@400&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
@@ -16,7 +16,6 @@
         /* ── Exact WhatsApp Fonts & Clean Preview Reset ── */
         #nameMarker,
         #nameMarker * {
-            font-weight: 400 !important;
             font-synthesis: none !important;
             text-shadow: none !important;
             -webkit-text-stroke: 0 !important;
@@ -615,10 +614,12 @@
                         <div class="coord-bar">
                             <span><i class="fa-solid fa-crosshairs" style="color: var(--primary);"></i> Click on image
                                 to place text</span>
-                            <span>X: <strong id="displayXVal" style="color: var(--text-title);">{{
-                                    active_template.name_x|default:'100' }}</strong> • Y: <strong id="displayYVal"
-                                    style="color: var(--text-title);">{{ active_template.name_y|default:'100'
-                                    }}</strong></span>
+                            <span>
+                                X: <strong id="displayXVal" style="color: var(--text-title);">{{
+                                    active_template.name_x|default:'100' }}</strong> •
+                                Y: <strong id="displayYVal" style="color: var(--text-title);">{{
+                                    active_template.name_y|default:'100' }}</strong>
+                            </span>
                         </div>
                     </div>
 
@@ -665,8 +666,9 @@
                                     <input type="color" name="text_color" id="textColorInput"
                                         value="{{ active_template.text_color|default:'#000000' }}" required>
                                     <span id="colorHexLabel"
-                                        style="font-family: monospace; font-weight: 700; color: var(--text-muted);">{{
-                                        active_template.text_color|default:'#000000' }}</span>
+                                        style="font-family: monospace; font-weight: 700; color: var(--text-muted);">
+                                        {{ active_template.text_color|default:'#000000' }}
+                                    </span>
                                 </div>
                             </div>
                             <div class="grid-3">
@@ -1139,6 +1141,10 @@
             if (input && input.value) {
                 parseFontFilename(input.value, prefix);
             }
+            // Always sync hidden .ttf input with what the dropdown actually displays
+            if (input) {
+                input.value = generateFontFilename(prefix);
+            }
 
             const updateField = () => {
                 const newFont = generateFontFilename(prefix);
@@ -1155,26 +1161,11 @@
             originalUpdateMarkerStyle();
 
             const fontConfig = {
-                'Franklin Gothic Medium Cond': {
-                    family: '"Franklin Gothic Medium Cond", "Barlow Condensed", "Arial Narrow", sans-serif',
-                    weight: '400'
-                },
-                'Calibri': {
-                    family: '"Calibri", "Carlito", sans-serif',
-                    weight: '400'
-                },
-                'Microsoft Uighur': {
-                    family: '"Microsoft Uighur", sans-serif',
-                    weight: '400'
-                },
-                'Sitla Heading Semi Bold': {
-                    family: '"Sitka Text", "Sitka Heading", "Noto Serif", serif',
-                    weight: '400'
-                },
-                'Sylfaen': {
-                    family: '"Sylfaen", "Noto Serif", serif',
-                    weight: '400'
-                }
+                'Franklin Gothic Medium Cond': { family: '"Franklin Gothic Medium Cond", "Barlow Condensed", sans-serif', weight: '500' },
+                'Calibri': { family: '"Calibri", "Carlito", sans-serif', weight: '400' },
+                'Microsoft Uighur': { family: '"Microsoft Uighur", sans-serif', weight: '400' },
+                'Sitla Heading Semi Bold': { family: '"Sitka Heading", "Sitka Text", serif', weight: '600' },
+                'Sylfaen': { family: '"Sylfaen", "Noto Serif", serif', weight: '400' }
             };
 
             prefixes.forEach(prefix => {
