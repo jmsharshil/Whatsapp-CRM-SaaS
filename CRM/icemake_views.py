@@ -169,6 +169,9 @@ def handle_icemake_message(msg: dict, contact: dict = None):
         conv_obj.bot_state = "INIT"
         conv_obj.save()
 
+    # Trigger live sheet sync immediately on conversation start / incoming message
+    trigger_sheet_sync(conv_obj)
+
     ist_tz = timezone(timedelta(hours=5, minutes=30))
     now_ist = datetime.now(ist_tz)
     today_ist_date = now_ist.date()
