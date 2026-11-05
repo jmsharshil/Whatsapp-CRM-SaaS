@@ -7,12 +7,16 @@
     <title>Jaivik International</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Barlow+Condensed:wght@400;500&family=Carlito:wght@400&family=Noto+Serif:wght@400;600&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Barlow+Condensed:wght@400&family=Carlito:wght@400&family=Noto+Serif:wght@400&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
     <style>
         /* ── Exact WhatsApp Fonts & Clean Preview Reset ── */
-        #nameMarker, #nameMarker * {
+        #nameMarker,
+        #nameMarker * {
+            font-weight: 400 !important;
             font-synthesis: none !important;
             text-shadow: none !important;
             -webkit-text-stroke: 0 !important;
@@ -348,7 +352,8 @@
             width: 100%;
         }
 
-        input:focus, select:focus {
+        input:focus,
+        select:focus {
             outline: none;
             border-color: var(--primary);
         }
@@ -522,12 +527,12 @@
 
     <div class="app-shell">
         {% if messages %}
-            {% for message in messages %}
-            <div class="flash-alert">
-                <i class="fa-solid fa-circle-check"></i>
-                <span>{{ message }}</span>
-            </div>
-            {% endfor %}
+        {% for message in messages %}
+        <div class="flash-alert">
+            <i class="fa-solid fa-circle-check"></i>
+            <span>{{ message }}</span>
+        </div>
+        {% endfor %}
         {% endif %}
 
         <!-- ── Step-by-Step Wizard Bar ── -->
@@ -579,13 +584,15 @@
                         <div class="canvas-stage">
                             <div class="canvas-viewport" id="canvasViewportBox">
                                 {% if active_template and active_template.base_image %}
-                                <img id="preview" src="{{ active_template.base_image.url }}" alt="Template Preview" style="display: block;">
+                                <img id="preview" src="{{ active_template.base_image.url }}" alt="Template Preview"
+                                    style="display: block;">
                                 <div id="nameMarker" class="marker" style="display: none;">
                                     <div id="markerName">Pranjal</div>
                                     <div id="markerAddress">CTM</div>
                                     <div id="markerNumber">+91 7874566064</div>
                                 </div>
-                                <div id="placeholderText" style="display: none; padding: 32px; color: var(--text-muted); font-weight: 600;">
+                                <div id="placeholderText"
+                                    style="display: none; padding: 32px; color: var(--text-muted); font-weight: 600;">
                                     No image uploaded
                                 </div>
                                 {% else %}
@@ -595,8 +602,10 @@
                                     <div id="markerAddress">CTM</div>
                                     <div id="markerNumber">+91 7874566064</div>
                                 </div>
-                                <div id="placeholderText" style="padding: 32px; color: var(--text-muted); font-weight: 600; text-align: center; line-height: 1.5;">
-                                    <i class="fa-regular fa-image" style="font-size: 2rem; color: var(--primary); display: block; margin-bottom: 8px;"></i>
+                                <div id="placeholderText"
+                                    style="padding: 32px; color: var(--text-muted); font-weight: 600; text-align: center; line-height: 1.5;">
+                                    <i class="fa-regular fa-image"
+                                        style="font-size: 2rem; color: var(--primary); display: block; margin-bottom: 8px;"></i>
                                     Upload an image on the right & click anywhere to place text
                                 </div>
                                 {% endif %}
@@ -604,8 +613,12 @@
                         </div>
 
                         <div class="coord-bar">
-                            <span><i class="fa-solid fa-crosshairs" style="color: var(--primary);"></i> Click on image to place text</span>
-                            <span>X: <strong id="displayXVal" style="color: var(--text-title);">{{ active_template.name_x|default:'100' }}</strong> • Y: <strong id="displayYVal" style="color: var(--text-title);">{{ active_template.name_y|default:'100' }}</strong></span>
+                            <span><i class="fa-solid fa-crosshairs" style="color: var(--primary);"></i> Click on image
+                                to place text</span>
+                            <span>X: <strong id="displayXVal" style="color: var(--text-title);">{{
+                                    active_template.name_x|default:'100' }}</strong> • Y: <strong id="displayYVal"
+                                    style="color: var(--text-title);">{{ active_template.name_y|default:'100'
+                                    }}</strong></span>
                         </div>
                     </div>
 
@@ -618,7 +631,8 @@
                             </div>
                             <div class="field" style="margin-bottom: 10px;">
                                 <label>Base Image</label>
-                                <input type="file" name="base_image" id="imageInput" accept="image/*" {% if not active_template %}required{% endif %}>
+                                <input type="file" name="base_image" id="imageInput" accept="image/*" {% if not
+                                    active_template %}required{% endif %}>
                             </div>
                             <div class="grid-3">
                                 <div class="field">
@@ -634,8 +648,10 @@
                                     <input type="text" id="samplePhoneInput" value="+91 7874566064" placeholder="Phone">
                                 </div>
                             </div>
-                            <input type="hidden" name="name_x" id="nameX" value="{{ active_template.name_x|default:'100' }}">
-                            <input type="hidden" name="name_y" id="nameY" value="{{ active_template.name_y|default:'100' }}">
+                            <input type="hidden" name="name_x" id="nameX"
+                                value="{{ active_template.name_x|default:'100' }}">
+                            <input type="hidden" name="name_y" id="nameY"
+                                value="{{ active_template.name_y|default:'100' }}">
                         </div>
 
                         <!-- 2. Color & Sizes -->
@@ -646,22 +662,28 @@
                             <div class="field" style="margin-bottom: 10px;">
                                 <label>Text Color</label>
                                 <div style="display: flex; align-items: center; gap: 8px;">
-                                    <input type="color" name="text_color" id="textColorInput" value="{{ active_template.text_color|default:'#000000' }}" required>
-                                    <span id="colorHexLabel" style="font-family: monospace; font-weight: 700; color: var(--text-muted);">{{ active_template.text_color|default:'#000000' }}</span>
+                                    <input type="color" name="text_color" id="textColorInput"
+                                        value="{{ active_template.text_color|default:'#000000' }}" required>
+                                    <span id="colorHexLabel"
+                                        style="font-family: monospace; font-weight: 700; color: var(--text-muted);">{{
+                                        active_template.text_color|default:'#000000' }}</span>
                                 </div>
                             </div>
                             <div class="grid-3">
                                 <div class="field">
                                     <label>Name Size</label>
-                                    <input type="number" name="font_size" id="fontSizeInput" value="{{ active_template.font_size|default:'60' }}" required>
+                                    <input type="number" name="font_size" id="fontSizeInput"
+                                        value="{{ active_template.font_size|default:'60' }}" required>
                                 </div>
                                 <div class="field">
                                     <label>Address Size</label>
-                                    <input type="number" name="address_font_size" id="addressFontSizeInput" value="{{ active_template.address_font_size|default:'45' }}" required>
+                                    <input type="number" name="address_font_size" id="addressFontSizeInput"
+                                        value="{{ active_template.address_font_size|default:'45' }}" required>
                                 </div>
                                 <div class="field">
                                     <label>Phone Size</label>
-                                    <input type="number" name="phone_font_size" id="phoneFontSizeInput" value="{{ active_template.phone_font_size|default:'45' }}" required>
+                                    <input type="number" name="phone_font_size" id="phoneFontSizeInput"
+                                        value="{{ active_template.phone_font_size|default:'45' }}" required>
                                 </div>
                             </div>
                         </div>
@@ -680,7 +702,8 @@
                                     <option value="Sitla Heading Semi Bold">Sitla Heading Semi Bold</option>
                                     <option value="Sylfaen">Sylfaen</option>
                                 </select>
-                                <input type="hidden" name="name_font" id="nameFontInput" value="{{ active_template.name_font|default:'framdcn.ttf' }}">
+                                <input type="hidden" name="name_font" id="nameFontInput"
+                                    value="{{ active_template.name_font|default:'framdcn.ttf' }}">
                             </div>
 
                             <div class="grid-2">
@@ -693,7 +716,8 @@
                                         <option value="Sitla Heading Semi Bold">Sitla Heading Semi Bold</option>
                                         <option value="Sylfaen">Sylfaen</option>
                                     </select>
-                                    <input type="hidden" name="address_font" id="addressFontInput" value="{{ active_template.address_font|default:'framdcn.ttf' }}">
+                                    <input type="hidden" name="address_font" id="addressFontInput"
+                                        value="{{ active_template.address_font|default:'framdcn.ttf' }}">
                                 </div>
 
                                 <div class="field">
@@ -705,7 +729,8 @@
                                         <option value="Sitla Heading Semi Bold">Sitla Heading Semi Bold</option>
                                         <option value="Sylfaen">Sylfaen</option>
                                     </select>
-                                    <input type="hidden" name="phone_font" id="phoneFontInput" value="{{ active_template.phone_font|default:'framdcn.ttf' }}">
+                                    <input type="hidden" name="phone_font" id="phoneFontInput"
+                                        value="{{ active_template.phone_font|default:'framdcn.ttf' }}">
                                 </div>
                             </div>
                         </div>
@@ -731,17 +756,22 @@
         <section id="contactsTab" class="tab-pane">
             <div class="card" style="max-width: 560px; margin: 0 auto;">
                 <h3 style="font-size: 1rem; color: var(--text-title); margin-bottom: 4px;">Upload Contacts CSV</h3>
-                <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 16px;">Columns: Phone, Name, Address</p>
+                <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 16px;">Columns: Phone, Name,
+                    Address</p>
 
                 <form action="/avantika-upload-csv/" method="POST" enctype="multipart/form-data">
                     {% csrf_token %}
                     <input type="hidden" name="auth" value="{{ auth_token }}">
 
                     <div class="dropzone" onclick="document.getElementById('csvFileInput').click();">
-                        <i class="fa-solid fa-file-csv" style="font-size: 2rem; color: var(--primary); margin-bottom: 8px;"></i>
-                        <div style="font-weight: 700; color: var(--text-title); margin-bottom: 4px;">Click to select CSV file</div>
-                        <input type="file" name="csv_file" id="csvFileInput" accept=".csv" required style="display: none;" onchange="updateCsvLabel(this)">
-                        <div id="selectedCsvName" style="font-size: 0.76rem; color: var(--primary); font-weight: 600;">No file chosen</div>
+                        <i class="fa-solid fa-file-csv"
+                            style="font-size: 2rem; color: var(--primary); margin-bottom: 8px;"></i>
+                        <div style="font-weight: 700; color: var(--text-title); margin-bottom: 4px;">Click to select CSV
+                            file</div>
+                        <input type="file" name="csv_file" id="csvFileInput" accept=".csv" required
+                            style="display: none;" onchange="updateCsvLabel(this)">
+                        <div id="selectedCsvName" style="font-size: 0.76rem; color: var(--primary); font-weight: 600;">
+                            No file chosen</div>
                     </div>
 
                     <button type="submit" class="btn btn-primary" style="width: 100%;">
@@ -765,17 +795,21 @@
              ═════════════════════════════════════════════════════════════════ -->
         <section id="campaignTab" class="tab-pane">
             <div class="card" style="max-width: 560px; margin: 0 auto;">
-                <h3 style="font-size: 1rem; color: var(--text-title); margin-bottom: 4px;">Launch WhatsApp Broadcast</h3>
-                <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 16px;">Send the active template to all uploaded contacts.</p>
+                <h3 style="font-size: 1rem; color: var(--text-title); margin-bottom: 4px;">Launch WhatsApp Broadcast
+                </h3>
+                <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 16px;">Send the active template
+                    to all uploaded contacts.</p>
 
-                <form action="/avantika-campaign/" method="POST" enctype="multipart/form-data" onsubmit="return handleCampaignSubmit(this);">
+                <form action="/avantika-campaign/" method="POST" enctype="multipart/form-data"
+                    onsubmit="return handleCampaignSubmit(this);">
                     {% csrf_token %}
                     <input type="hidden" name="auth" value="{{ auth_token }}">
 
                     <div class="grid-2" style="margin-bottom: 14px;">
                         <div class="field">
                             <label>Media Type</label>
-                            <select name="media_type" id="campaignMediaType" onchange="handleMediaTypeChange(this.value)">
+                            <select name="media_type" id="campaignMediaType"
+                                onchange="handleMediaTypeChange(this.value)">
                                 <option value="image" selected>Image</option>
                                 <option value="video">Video</option>
                                 <option value="document">Document</option>
@@ -784,12 +818,14 @@
 
                         <div class="field">
                             <label>Template Name</label>
-                            <input type="text" name="template_name" id="campaignTemplateName" value="image" readonly style="background: #f8fafc; font-weight: 700;">
+                            <input type="text" name="template_name" id="campaignTemplateName" value="image" readonly
+                                style="background: #f8fafc; font-weight: 700;">
                             <input type="hidden" name="language_code" value="en">
                         </div>
                     </div>
 
-                    <div id="mediaUploadContainer" style="display: none; background: #f8fafc; border: 1px dashed var(--border); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 14px;">
+                    <div id="mediaUploadContainer"
+                        style="display: none; background: #f8fafc; border: 1px dashed var(--border); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 14px;">
                         <div class="field" style="margin-bottom: 10px;">
                             <label id="mediaFileLabel">Upload File</label>
                             <input type="file" name="media_file" id="campaignMediaFile">
@@ -825,16 +861,19 @@
              ═════════════════════════════════════════════════════════════════ -->
         <section id="analyticsTab" class="tab-pane">
             <div class="card">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+                <div
+                    style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
                     <h3 style="font-size: 1rem; color: var(--text-title);">Delivery Report</h3>
                     <div style="display: flex; align-items: center; gap: 8px;">
-                        <select id="pageSizeSelect" style="width: auto; padding: 6px 10px;" onchange="loadHistory(null, 1)">
+                        <select id="pageSizeSelect" style="width: auto; padding: 6px 10px;"
+                            onchange="loadHistory(null, 1)">
                             <option value="25">25 / page</option>
                             <option value="50" selected>50 / page</option>
                             <option value="100">100 / page</option>
                             <option value="200">200 / page</option>
                         </select>
-                        <button type="button" class="btn btn-success" id="refreshReportBtn" onclick="loadHistory(this, currentHistoryPage)">
+                        <button type="button" class="btn btn-success" id="refreshReportBtn"
+                            onclick="loadHistory(this, currentHistoryPage)">
                             <i class="fa-solid fa-arrows-rotate"></i> Refresh
                         </button>
                     </div>
@@ -861,11 +900,14 @@
                     </div>
                 </div>
 
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 10px; flex-wrap: wrap;">
+                <div
+                    style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 10px; flex-wrap: wrap;">
                     <div style="max-width: 260px; width: 100%;">
-                        <input type="text" id="tableFilterInput" placeholder="Search name or phone..." onkeyup="filterHistoryTable()">
+                        <input type="text" id="tableFilterInput" placeholder="Search name or phone..."
+                            onkeyup="filterHistoryTable()">
                     </div>
-                    <div id="paginationSummary" style="font-size: 0.76rem; color: var(--text-muted); font-weight: 600;"></div>
+                    <div id="paginationSummary" style="font-size: 0.76rem; color: var(--text-muted); font-weight: 600;">
+                    </div>
                 </div>
 
                 <div style="overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-sm);">
@@ -884,12 +926,16 @@
                 </div>
 
                 <!-- Pagination Bar -->
-                <div id="paginationControls" style="display: none; align-items: center; justify-content: space-between; margin-top: 12px; padding: 8px 12px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm);">
-                    <button type="button" class="btn btn-outline" id="prevPageBtn" style="padding: 6px 12px; font-size: 0.76rem;" onclick="changeHistoryPage(-1)">
+                <div id="paginationControls"
+                    style="display: none; align-items: center; justify-content: space-between; margin-top: 12px; padding: 8px 12px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm);">
+                    <button type="button" class="btn btn-outline" id="prevPageBtn"
+                        style="padding: 6px 12px; font-size: 0.76rem;" onclick="changeHistoryPage(-1)">
                         <i class="fa-solid fa-chevron-left"></i> Previous
                     </button>
-                    <span id="pageIndicator" style="font-size: 0.78rem; font-weight: 700; color: var(--text-title);">Page 1 of 1</span>
-                    <button type="button" class="btn btn-outline" id="nextPageBtn" style="padding: 6px 12px; font-size: 0.76rem;" onclick="changeHistoryPage(1)">
+                    <span id="pageIndicator"
+                        style="font-size: 0.78rem; font-weight: 700; color: var(--text-title);">Page 1 of 1</span>
+                    <button type="button" class="btn btn-outline" id="nextPageBtn"
+                        style="padding: 6px 12px; font-size: 0.76rem;" onclick="changeHistoryPage(1)">
                         Next <i class="fa-solid fa-chevron-right"></i>
                     </button>
                 </div>
@@ -1110,8 +1156,8 @@
 
             const fontConfig = {
                 'Franklin Gothic Medium Cond': {
-                    family: '"Barlow Condensed", "Arial Narrow", sans-serif',
-                    weight: '500'
+                    family: '"Franklin Gothic Medium Cond", "Barlow Condensed", "Arial Narrow", sans-serif',
+                    weight: '400'
                 },
                 'Calibri': {
                     family: '"Calibri", "Carlito", sans-serif',
@@ -1122,8 +1168,8 @@
                     weight: '400'
                 },
                 'Sitla Heading Semi Bold': {
-                    family: '"Sitka Text", "Noto Serif", serif',
-                    weight: '600'
+                    family: '"Sitka Text", "Sitka Heading", "Noto Serif", serif',
+                    weight: '400'
                 },
                 'Sylfaen': {
                     family: '"Sylfaen", "Noto Serif", serif',
