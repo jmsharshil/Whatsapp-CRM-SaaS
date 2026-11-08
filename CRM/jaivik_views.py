@@ -148,28 +148,48 @@ def generate_avantika_image(contact, active_template) -> str:
             from django.conf import settings
             import os
             
-            primary_path = os.path.join(settings.BASE_DIR, 'CRM', 'fonts', font_filename)
-            font_paths = [primary_path, font_filename, os.path.join(r"C:\Windows\Fonts", font_filename)]
+            crm_dir = os.path.dirname(os.path.abspath(__file__))
+            fonts_dir = os.path.join(crm_dir, 'fonts')
             
-            # The UI now directly sends the correct .ttf filename (e.g. msuighur.ttf)
-            # which is already handled by primary_path above.
+            name_map = {
+                'franklin gothic medium cond': 'framdcn.ttf',
+                'framdcn': 'framdcn.ttf',
+                'framdcn.ttf': 'framdcn.ttf',
+                'calibri': 'calibri.ttf',
+                'calibri.ttf': 'calibri.ttf',
+                'microsoft uighur': 'msuighur.ttf',
+                'msuighur': 'msuighur.ttf',
+                'msuighur.ttf': 'msuighur.ttf',
+                'sitla heading semi bold': 'SitkaVF.ttf',
+                'sitka heading': 'SitkaVF.ttf',
+                'sitkavf': 'SitkaVF.ttf',
+                'sitkavf.ttf': 'SitkaVF.ttf',
+                'sylfaen': 'sylfaen.ttf',
+                'sylfaen.ttf': 'sylfaen.ttf',
+            }
+            clean_key = (font_filename or '').strip().lower()
+            resolved_file = name_map.get(clean_key, font_filename)
             
-            if 'BoldItalic' in font_filename or 'bi.ttf' in font_filename:
-                font_paths.extend([r"C:\Windows\Fonts\arialbi.ttf", r"C:\Windows\Fonts\segoeuiz.ttf"])
-            elif 'Bold' in font_filename or 'bd.ttf' in font_filename:
-                font_paths.extend([r"C:\Windows\Fonts\arialbd.ttf", r"C:\Windows\Fonts\segoeuib.ttf"])
-            elif 'Italic' in font_filename or 'i.ttf' in font_filename:
-                font_paths.extend([r"C:\Windows\Fonts\ariali.ttf", r"C:\Windows\Fonts\segoeuii.ttf"])
-            else:
-                font_paths.extend([r"C:\Windows\Fonts\arial.ttf", r"C:\Windows\Fonts\segoeui.ttf"])
-                
-            font_paths.append(os.path.join(settings.BASE_DIR, 'CRM', 'fonts', 'Roboto-Regular.ttf'))
+            font_paths = [
+                os.path.join(fonts_dir, resolved_file),
+                os.path.join(settings.BASE_DIR, 'CRM', 'fonts', resolved_file),
+                os.path.join(fonts_dir, font_filename),
+                os.path.join(settings.BASE_DIR, 'CRM', 'fonts', font_filename),
+                resolved_file,
+                font_filename,
+                os.path.join(r"C:\Windows\Fonts", resolved_file),
+            ]
+            
+            font_paths.append(os.path.join(fonts_dir, 'framdcn.ttf'))
             
             for path in font_paths:
                 try:
-                    return ImageFont.truetype(path, size)
-                except IOError:
+                    loaded_font = ImageFont.truetype(path, size)
+                    print(f"[AVANTIKA PIL FONT] Requested='{font_filename}' (size={size}) -> Loaded='{path}' | FontName={loaded_font.getname()}", flush=True)
+                    return loaded_font
+                except IOError as io_err:
                     continue
+            print(f"[AVANTIKA PIL FONT ERROR] Could not load any font for '{font_filename}'! Using default!", flush=True)
             return ImageFont.load_default()
             
         n_font_file = getattr(active_template, 'name_font', 'Montserrat-ExtraBold.ttf')
@@ -226,5 +246,6 @@ def generate_avantika_image(contact, active_template) -> str:
             image_url = f"{domain}{file_url}"
         else:
             image_url = file_url
+        print(f"[AVANTIKA GENERATED IMAGE] Saved='{generated_filename}' | file_url='{file_url}' | Final WhatsApp image_url='{image_url}'", flush=True)
             
     return image_url
