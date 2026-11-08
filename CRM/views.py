@@ -2502,9 +2502,9 @@ def avantika_template_view(request):
     # Allow browser to load HTML directly without auth
     if request.method == "GET" and not is_api:
         active_template = AvantikaTemplate.objects.filter(is_active=True).first()
-        if active_template:
-            print(f"[AVANTIKA GET TEMPLATE] ID={active_template.id} | name_font={active_template.name_font} | address_font={active_template.address_font} | phone_font={active_template.phone_font} | sizes=({active_template.font_size}, {active_template.address_font_size}, {active_template.phone_font_size}) | pos=({active_template.name_x}, {active_template.name_y})", flush=True)
-        print(f"[AVANTIKA GET TEMPLATE] Loaded embedded Base64 fonts: {list(font_b64.keys())}", flush=True)
+        # if active_template:
+        #     print(f"[AVANTIKA GET TEMPLATE] ID={active_template.id} | name_font={active_template.name_font} | address_font={active_template.address_font} | phone_font={active_template.phone_font} | sizes=({active_template.font_size}, {active_template.address_font_size}, {active_template.phone_font_size}) | pos=({active_template.name_x}, {active_template.name_y})", flush=True)
+        # print(f"[AVANTIKA GET TEMPLATE] Loaded embedded Base64 fonts: {list(font_b64.keys())}", flush=True)
         contacts = AvantikaContact.objects.all().order_by('-id')
         contacts_count = contacts.count()
         # Provide the token to the template so forms can submit successfully
@@ -2533,9 +2533,9 @@ def avantika_template_view(request):
         phone_font = request.POST.get("phone_font", "Montserrat-SemiBold.ttf")
         
         active_template = AvantikaTemplate.objects.filter(is_active=True).first()
-        print("\n" + "="*60, flush=True)
-        print(f"[AVANTIKA TEMPLATE SAVE] POST DATA -> name_font={name_font}, address_font={address_font}, phone_font={phone_font}, size=({font_size}, {address_font_size}, {phone_font_size}), pos=({name_x}, {name_y})", flush=True)
-        print("="*60 + "\n", flush=True)
+        # print("\n" + "="*60, flush=True)
+        # print(f"[AVANTIKA TEMPLATE SAVE] POST DATA -> name_font={name_font}, address_font={address_font}, phone_font={phone_font}, size=({font_size}, {address_font_size}, {phone_font_size}), pos=({name_x}, {name_y})", flush=True)
+        # print("="*60 + "\n", flush=True)
         
         if base_image:
             AvantikaTemplate.objects.update(is_active=False)
@@ -2678,9 +2678,9 @@ def avantika_campaign_view(request):
     
     if request.method == "POST":
         active_template = AvantikaTemplate.objects.filter(is_active=True).first()
-        print("\n" + "="*60, flush=True)
-        print(f"[AVANTIKA CAMPAIGN START] active_template={active_template.id if active_template else None} | fonts=({getattr(active_template, 'name_font', None)}, {getattr(active_template, 'address_font', None)}, {getattr(active_template, 'phone_font', None)})", flush=True)
-        print("="*60 + "\n", flush=True)
+        # print("\n" + "="*60, flush=True)
+        # print(f"[AVANTIKA CAMPAIGN START] active_template={active_template.id if active_template else None} | fonts=({getattr(active_template, 'name_font', None)}, {getattr(active_template, 'address_font', None)}, {getattr(active_template, 'phone_font', None)})", flush=True)
+        # print("="*60 + "\n", flush=True)
         
         # Support dynamic media type (image, video, document) with fixed hardcoded template names
         media_type = (request.POST.get("media_type") or "image").lower().strip()

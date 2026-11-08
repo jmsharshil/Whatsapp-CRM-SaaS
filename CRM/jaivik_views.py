@@ -185,11 +185,11 @@ def generate_avantika_image(contact, active_template) -> str:
             for path in font_paths:
                 try:
                     loaded_font = ImageFont.truetype(path, size)
-                    print(f"[AVANTIKA PIL FONT] Requested='{font_filename}' (size={size}) -> Loaded='{path}' | FontName={loaded_font.getname()}", flush=True)
+                    # print(f"[AVANTIKA PIL FONT] Requested='{font_filename}' (size={size}) -> Loaded='{path}' | FontName={loaded_font.getname()}", flush=True)
                     return loaded_font
                 except IOError as io_err:
                     continue
-            print(f"[AVANTIKA PIL FONT ERROR] Could not load any font for '{font_filename}'! Using default!", flush=True)
+            # print(f"[AVANTIKA PIL FONT ERROR] Could not load any font for '{font_filename}'! Using default!", flush=True)
             return ImageFont.load_default()
             
         n_font_file = getattr(active_template, 'name_font', 'Montserrat-ExtraBold.ttf')
@@ -246,6 +246,6 @@ def generate_avantika_image(contact, active_template) -> str:
             image_url = f"{domain}{file_url}"
         else:
             image_url = file_url
-        print(f"[AVANTIKA GENERATED IMAGE] Saved='{generated_filename}' | file_url='{file_url}' | Final WhatsApp image_url='{image_url}'", flush=True)
+        # print(f"[AVANTIKA GENERATED IMAGE] Saved='{generated_filename}' | file_url='{file_url}' | Final WhatsApp image_url='{image_url}'", flush=True)
             
     return image_url
