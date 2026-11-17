@@ -13,7 +13,7 @@ from CRM.globestar_views import GlobestarDataAPIView
 from CRM.navratri_views import NavratriRegistrationAPIView
 from CRM.jms_campaign_views import JMSCampaignUploadView, JMSCampaignHistoryView, JMSCampaignListView, jms_campaign_ui_view, JMSCSVUploadView, JMSCSVListView
 from CRM.icemake_views import IceMakeDataAPIView
-from CRM.ai4trades_views import Ai4TradesKBUploadAPIView
+from CRM.ai4trades_views import Ai4TradesKBUploadAPIView, Ai4TradesMessagesAPIView, Ai4TradesSendTemplateAPIView
 
 urlpatterns = [
 
@@ -114,6 +114,8 @@ path("api/templates/analytics/",     MetaTemplateAnalyticsView.as_view(), name="
     path("api/v1/jms/campaign/history/", JMSCampaignListView.as_view(), name="jms-campaign-history-list"),
     path("api/v1/jms/campaign/history/<str:campaign_id>/", JMSCampaignHistoryView.as_view(), name="jms-campaign-history-detail"),
     
-    # ── Ai4Trades Knowledgebase ────────────────────────────────────────────────
+    # ── Ai4Trades Knowledgebase & APIs ─────────────────────────────────────────
     path("api/ai4tradeskb", Ai4TradesKBUploadAPIView.as_view(), name="ai4trades-kb-upload"),
+    path("api/ai4trades/messages/", Ai4TradesMessagesAPIView.as_view(), name="ai4trades-messages"),
+    path("api/ai4trades/send-template/", Ai4TradesSendTemplateAPIView.as_view(), name="ai4trades-send-template"),
 ]
