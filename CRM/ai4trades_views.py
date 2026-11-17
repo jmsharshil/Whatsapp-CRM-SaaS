@@ -751,7 +751,6 @@ class Ai4TradesSendTemplateAPIView(APIView):
 
             import concurrent.futures
             from django.db import close_old_connections
-            from CRM.models import ClientAccount
 
             ai4trades_phone_id = getattr(settings, 'AI4TRADES_PHONE_NUMBER_ID', AI4TRADES_PHONE_NUMBER_ID)
             shared_client_acc = ClientAccount.objects.filter(phone_number_id=ai4trades_phone_id).first()

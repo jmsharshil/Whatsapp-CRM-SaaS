@@ -402,7 +402,7 @@ def send_ai4trades_template(
         return False, f"Invalid phone number: '{to}'"
 
     template_payload = {
-        "name": template_name.strip(),
+        "name": template_name.strip().lower().replace(" ", "_"),
         "language": {"code": language_code or "en"},
     }
 
