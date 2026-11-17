@@ -190,6 +190,305 @@ def send_ai4trades_welcome_template(to: str, customer_obj=None, conv_obj=None, c
     }, customer_obj=customer_obj, conv_obj=conv_obj, client_account_obj=client_account_obj)
 
 
+def _upload_media_to_meta_ai4trades(file_obj, phone_number_id: str, access_token: str) -> str:
+    """
+    Uploads a media file directly to Meta's /media endpoint and returns the media_id.
+    """
+    import mimetypes
+    url = f"https://graph.facebook.com/v22.0/{phone_number_id}/media"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    content_type = getattr(file_obj, "content_type", None)
+    if not content_type:
+        content_type = mimetypes.guess_type(getattr(file_obj, "name", ""))[0] or "application/octet-stream"
+
+    file_obj.seek(0)
+    files = {"file": (getattr(file_obj, "name", "media.bin"), file_obj.read(), content_type)}
+    data = {"messaging_product": "whatsapp"}
+
+    try:
+        resp = requests.post(url, headers=headers, data=data, files=files, timeout=60)
+        resp_data = resp.json() if resp.text else {}
+        if resp.status_code in (200, 201) and "id" in resp_data:
+            return resp_data["id"]
+        logger.error("[ai4trades] Meta media upload failed: %s", resp_data)
+    except Exception as e:
+        logger.error("[ai4trades] Meta media upload exception: %s", e)
+    return ""
+
+
+def build_ai4trades_template_components(
+    components: list = None,
+    header_type: str = None,
+    header_text: str = None,
+    header_variables: list = None,
+    header_media_url: str = None,
+    header_media_id: str = None,
+    document_filename: str = None,
+    variables=None,
+    button_variables=None,
+    otp_code: str = None,
+) -> list:
+    """
+    Builds Meta WhatsApp Cloud API `components` array supporting:
+      - Header: TEXT (with variables), IMAGE, VIDEO, DOCUMENT (via URL, media_id, or uploaded file)
+      - Body: Static or dynamic variables ({{1}}, {{2}}, ...) as list or dict
+      - Footer: Handled automatically by Meta template definition (no runtime params required by Meta)
+      - Buttons: Dynamic URL buttons, Quick Reply payloads, or OTP / Copy Code buttons
+      - Raw `components`: If caller passes full Meta components list directly, uses it as-is.
+    """
+    if components and isinstance(components, list):
+        return components
+
+    built_components = []
+
+    # 1. HEADER COMPONENT (TEXT, IMAGE, VIDEO, DOCUMENT)
+    h_type = (header_type or "").strip().upper()
+    if not h_type:
+        if header_media_url or header_media_id:
+            url_lower = (header_media_url or "").lower().split("?")[0]
+            if url_lower.endswith((".mp4", ".3gp", ".mov")):
+                h_type = "VIDEO"
+            elif url_lower.endswith((".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".csv")):
+                h_type = "DOCUMENT"
+            else:
+                h_type = "IMAGE"
+        elif header_text or header_variables:
+            h_type = "TEXT"
+
+    if h_type == "TEXT":
+        h_params = []
+        if header_variables:
+            if isinstance(header_variables, list):
+                for hv in header_variables:
+                    h_params.append({"type": "text", "text": str(hv)})
+            elif isinstance(header_variables, dict):
+                for k in sorted(header_variables.keys(), key=lambda x: int(x) if str(x).isdigit() else str(x)):
+                    h_params.append({"type": "text", "text": str(header_variables[k])})
+            else:
+                h_params.append({"type": "text", "text": str(header_variables)})
+        elif header_text:
+            h_params.append({"type": "text", "text": str(header_text)})
+
+        if h_params:
+            built_components.append({
+                "type": "header",
+                "parameters": h_params
+            })
+
+    elif h_type in ("IMAGE", "VIDEO", "DOCUMENT"):
+        media_key = h_type.lower()
+        media_obj = {}
+        if header_media_id:
+            media_obj["id"] = str(header_media_id).strip()
+        elif header_media_url:
+            media_obj["link"] = str(header_media_url).strip()
+
+        if media_obj:
+            if h_type == "DOCUMENT" and document_filename:
+                media_obj["filename"] = str(document_filename).strip()
+            built_components.append({
+                "type": "header",
+                "parameters": [
+                    {
+                        "type": media_key,
+                        media_key: media_obj
+                    }
+                ]
+            })
+
+    # 2. BODY COMPONENT (variables / body_variables / otp_code)
+    body_params = []
+    if variables:
+        if isinstance(variables, list):
+            for v in variables:
+                body_params.append({"type": "text", "text": str(v)})
+        elif isinstance(variables, dict):
+            for k in sorted(variables.keys(), key=lambda x: int(x) if str(x).isdigit() else str(x)):
+                body_params.append({"type": "text", "text": str(variables[k])})
+        else:
+            body_params.append({"type": "text", "text": str(variables)})
+    elif otp_code:
+        body_params.append({"type": "text", "text": str(otp_code)})
+
+    if body_params:
+        built_components.append({
+            "type": "body",
+            "parameters": body_params
+        })
+
+    # 3. BUTTONS COMPONENT (Dynamic URL, Quick Reply, or OTP Copy Code)
+    if otp_code and not button_variables:
+        built_components.append({
+            "type": "button",
+            "sub_type": "url",
+            "index": "0",
+            "parameters": [{"type": "text", "text": str(otp_code)}]
+        })
+    elif button_variables:
+        if isinstance(button_variables, list):
+            for idx, b_val in enumerate(button_variables):
+                if isinstance(b_val, dict):
+                    sub_type = b_val.get("sub_type", "url").lower()
+                    b_idx = str(b_val.get("index", idx))
+                    param_val = b_val.get("text") or b_val.get("payload") or b_val.get("value") or ""
+                    param_type = "payload" if sub_type == "quick_reply" else "text"
+                    built_components.append({
+                        "type": "button",
+                        "sub_type": sub_type,
+                        "index": b_idx,
+                        "parameters": [{"type": param_type, param_type: str(param_val)}]
+                    })
+                else:
+                    built_components.append({
+                        "type": "button",
+                        "sub_type": "url",
+                        "index": str(idx),
+                        "parameters": [{"type": "text", "text": str(b_val)}]
+                    })
+        elif isinstance(button_variables, dict):
+            for idx_key, b_val in button_variables.items():
+                built_components.append({
+                    "type": "button",
+                    "sub_type": "url",
+                    "index": str(idx_key),
+                    "parameters": [{"type": "text", "text": str(b_val)}]
+                })
+
+    return built_components
+
+
+def send_ai4trades_template(
+    to: str,
+    template_name: str,
+    language_code: str = "en",
+    components: list = None,
+    variables=None,
+    header_type: str = None,
+    header_text: str = None,
+    header_variables=None,
+    header_media_url: str = None,
+    header_media_id: str = None,
+    document_filename: str = None,
+    button_variables=None,
+    otp_code: str = None,
+    customer_obj=None,
+    conv_obj=None,
+    client_account_obj=None
+) -> tuple:
+    """
+    Send any Meta WhatsApp approved template to a phone number.
+    Supports:
+      - Plain templates (Body + Footer only)
+      - Body with variables ({{1}}, {{2}}, ...)
+      - Header with TEXT (and header variables)
+      - Header with IMAGE, VIDEO, or DOCUMENT (via URL, media_id, or uploaded file)
+      - Dynamic URL / Quick Reply / OTP buttons
+    Returns (success: bool, response_data_or_error: dict/str)
+    """
+    ai4trades_phone_id = getattr(settings, 'AI4TRADES_PHONE_NUMBER_ID', AI4TRADES_PHONE_NUMBER_ID)
+    from CRM.models import ClientAccount, Customer, Conversation, Message
+
+    if not client_account_obj:
+        client_account_obj = ClientAccount.objects.filter(phone_number_id=ai4trades_phone_id).first()
+    token = client_account_obj.access_token if (client_account_obj and client_account_obj.access_token) else getattr(settings, "META_PERMANENT_TOKEN", "")
+
+    to_clean = re.sub(r"[^\d]", "", str(to))
+    if len(to_clean) == 10:
+        to_clean = f"91{to_clean}"
+    elif len(to_clean) == 11 and to_clean.startswith("0"):
+        to_clean = f"91{to_clean[1:]}"
+
+    if not to_clean or len(to_clean) < 10:
+        return False, f"Invalid phone number: '{to}'"
+
+    template_payload = {
+        "name": template_name.strip(),
+        "language": {"code": language_code or "en"},
+    }
+
+    final_components = build_ai4trades_template_components(
+        components=components,
+        header_type=header_type,
+        header_text=header_text,
+        header_variables=header_variables,
+        header_media_url=header_media_url,
+        header_media_id=header_media_id,
+        document_filename=document_filename,
+        variables=variables,
+        button_variables=button_variables,
+        otp_code=otp_code,
+    )
+
+    if final_components:
+        template_payload["components"] = final_components
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": to_clean,
+        "type": "template",
+        "template": template_payload
+    }
+
+    url = META_SEND_URL.format(phone_id=ai4trades_phone_id)
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+
+    try:
+        r = requests.post(url, json=payload, headers=headers, timeout=15)
+        try:
+            resp_json = r.json() if r.text else {}
+        except ValueError:
+            resp_json = {}
+        if r.status_code not in (200, 201):
+            logger.error("[ai4trades] Template send error (%s): %s - %s", template_name, r.status_code, r.text)
+            err_msg = resp_json.get("error", {}).get("message") if isinstance(resp_json, dict) else None
+            return False, err_msg or r.text or f"HTTP {r.status_code}"
+
+        meta_id = ""
+        if "messages" in resp_json and len(resp_json["messages"]) > 0:
+            meta_id = resp_json["messages"][0].get("id", "")
+
+        try:
+            if not customer_obj:
+                customer_obj = Customer.objects.filter(phone__in=[to_clean, f"+{to_clean}"]).first()
+                if not customer_obj:
+                    customer_obj, _ = Customer.objects.get_or_create(phone=f"+{to_clean}", defaults={'name': f"+{to_clean}"})
+
+            if not conv_obj:
+                conv_obj = Conversation.objects.filter(
+                    customer=customer_obj,
+                    phone_number_id=ai4trades_phone_id
+                ).first()
+                if not conv_obj:
+                    conv_obj, _ = Conversation.objects.get_or_create(
+                        customer=customer_obj,
+                        phone_number_id=ai4trades_phone_id,
+                        defaults={'client': client_account_obj}
+                    )
+
+            Message.objects.create(
+                conversation=conv_obj,
+                client=client_account_obj,
+                customer=customer_obj,
+                meta_message_id=meta_id,
+                direction="outbound",
+                message_type="template",
+                template_name=template_name,
+                content=f"[Template: {template_name}]",
+                status="sent"
+            )
+        except Exception as db_err:
+            logger.error("[ai4trades] Error saving outbound template message to DB: %s", db_err)
+
+        return True, {"meta_message_id": meta_id, "to": to_clean, "template_name": template_name}
+    except Exception as exc:
+        logger.error("[ai4trades] Template send exception: %s", exc)
+        return False, str(exc)
+
+
 def send_ai4trades_otp_template(to: str, otp_code: str) -> bool:
     """
     Send Meta WhatsApp approved authentication template 'otp' with Copy Code button.

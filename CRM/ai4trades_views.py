@@ -237,6 +237,61 @@ def handle_ai4trades_message(msg: dict, contact: dict = None):
 
 
 # ─────────────────────────────────────────────────────────────
+# Authentication Helper (Requires AI4Trades Phone Number ID)
+# ─────────────────────────────────────────────────────────────
+def _verify_ai4trades_auth(request):
+    """
+    Strictly requires the AI4Trades phone_number_id (1357577430775484) to be passed via:
+      - Header: `Authorization: Bearer 1357577430775484` (or `X-Phone-Number-Id: 1357577430775484`)
+      - Query param: `?token=1357577430775484` or `?phone_number_id=1357577430775484`
+      - Request Body: `{"token": "1357577430775484"}` or `{"phone_number_id": "1357577430775484"}`
+    Returns None if valid, or a DRF Response (401) if missing/invalid.
+    """
+    expected_id = str(getattr(settings, 'AI4TRADES_PHONE_NUMBER_ID', AI4TRADES_PHONE_NUMBER_ID)).strip()
+
+    token = (
+        request.GET.get("token")
+        or request.GET.get("phone_number_id")
+        or request.headers.get("X-Phone-Number-Id")
+        or ""
+    ).strip()
+
+    if not token:
+        auth_header = request.headers.get("Authorization", "").strip()
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header[7:].strip()
+        elif auth_header:
+            token = auth_header
+
+    if not token and hasattr(request, "data") and isinstance(request.data, dict):
+        token = str(
+            request.data.get("token")
+            or request.data.get("phone_number_id")
+            or ""
+        ).strip()
+
+    if not token:
+        return Response(
+            {
+                "status": False,
+                "error": "Authentication required. Provide phone_number_id via 'Authorization: Bearer <phone_number_id>' header or '?token=<phone_number_id>' query param."
+            },
+            status=401
+        )
+
+    if token != expected_id:
+        return Response(
+            {
+                "status": False,
+                "error": "Invalid authentication token / phone_number_id."
+            },
+            status=401
+        )
+
+    return None
+
+
+# ─────────────────────────────────────────────────────────────
 # Knowledge Base Upload & Update API
 # ─────────────────────────────────────────────────────────────
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
@@ -246,11 +301,17 @@ class Ai4TradesKBUploadAPIView(APIView):
     POST /api/ai4trades/kb/upload/
     Uploads a new Knowledgebase file (PDF, XLSX, CSV, DOCX, TXT) OR raw text.
     Extracts text, updates database Document model, and refreshes LLM cache.
+    Requires AI4Trades phone_number_id authentication.
     """
+    authentication_classes = []
     permission_classes = [AllowAny]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def post(self, request):
+        auth_err = _verify_ai4trades_auth(request)
+        if auth_err:
+            return auth_err
+
         from CRM.models import Document
         from .ai4trades_utils import extract_text_from_file_bytes, update_ai4trades_knowledge_content
 
@@ -346,6 +407,10 @@ class Ai4TradesKBUploadAPIView(APIView):
 
     def get(self, request):
         """GET /api/ai4trades/kb/upload/ - Returns current active KB status."""
+        auth_err = _verify_ai4trades_auth(request)
+        if auth_err:
+            return auth_err
+
         from .ai4trades_utils import get_ai4trades_knowledge_content
         current_kb = get_ai4trades_knowledge_content()
         return Response({
@@ -354,6 +419,383 @@ class Ai4TradesKBUploadAPIView(APIView):
             "characters_count": len(current_kb) if current_kb else 0,
             "preview": current_kb[:400] + "..." if current_kb else "No KB content loaded."
         })
+
+
+# ─────────────────────────────────────────────────────────────
+# 1. All Conversations & Messages API
+# ─────────────────────────────────────────────────────────────
+class Ai4TradesMessagesAPIView(APIView):
+    """
+    GET /api/ai4trades/messages/
+    Requires AI4Trades phone_number_id authentication (1357577430775484).
+    Returns all conversations and their complete messages list (inbound + outbound) for AI4Trades.
+    
+    Optional Query Params:
+      ?token=1357577430775484 (or Authorization: Bearer 1357577430775484)
+      ?phone=919876543210 -> filter by specific customer phone number
+      ?page=1&page_size=50 -> pagination
+    """
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        try:
+            auth_err = _verify_ai4trades_auth(request)
+            if auth_err:
+                return auth_err
+
+            from datetime import timezone, timedelta
+            from django.core.paginator import Paginator
+
+            ai4trades_phone_id = getattr(settings, 'AI4TRADES_PHONE_NUMBER_ID', AI4TRADES_PHONE_NUMBER_ID)
+            phone_filter = str(request.GET.get("phone", "") or "").strip()
+
+            try:
+                page_num = max(1, int(request.GET.get("page", 1)))
+            except (ValueError, TypeError):
+                page_num = 1
+
+            try:
+                # Cap page_size at 200 conversations max per request to prevent heavy memory/DB spikes
+                page_size = max(1, min(int(request.GET.get("page_size", 50)), 200))
+            except (ValueError, TypeError):
+                page_size = 50
+
+            conv_qs = Conversation.objects.filter(
+                phone_number_id=ai4trades_phone_id
+            ).select_related("customer").order_by("-created_at")
+
+            if phone_filter:
+                clean_p = re.sub(r"[^\d]", "", phone_filter)
+                if clean_p:
+                    conv_qs = conv_qs.filter(customer__phone__icontains=clean_p)
+
+            paginator = Paginator(conv_qs, page_size)
+            page_obj = paginator.get_page(page_num)
+            paged_convs = page_obj.object_list
+
+            base_url = request.build_absolute_uri(request.path)
+            def make_page_url(p):
+                if p is None:
+                    return None
+                params = request.GET.copy()
+                params["page"] = p
+                return f"{base_url}?{params.urlencode()}"
+
+            ist_tz = timezone(timedelta(hours=5, minutes=30))
+
+            all_conversations = []
+            total_messages_count = 0
+
+            for conv in paged_convs:
+                msgs = list(conv.messages.order_by("timestamp", "id"))
+                total_messages_count += len(msgs)
+                cust_phone = conv.customer.phone if conv.customer else ""
+                cust_name = conv.customer.name if conv.customer else ""
+
+                formatted_msgs = [
+                    {
+                        "id": m.id,
+                        "direction": m.direction,
+                        "type": m.message_type,
+                        "content": m.content,
+                        "template_name": m.template_name or "",
+                        "status": m.status,
+                        "timestamp": m.timestamp.astimezone(ist_tz).isoformat() if m.timestamp else None,
+                        "meta_message_id": m.meta_message_id,
+                    }
+                    for m in msgs
+                ]
+
+                all_conversations.append({
+                    "conversation_id": conv.id,
+                    "customer_name": cust_name,
+                    "customer_phone": cust_phone,
+                    "bot_state": conv.bot_state,
+                    "status": conv.status,
+                    "created_at": conv.created_at.astimezone(ist_tz).isoformat() if conv.created_at else None,
+                    "total_messages": len(formatted_msgs),
+                    "messages": formatted_msgs
+                })
+
+            return Response({
+                "status": True,
+                "pagination": {
+                    "current_page": page_obj.number,
+                    "total_pages": paginator.num_pages,
+                    "total_conversations": paginator.count,
+                    "page_size": page_size,
+                    "has_next": page_obj.has_next(),
+                    "has_previous": page_obj.has_previous(),
+                    "next": make_page_url(page_obj.next_page_number() if page_obj.has_next() else None),
+                    "previous": make_page_url(page_obj.previous_page_number() if page_obj.has_previous() else None),
+                },
+                "total_conversations": len(all_conversations),
+                "total_messages": total_messages_count,
+                "conversations": all_conversations,
+            }, status=200)
+        except Exception as e:
+            logger.error("[ai4trades] Error in Ai4TradesMessagesAPIView: %s", e, exc_info=True)
+            return Response({
+                "status": False,
+                "error": "Failed to fetch conversations and messages.",
+                "detail": str(e)
+            }, status=500)
+
+
+# ─────────────────────────────────────────────────────────────
+# 2. Send Template Message API
+# ─────────────────────────────────────────────────────────────
+class Ai4TradesSendTemplateAPIView(APIView):
+    """
+    POST /api/ai4trades/send-template/
+    Pass `template_name` and `phone_number` (or `phone_numbers` list) to send the template
+    directly to that WhatsApp number via AI4Trades WABA.
+
+    Example JSON Body:
+    {
+        "phone_number": "919876543210",
+        "template_name": "welcome",
+        "language": "en",
+        "variables": ["Var1", "Var2"],      // optional body variables
+        "components": [...]                 // optional raw Meta components
+    }
+    """
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    parser_classes = [JSONParser, FormParser, MultiPartParser]
+
+    def post(self, request):
+        try:
+            auth_err = _verify_ai4trades_auth(request)
+            if auth_err:
+                return auth_err
+
+            from .ai4trades_utils import send_ai4trades_template, _upload_media_to_meta_ai4trades
+
+            template_name = str(
+                request.data.get("template_name")
+                or request.data.get("template")
+                or ""
+            ).strip()
+            phone_number = (
+                request.data.get("phone_number")
+                or request.data.get("phone")
+                or request.data.get("to")
+                or ""
+            )
+            phone_numbers_list = request.data.get("phone_numbers", [])
+            language_code = str(request.data.get("language") or request.data.get("language_code") or "en").strip()
+
+            # Body variables ({{1}}, {{2}}, ...)
+            variables = request.data.get("variables") or request.data.get("body_variables")
+            # Header options (TEXT, IMAGE, VIDEO, DOCUMENT)
+            header_type = str(request.data.get("header_type") or "").strip()
+            header_text = request.data.get("header_text")
+            header_variables = request.data.get("header_variables")
+            header_media_url = str(
+                request.data.get("header_media_url")
+                or request.data.get("media_url")
+                or request.data.get("image_url")
+                or request.data.get("video_url")
+                or request.data.get("document_url")
+                or ""
+            ).strip()
+            header_media_id = str(
+                request.data.get("header_media_id")
+                or request.data.get("media_id")
+                or ""
+            ).strip()
+            document_filename = str(
+                request.data.get("document_filename")
+                or request.data.get("filename")
+                or ""
+            ).strip()
+
+            # Auto-infer header_type if specific *_url key was used
+            if not header_type:
+                if request.data.get("image_url"):
+                    header_type = "IMAGE"
+                elif request.data.get("video_url"):
+                    header_type = "VIDEO"
+                elif request.data.get("document_url"):
+                    header_type = "DOCUMENT"
+
+            # Handle direct file upload in form-data (file / media_file / header_file)
+            uploaded_media = (
+                request.FILES.get("media_file")
+                or request.FILES.get("header_file")
+                or request.FILES.get("file")
+            )
+            if uploaded_media:
+                if not document_filename:
+                    document_filename = uploaded_media.name
+                if not header_type:
+                    ext = uploaded_media.name.split(".")[-1].lower() if "." in uploaded_media.name else ""
+                    if ext in ("mp4", "3gp", "mov"):
+                        header_type = "VIDEO"
+                    elif ext in ("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv"):
+                        header_type = "DOCUMENT"
+                    else:
+                        header_type = "IMAGE"
+
+                ai4trades_phone_id = getattr(settings, 'AI4TRADES_PHONE_NUMBER_ID', AI4TRADES_PHONE_NUMBER_ID)
+                client_acc = ClientAccount.objects.filter(phone_number_id=ai4trades_phone_id).first()
+                token = client_acc.access_token if (client_acc and client_acc.access_token) else getattr(settings, "META_PERMANENT_TOKEN", "")
+                uploaded_id = _upload_media_to_meta_ai4trades(uploaded_media, ai4trades_phone_id, token)
+                if uploaded_id:
+                    header_media_id = uploaded_id
+                else:
+                    return Response({
+                        "status": False,
+                        "message": "Failed to upload header media file to Meta."
+                    }, status=400)
+
+            # Button / OTP variables
+            button_variables = request.data.get("button_variables")
+            otp_code = request.data.get("otp_code") or request.data.get("otp")
+            components = request.data.get("components")
+
+            # Parse JSON strings if sent via form-data
+            if isinstance(variables, str):
+                try:
+                    variables = json.loads(variables)
+                except Exception:
+                    variables = [v.strip() for v in variables.split(",") if v.strip()]
+
+            if isinstance(header_variables, str):
+                try:
+                    header_variables = json.loads(header_variables)
+                except Exception:
+                    header_variables = [v.strip() for v in header_variables.split(",") if v.strip()]
+
+            if isinstance(button_variables, str):
+                try:
+                    button_variables = json.loads(button_variables)
+                except Exception:
+                    button_variables = [v.strip() for v in button_variables.split(",") if v.strip()]
+
+            if isinstance(components, str):
+                try:
+                    components = json.loads(components)
+                except Exception:
+                    components = None
+
+            if not template_name:
+                return Response({
+                    "status": False,
+                    "message": "'template_name' is required."
+                }, status=400)
+
+            targets = []
+            if phone_number:
+                targets.append(str(phone_number).strip())
+            if isinstance(phone_numbers_list, list):
+                targets.extend([str(p).strip() for p in phone_numbers_list if str(p).strip()])
+            elif isinstance(phone_numbers_list, str) and phone_numbers_list.strip():
+                try:
+                    parsed = json.loads(phone_numbers_list)
+                    if isinstance(parsed, list):
+                        targets.extend([str(p).strip() for p in parsed if str(p).strip()])
+                    else:
+                        targets.append(phone_numbers_list.strip())
+                except Exception:
+                    targets.extend([p.strip() for p in phone_numbers_list.split(",") if p.strip()])
+
+            if not targets:
+                return Response({
+                    "status": False,
+                    "message": "'phone_number' is required."
+                }, status=400)
+
+            common_kwargs = dict(
+                template_name=template_name,
+                language_code=language_code,
+                components=components,
+                variables=variables,
+                header_type=header_type,
+                header_text=header_text,
+                header_variables=header_variables,
+                header_media_url=header_media_url,
+                header_media_id=header_media_id,
+                document_filename=document_filename,
+                button_variables=button_variables,
+                otp_code=otp_code,
+            )
+
+            # Single recipient
+            if len(targets) == 1:
+                success, result = send_ai4trades_template(
+                    to=targets[0],
+                    **common_kwargs
+                )
+                if success:
+                    return Response({
+                        "status": True,
+                        "message": f"Template '{template_name}' sent successfully to {result.get('to')}.",
+                        "data": result
+                    }, status=200)
+                else:
+                    return Response({
+                        "status": False,
+                        "message": f"Failed to send template '{template_name}'.",
+                        "error": result
+                    }, status=400)
+
+            # Multiple recipients support if list passed (run concurrently with ThreadPoolExecutor, max 500 per request)
+            if len(targets) > 500:
+                return Response({
+                    "status": False,
+                    "message": "Maximum 500 phone numbers allowed per single request."
+                }, status=400)
+
+            import concurrent.futures
+            from django.db import close_old_connections
+            from CRM.models import ClientAccount
+
+            ai4trades_phone_id = getattr(settings, 'AI4TRADES_PHONE_NUMBER_ID', AI4TRADES_PHONE_NUMBER_ID)
+            shared_client_acc = ClientAccount.objects.filter(phone_number_id=ai4trades_phone_id).first()
+            common_kwargs["client_account_obj"] = shared_client_acc
+
+            def _send_to_target(target_num):
+                close_old_connections()
+                try:
+                    ok, res = send_ai4trades_template(to=target_num, **common_kwargs)
+                    return target_num, ok, res
+                except Exception as exc:
+                    return target_num, False, str(exc)
+                finally:
+                    close_old_connections()
+
+            results = []
+            sent_count = 0
+            failed_count = 0
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                futures = [executor.submit(_send_to_target, t) for t in targets]
+                for future in concurrent.futures.as_completed(futures):
+                    target, success, result = future.result()
+                    if success:
+                        sent_count += 1
+                        results.append({"phone_number": target, "status": "sent", **result})
+                    else:
+                        failed_count += 1
+                        results.append({"phone_number": target, "status": "failed", "error": result})
+
+            return Response({
+                "status": sent_count > 0,
+                "template_name": template_name,
+                "total": len(targets),
+                "sent_count": sent_count,
+                "failed_count": failed_count,
+                "results": results
+            }, status=200 if sent_count > 0 else 400)
+        except Exception as e:
+            logger.error("[ai4trades] Error in Ai4TradesSendTemplateAPIView: %s", e, exc_info=True)
+            return Response({
+                "status": False,
+                "error": "An unexpected error occurred while sending template.",
+                "detail": str(e)
+            }, status=500)
 
 
 
