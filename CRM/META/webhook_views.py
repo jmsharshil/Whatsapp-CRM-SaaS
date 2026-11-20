@@ -114,6 +114,8 @@ from CRM.mahindra_utils import mahindra_PHONE_NUMBER_ID
 from CRM.rk_voyagers_views import handle_rk_voyagers_message
 from CRM.rk_voyagers_utils import rk_voyagers_PHONE_NUMBER_ID
 from CRM.khodiyar_seasonal_views import handle_khodiyar_seasonal_message, KHODIYAR_SEASONAL_PHONE_NUMBER_ID
+from CRM.shreys_views import handle_shreys_message, handle_shreys_status_update
+from CRM.shreys_utils import shreys_PHONE_NUMBER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -781,6 +783,7 @@ class WhatsAppWebhookView(APIView):
                         mahindra_phone_id = mahindra_PHONE_NUMBER_ID
                         rk_voyagers_phone_id = rk_voyagers_PHONE_NUMBER_ID
                         khodiyar_phone_id = KHODIYAR_SEASONAL_PHONE_NUMBER_ID
+                        shreys_phone_id = shreys_PHONE_NUMBER_ID
                         
                         if gigatel_phone_id and phone_number_id == gigatel_phone_id:
                             logger.info("[Webhook] Routing message to Gigatel Bot")
@@ -855,6 +858,9 @@ class WhatsAppWebhookView(APIView):
                         elif khodiyar_phone_id and phone_number_id == khodiyar_phone_id:
                             logger.info("[Webhook] Routing message to Khodiyar Seasonal Handler (Phone ID: %s)", phone_number_id)
                             handle_khodiyar_seasonal_message(msg, contacts[0] if contacts else {})
+                        elif shreys_phone_id and phone_number_id == shreys_phone_id:
+                            logger.info("[Webhook] Routing message to Shreys Bot")
+                            handle_shreys_message(msg, contacts[0] if contacts else {})
                         elif phone_number_id == "1168578376348442":
                             logger.info(f"[Webhook] Saving message for disabled bot number {phone_number_id}")
 
@@ -955,6 +961,8 @@ class WhatsAppWebhookView(APIView):
                 for stat in value.get("statuses", []):
                     try:
                         _handle_status_update(stat)
+                        if phone_number_id == shreys_PHONE_NUMBER_ID:
+                            handle_shreys_status_update(stat)
                     except Exception:
                         logger.exception("[Webhook] Error processing status update")
 

@@ -1,0 +1,220 @@
+import json
+import logging
+import uuid
+import requests
+from django.conf import settings
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
+
+from CRM.models import Customer, Conversation, Message, ClientAccount
+from .shreys_utils import (
+    shreys_PHONE_NUMBER_ID,
+    SHREYS_DEFAULT_CALLBACK_URL,
+    send_shreys_template,
+    forward_shreys_status_callback,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def download_media_from_whatsapp(media_id: str, access_token: str) -> str:
+    try:
+        url = f"https://graph.facebook.com/v22.0/{media_id}"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        res = requests.get(url, headers=headers, timeout=10)
+        if res.status_code != 200:
+            logger.error("[shreys] Failed to get media URL for %s: %s", media_id, res.text)
+            return ""
+        media_url = res.json().get("url")
+        if not media_url:
+            return ""
+
+        file_res = requests.get(media_url, headers=headers, timeout=15)
+        if file_res.status_code != 200:
+            logger.error("[shreys] Failed to download media %s", media_id)
+            return ""
+
+        content_type = file_res.headers.get("Content-Type", "").split(";")[0].strip()
+        ext_map = {
+            "image/jpeg": "jpg",
+            "image/jpg": "jpg",
+            "image/png": "png",
+            "image/webp": "webp",
+            "image/gif": "gif",
+            "video/mp4": "mp4",
+            "video/3gpp": "3gp",
+            "video/quicktime": "mov",
+            "audio/mp4": "m4a",
+            "audio/aac": "aac",
+            "audio/amr": "amr",
+            "audio/ogg": "ogg",
+            "audio/opus": "opus",
+            "audio/mpeg": "mp3",
+            "application/pdf": "pdf",
+            "application/msword": "doc",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+            "application/vnd.ms-excel": "xls",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+            "application/vnd.ms-powerpoint": "ppt",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+            "text/plain": "txt",
+        }
+
+        ext = ext_map.get(content_type)
+        if not ext:
+            ext = content_type.split("/")[-1]
+            if not ext or len(ext) > 6 or not ext.isalnum():
+                ext = "bin"
+
+        file_name = f"shreys_media/{uuid.uuid4().hex}.{ext}"
+        saved_path = default_storage.save(file_name, ContentFile(file_res.content))
+        return default_storage.url(saved_path)
+    except Exception as e:
+        logger.error("[shreys] Error downloading media: %s", e)
+        return ""
+
+
+def handle_shreys_status_update(status_payload: dict):
+    """
+    Forwards Meta delivery status ('sent', 'delivered', 'read', 'failed')
+    for Shreys (1481244255068012) back to Shreyas Foundation's webhook.
+    """
+    wa_msg_id = status_payload.get("id", "")
+    new_status = status_payload.get("status", "")
+    recipient_id = status_payload.get("recipient_id", "")
+    timestamp_val = str(status_payload.get("timestamp", ""))
+
+    if not wa_msg_id or not new_status:
+        return
+
+    msg_row = (
+        Message.objects.filter(meta_message_id=wa_msg_id)
+        .values("template_name", "reply_of")
+        .first()
+    )
+    t_name = (msg_row.get("template_name") or "") if msg_row else ""
+    cb_url = SHREYS_DEFAULT_CALLBACK_URL
+    sub_id = None
+
+    if msg_row and msg_row.get("reply_of"):
+        try:
+            meta_info = json.loads(msg_row["reply_of"])
+            if isinstance(meta_info, dict):
+                cb_url = meta_info.get("webhook_callback_url") or cb_url
+                sub_id = meta_info.get("submission_id")
+        except Exception:
+            pass
+
+    forward_shreys_status_callback(
+        message_id=wa_msg_id,
+        recipient_id=recipient_id,
+        status=new_status,
+        timestamp=timestamp_val,
+        template_name=t_name,
+        callback_url=cb_url,
+        submission_id=sub_id,
+    )
+
+
+def handle_shreys_message(msg: dict, contact_obj: dict = None):
+    # 1. If Shreyas Backend triggers a template via webhook payload -> send template & save to CRM
+    if msg.get("event") == "TRIGGER_TEMPLATE" or msg.get("template_name"):
+        raw_phone = str(msg.get("phone") or msg.get("phone_number") or msg.get("from") or "").strip()
+        template_name = str(msg.get("template_name") or "").strip()
+        parameters = msg.get("parameters")
+        language_code = str(msg.get("language") or msg.get("language_code") or "en").strip()
+        submission_id = msg.get("submission_id")
+        webhook_callback_url = str(
+            msg.get("webhook_callback_url") or SHREYS_DEFAULT_CALLBACK_URL
+        ).strip()
+        if raw_phone and template_name:
+            send_shreys_template(
+                to=raw_phone,
+                template_name=template_name,
+                language_code=language_code,
+                parameters=parameters,
+                submission_id=submission_id,
+                webhook_callback_url=webhook_callback_url,
+            )
+        return
+
+    # 2. Normal inbound customer message -> normalize number, handle media & save to CRM
+    from CRM.META.webhook_views import _normalize_e164_phone
+
+    raw_from = msg.get("from", "").strip()
+    number = _normalize_e164_phone(raw_from)
+    if not number:
+        return
+
+    msg_id = msg.get("id", "")
+    msg_type = msg.get("type", "text")
+
+    display_body = ""
+    if msg_type == "text":
+        display_body = msg.get("text", {}).get("body", "").strip()
+    elif msg_type == "interactive":
+        idata = msg.get("interactive", {})
+        itype = idata.get("type")
+        if itype == "button_reply":
+            display_body = idata["button_reply"].get("title") or idata["button_reply"].get("id", "")
+        elif itype == "list_reply":
+            display_body = idata["list_reply"].get("title") or idata["list_reply"].get("id", "")
+    elif msg_type == "button":
+        display_body = msg.get("button", {}).get("text") or msg.get("button", {}).get("payload", "").strip()
+    elif msg_type in ["image", "video", "audio", "document", "sticker"]:
+        media_id = msg.get(msg_type, {}).get("id")
+        caption = msg.get(msg_type, {}).get("caption", "").strip()
+        if media_id:
+            client_account_obj = ClientAccount.objects.filter(phone_number_id=shreys_PHONE_NUMBER_ID).first()
+            token = (
+                client_account_obj.access_token
+                if client_account_obj and client_account_obj.access_token
+                else getattr(settings, "META_PERMANENT_TOKEN", "")
+            )
+            dl_url = download_media_from_whatsapp(media_id, token)
+            prefix = f"[{msg_type.upper()}]"
+            display_body = f"{prefix} {dl_url}" if dl_url else prefix
+        else:
+            display_body = f"[{msg_type.upper()}]"
+        if caption:
+            display_body = f"{display_body}\n{caption}"
+    elif msg_type == "location":
+        loc = msg.get("location", {})
+        lat, lng = loc.get("latitude"), loc.get("longitude")
+        name = loc.get("name", "")
+        display_body = f"📍 Location: {name} https://maps.google.com/?q={lat},{lng}".strip()
+    elif msg_type == "contacts":
+        c_list = msg.get("contacts", [])
+        c_names = [c.get("name", {}).get("formatted_name", "Unknown") for c in c_list]
+        display_body = f"👤 Contact: {', '.join(c_names)}"
+
+    if not display_body:
+        display_body = f"[{msg_type}]"
+
+    contact_name = number
+    if contact_obj and isinstance(contact_obj, dict):
+        profile_name = contact_obj.get("profile", {}).get("name", "").strip()
+        if profile_name:
+            contact_name = profile_name
+
+    customer_obj, created = Customer.objects.get_or_create(phone=number, defaults={"name": contact_name})
+    if not created and contact_name != number and (customer_obj.name == number or not customer_obj.name):
+        customer_obj.name = contact_name
+        customer_obj.save(update_fields=["name"])
+
+    client_account_obj = ClientAccount.objects.filter(phone_number_id=shreys_PHONE_NUMBER_ID).first()
+    conv_obj, _ = Conversation.objects.get_or_create(
+        customer=customer_obj,
+        phone_number_id=shreys_PHONE_NUMBER_ID,
+        defaults={"client": client_account_obj},
+    )
+    Message.objects.create(
+        conversation=conv_obj,
+        client=client_account_obj,
+        customer=customer_obj,
+        meta_message_id=msg_id,
+        direction="inbound",
+        message_type=msg_type if msg_type in ["text", "template", "image", "document", "video"] else "text",
+        content=display_body,
+        status="delivered",
+    )
