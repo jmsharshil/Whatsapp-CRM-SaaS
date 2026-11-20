@@ -364,9 +364,12 @@ def send_shreys_template(
     components: list = None,
     submission_id=None,
     webhook_callback_url: str = None,
+    existing_message_id: str = None,
+    log_only: bool = False,
 ) -> tuple:
     """
     Sends WhatsApp template via Shreys Phone Number ID (1481244255068012)
+    (or logs an already-sent template if log_only=True / existing_message_id is provided)
     and saves outbound message in CRM.
     """
     from CRM.models import ClientAccount, Customer, Conversation, Message
@@ -427,9 +430,6 @@ def send_shreys_template(
     callback_url = (webhook_callback_url or SHREYS_DEFAULT_CALLBACK_URL).strip()
 
     try:
-        r = requests.post(url, json=payload, headers=headers, timeout=15)
-        resp_json = r.json() if r.text else {}
-
         customer_obj = Customer.objects.filter(phone__in=[normalized_phone, to_clean]).first()
         if not customer_obj:
             customer_obj, _ = Customer.objects.get_or_create(
@@ -442,6 +442,30 @@ def send_shreys_template(
             phone_number_id=phone_id,
             defaults={"client": client_account_obj},
         )
+
+        # If Shreyas Backend already sent the template directly via Meta and is logging it to CRM:
+        if log_only or existing_message_id:
+            meta_id = str(existing_message_id or "").strip()
+            Message.objects.create(
+                conversation=conv_obj,
+                client=client_account_obj,
+                customer=customer_obj,
+                meta_message_id=meta_id,
+                direction="outbound",
+                message_type="template",
+                template_name=clean_template_name,
+                content=content_str,
+                status="sent",
+                reply_of=json.dumps({
+                    "webhook_callback_url": callback_url,
+                    "submission_id": submission_id,
+                }),
+            )
+            logger.info("[shreys] Logged outbound template '%s' to %s in CRM (wamid=%s)", clean_template_name, normalized_phone, meta_id)
+            return True, meta_id
+
+        r = requests.post(url, json=payload, headers=headers, timeout=15)
+        resp_json = r.json() if r.text else {}
 
         if r.status_code not in (200, 201):
             err_msg = (
