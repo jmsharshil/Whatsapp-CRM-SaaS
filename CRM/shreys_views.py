@@ -122,6 +122,7 @@ def handle_shreys_message(msg: dict, contact_obj: dict = None):
         raw_phone = str(msg.get("phone") or msg.get("phone_number") or msg.get("from") or "").strip()
         template_name = str(msg.get("template_name") or "").strip()
         parameters = msg.get("parameters")
+        raw_components = msg.get("components")
         language_code = str(msg.get("language") or msg.get("language_code") or "en").strip()
         submission_id = msg.get("submission_id")
         webhook_callback_url = str(
@@ -133,6 +134,7 @@ def handle_shreys_message(msg: dict, contact_obj: dict = None):
                 template_name=template_name,
                 language_code=language_code,
                 parameters=parameters,
+                components=raw_components,
                 submission_id=submission_id,
                 webhook_callback_url=webhook_callback_url,
             )
