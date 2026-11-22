@@ -21,6 +21,8 @@ def forward_shreys_status_callback(
     template_name: str = "",
     callback_url: str = "",
     submission_id=None,
+    raw_meta_payload: dict = None,
+    sig_header: str = "",
 ):
     """
     POSTs delivery status ('sent', 'delivered', 'read', 'failed') back to Shreyas webhook URL.
@@ -38,13 +40,51 @@ def forward_shreys_status_callback(
         "status": status,
         "timestamp": ts,
         "template_name": template_name or "",
+        "forwarded_from_saas_crm": True,
     }
     if submission_id is not None:
         payload["submission_id"] = submission_id
 
+    # Include standard Meta WhatsApp Business Account structure so Shreyas webhook
+    # works whether it expects flat fields OR standard Meta webhook format (like Insights)
+    if raw_meta_payload and isinstance(raw_meta_payload, dict):
+        for k, v in raw_meta_payload.items():
+            if k not in payload:
+                payload[k] = v
+    else:
+        payload["object"] = "whatsapp_business_account"
+        payload["entry"] = [
+            {
+                "id": shreys_PHONE_NUMBER_ID,
+                "changes": [
+                    {
+                        "field": "messages",
+                        "value": {
+                            "messaging_product": "whatsapp",
+                            "metadata": {"phone_number_id": shreys_PHONE_NUMBER_ID},
+                            "statuses": [
+                                {
+                                    "id": message_id or "",
+                                    "status": status,
+                                    "timestamp": ts,
+                                    "recipient_id": clean_recipient,
+                                }
+                            ],
+                        },
+                    }
+                ],
+            }
+        ]
+
     def _post_callback():
         try:
-            res = requests.post(target_url, json=payload, timeout=8)
+            headers = {
+                "Content-Type": "application/json",
+                "X-Forwarded-From-SaaS-CRM": "1",
+            }
+            if sig_header:
+                headers["X-Hub-Signature-256"] = sig_header
+            res = requests.post(target_url, json=payload, headers=headers, timeout=15)
             logger.info(
                 "[shreys] Status callback (%s) sent to %s for wamid=%s -> HTTP %s",
                 status,
@@ -58,7 +98,40 @@ def forward_shreys_status_callback(
     threading.Thread(target=_post_callback, daemon=True).start()
 
 
-def _build_shreys_components(template_name: str, parameters, raw_components: list = None) -> tuple:
+# In-memory cache to avoid redundant DB & Meta API queries on every request
+_SHREYS_TEMPLATE_CACHE = {}
+_SHREYS_CLIENT_CACHE = {"obj": None, "ts": 0}
+
+
+def _get_cached_shreys_client():
+    from CRM.models import ClientAccount
+    now = time.time()
+    if _SHREYS_CLIENT_CACHE["obj"] is not None and (now - _SHREYS_CLIENT_CACHE["ts"]) < 300:
+        return _SHREYS_CLIENT_CACHE["obj"]
+    obj = ClientAccount.objects.filter(phone_number_id=shreys_PHONE_NUMBER_ID).first()
+    _SHREYS_CLIENT_CACHE["obj"] = obj
+    _SHREYS_CLIENT_CACHE["ts"] = now
+    return obj
+
+
+def _get_cached_shreys_template(template_name: str, client_account_obj, token: str):
+    from CRM.models import Template
+    t_key = (template_name or "").strip().lower()
+    if not t_key:
+        return None
+    if t_key in _SHREYS_TEMPLATE_CACHE:
+        return _SHREYS_TEMPLATE_CACHE[t_key]
+
+    db_template = Template.objects.filter(name__iexact=t_key).first()
+    if not db_template:
+        db_template = _fetch_and_sync_meta_template(template_name.strip(), client_account_obj, token)
+
+    # Cache even if None so we don't repeatedly hit Meta API for missing templates
+    _SHREYS_TEMPLATE_CACHE[t_key] = db_template
+    return db_template
+
+
+def _build_shreys_components(template_name: str, parameters, raw_components: list = None, db_template=None) -> tuple:
     """
     Dynamically builds Meta template components so even if template names change
     or new templates are added in the future, it works without code changes:
@@ -77,13 +150,13 @@ def _build_shreys_components(template_name: str, parameters, raw_components: lis
     t_lower = t_clean.lower()
     params = parameters if isinstance(parameters, dict) else {}
 
-    # Check if template definition exists in CRM Template table
-    db_template = None
-    try:
-        from CRM.models import Template
-        db_template = Template.objects.filter(name__iexact=t_clean).first()
-    except Exception:
-        db_template = None
+    # Check if template definition exists in CRM Template table (if not already passed)
+    if db_template is None:
+        try:
+            from CRM.models import Template
+            db_template = _SHREYS_TEMPLATE_CACHE.get(t_lower) or Template.objects.filter(name__iexact=t_clean).first()
+        except Exception:
+            db_template = None
 
     components = []
     summary_parts = []
@@ -146,8 +219,8 @@ def _build_shreys_components(template_name: str, parameters, raw_components: lis
         db_has_dynamic_btn_only
         or "button_param" in params
         or "button_url" in params
-        or t_lower in ("shreyas_admission__", "shreyas_admission_reminder_")
-        or ("admission" in t_lower and len(params) == 1 and "1" in params)
+        or t_lower in ("shreyas_admission__", "shreyas_admission_link", "shreyas_admission_reminder_")
+        or ("admission" in t_lower and len(params) == 1 and ("1" in params or "submission_id" in params))
     )
 
     if is_button_only_template:
@@ -372,11 +445,11 @@ def send_shreys_template(
     (or logs an already-sent template if log_only=True / existing_message_id is provided)
     and saves outbound message in CRM.
     """
-    from CRM.models import ClientAccount, Customer, Conversation, Message
+    from CRM.models import Customer, Conversation, Message
     from CRM.META.webhook_views import _normalize_e164_phone
 
     phone_id = shreys_PHONE_NUMBER_ID
-    client_account_obj = ClientAccount.objects.filter(phone_number_id=phone_id).first()
+    client_account_obj = _get_cached_shreys_client()
     token = (
         client_account_obj.access_token
         if (client_account_obj and client_account_obj.access_token)
@@ -398,12 +471,11 @@ def send_shreys_template(
     if not parameters and submission_id is not None:
         parameters = {"1": str(submission_id)}
 
-    from CRM.models import Template
-    db_template = Template.objects.filter(name__iexact=clean_template_name).first()
-    if not db_template:
-        db_template = _fetch_and_sync_meta_template(clean_template_name, client_account_obj, token)
+    db_template = _get_cached_shreys_template(clean_template_name, client_account_obj, token)
 
-    components, param_summary = _build_shreys_components(clean_template_name, parameters, raw_components=components)
+    components, param_summary = _build_shreys_components(
+        clean_template_name, parameters, raw_components=components, db_template=db_template
+    )
     if components:
         template_payload["components"] = components
 
@@ -437,15 +509,31 @@ def send_shreys_template(
                 defaults={"name": normalized_phone},
             )
 
-        conv_obj, _ = Conversation.objects.get_or_create(
+        conv_obj = Conversation.objects.filter(
             customer=customer_obj,
             phone_number_id=phone_id,
-            defaults={"client": client_account_obj},
-        )
+        ).order_by("-created_at").first()
+        if not conv_obj:
+            conv_obj = Conversation.objects.create(
+                customer=customer_obj,
+                phone_number_id=phone_id,
+                client=client_account_obj,
+            )
+        elif client_account_obj and not conv_obj.client:
+            conv_obj.client = client_account_obj
+            conv_obj.save(update_fields=["client"])
 
         # If Shreyas Backend already sent the template directly via Meta and is logging it to CRM:
         if log_only or existing_message_id:
             meta_id = str(existing_message_id or "").strip()
+            if meta_id:
+                from django.core.cache import cache
+                log_dedup_key = f"shreys_log_wamid:{meta_id}"
+                if cache.get(log_dedup_key):
+                    logger.info("[shreys] Duplicate log skipped via cache for wamid=%s", meta_id)
+                    return True, meta_id
+                cache.set(log_dedup_key, "1", timeout=600)
+
             Message.objects.create(
                 conversation=conv_obj,
                 client=client_account_obj,

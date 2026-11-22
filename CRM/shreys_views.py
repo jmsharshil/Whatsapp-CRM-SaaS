@@ -12,6 +12,7 @@ from .shreys_utils import (
     SHREYS_DEFAULT_CALLBACK_URL,
     send_shreys_template,
     forward_shreys_status_callback,
+    _get_cached_shreys_client,
 )
 
 logger = logging.getLogger(__name__)
@@ -74,22 +75,32 @@ def download_media_from_whatsapp(media_id: str, access_token: str) -> str:
         return ""
 
 
-def handle_shreys_status_update(status_payload: dict):
+def handle_shreys_status_update(
+    status_payload: dict,
+    raw_meta_payload: dict = None,
+    sig_header: str = "",
+):
     """
     Forwards Meta delivery status ('sent', 'delivered', 'read', 'failed')
     for Shreys (1481244255068012) back to Shreyas Foundation's webhook.
+    Uses cache deduplication on (wamid, status) so if Shreyas webhook forwards
+    the event back to WHATSAPP_CRM_FORWARD_URL, it never loops.
     """
+    if raw_meta_payload and raw_meta_payload.get("forwarded_from_saas_crm"):
+        return {"skipped": True, "reason": "already_forwarded_from_saas_crm"}
+
     wa_msg_id = status_payload.get("id", "")
     new_status = status_payload.get("status", "")
     recipient_id = status_payload.get("recipient_id", "")
     timestamp_val = str(status_payload.get("timestamp", ""))
 
     if not wa_msg_id or not new_status:
-        return
+        return {"skipped": True, "reason": "missing_id_or_status"}
 
     msg_row = (
         Message.objects.filter(meta_message_id=wa_msg_id)
-        .values("template_name", "reply_of")
+        .order_by("-id")
+        .values("template_name", "reply_of", "status")
         .first()
     )
     t_name = (msg_row.get("template_name") or "") if msg_row else ""
@@ -105,33 +116,73 @@ def handle_shreys_status_update(status_payload: dict):
         except Exception:
             pass
 
-    forward_shreys_status_callback(
-        message_id=wa_msg_id,
-        recipient_id=recipient_id,
-        status=new_status,
-        timestamp=timestamp_val,
-        template_name=t_name,
-        callback_url=cb_url,
-        submission_id=sub_id,
-    )
+    from django.core.cache import cache
+    dedup_key = f"shreys_stat_fwd:{wa_msg_id}:{new_status}"
+    already_forwarded = bool(cache.get(dedup_key))
+    if not already_forwarded:
+        cache.set(dedup_key, "1", timeout=600)
+        forward_shreys_status_callback(
+            message_id=wa_msg_id,
+            recipient_id=recipient_id,
+            status=new_status,
+            timestamp=timestamp_val,
+            template_name=t_name,
+            callback_url=cb_url,
+            submission_id=sub_id,
+            raw_meta_payload=raw_meta_payload,
+            sig_header=sig_header,
+        )
+
+    return {
+        "event": "status_update",
+        "message_id": wa_msg_id,
+        "recipient_id": recipient_id,
+        "status": new_status,
+        "timestamp": timestamp_val,
+        "template_name": t_name,
+        "submission_id": sub_id,
+        "db_matched": bool(msg_row),
+        "forwarded_to_shreyas": not already_forwarded,
+        "callback_url": cb_url,
+    }
 
 
-def handle_shreys_message(msg: dict, contact_obj: dict = None):
+def handle_shreys_message(
+    msg: dict,
+    contact_obj: dict = None,
+    raw_meta_payload: dict = None,
+    sig_header: str = "",
+):
     # 1. If Shreyas Backend triggers or logs a template via webhook payload -> send/save template in CRM
     if msg.get("event") in ("TRIGGER_TEMPLATE", "LOG_TEMPLATE") or msg.get("template_name"):
-        raw_phone = str(msg.get("phone") or msg.get("phone_number") or msg.get("from") or "").strip()
+        raw_phone = str(
+            msg.get("phone")
+            or msg.get("phone_number")
+            or msg.get("to")
+            or msg.get("from")
+            or ""
+        ).strip()
         template_name = str(msg.get("template_name") or "").strip()
         parameters = msg.get("parameters")
         raw_components = msg.get("components")
         language_code = str(msg.get("language") or msg.get("language_code") or "en").strip()
         submission_id = msg.get("submission_id")
-        existing_msg_id = str(msg.get("message_id") or msg.get("meta_message_id") or msg.get("wamid") or "").strip()
-        log_only = bool(msg.get("log_only") or msg.get("event") == "LOG_TEMPLATE" or existing_msg_id)
+        existing_msg_id = str(
+            msg.get("message_id")
+            or msg.get("meta_message_id")
+            or msg.get("wamid")
+            or ""
+        ).strip()
+        log_only = bool(
+            msg.get("log_only")
+            or msg.get("event") == "LOG_TEMPLATE"
+            or existing_msg_id
+        )
         webhook_callback_url = str(
             msg.get("webhook_callback_url") or SHREYS_DEFAULT_CALLBACK_URL
         ).strip()
         if raw_phone and template_name:
-            send_shreys_template(
+            ok, res_val = send_shreys_template(
                 to=raw_phone,
                 template_name=template_name,
                 language_code=language_code,
@@ -142,10 +193,22 @@ def handle_shreys_message(msg: dict, contact_obj: dict = None):
                 existing_message_id=existing_msg_id,
                 log_only=log_only,
             )
-        return
+            return {
+                "success": ok,
+                "event": "LOG_TEMPLATE" if log_only else "TRIGGER_TEMPLATE",
+                "phone": raw_phone,
+                "template_name": template_name,
+                "submission_id": submission_id,
+                "message_id": res_val if ok else "",
+                "error": "" if ok else res_val,
+            }
+        return {"success": False, "error": "phone and template_name are required"}
 
-    # 2. Normal inbound customer message -> normalize number, handle media & save to CRM
+    # 2. Normal inbound customer message -> normalize number, deduplicate, forward to Shreyas & save to CRM
     from CRM.META.webhook_views import _normalize_e164_phone
+
+    if raw_meta_payload and raw_meta_payload.get("forwarded_from_saas_crm"):
+        return
 
     raw_from = msg.get("from", "").strip()
     number = _normalize_e164_phone(raw_from)
@@ -153,6 +216,43 @@ def handle_shreys_message(msg: dict, contact_obj: dict = None):
         return
 
     msg_id = msg.get("id", "")
+    if msg_id:
+        from django.core.cache import cache
+        in_dedup_key = f"shreys_in_wamid:{msg_id}"
+        if cache.get(in_dedup_key):
+            logger.info("[shreys] Duplicate inbound wamid=%s skipped via cache", msg_id)
+            return
+        cache.set(in_dedup_key, "1", timeout=600)
+
+    # Forward inbound webhook to Shreyas Foundation URL (just like Insights)
+    if raw_meta_payload and SHREYS_DEFAULT_CALLBACK_URL:
+        try:
+            import threading
+
+            forward_data = dict(raw_meta_payload)
+            forward_data["forwarded_from_saas_crm"] = True
+
+            def _forward_inbound_to_shreys(data, sig):
+                try:
+                    headers = {
+                        "Content-Type": "application/json",
+                        "X-Forwarded-From-SaaS-CRM": "1",
+                    }
+                    if sig:
+                        headers["X-Hub-Signature-256"] = sig
+                    res = requests.post(SHREYS_DEFAULT_CALLBACK_URL, json=data, headers=headers, timeout=15)
+                    logger.info("[shreys] Forwarded inbound message to Shreyas webhook. Status: %s", res.status_code)
+                except Exception as e:
+                    logger.error("[shreys] Forwarding inbound error to Shreyas webhook: %s", e)
+
+            threading.Thread(
+                target=_forward_inbound_to_shreys,
+                args=(forward_data, sig_header),
+                daemon=True,
+            ).start()
+        except Exception as e:
+            logger.error("[shreys] Failed to start forwarding thread for Shreyas: %s", e)
+
     msg_type = msg.get("type", "text")
 
     display_body = ""
@@ -171,7 +271,7 @@ def handle_shreys_message(msg: dict, contact_obj: dict = None):
         media_id = msg.get(msg_type, {}).get("id")
         caption = msg.get(msg_type, {}).get("caption", "").strip()
         if media_id:
-            client_account_obj = ClientAccount.objects.filter(phone_number_id=shreys_PHONE_NUMBER_ID).first()
+            client_account_obj = _get_cached_shreys_client()
             token = (
                 client_account_obj.access_token
                 if client_account_obj and client_account_obj.access_token
@@ -203,17 +303,31 @@ def handle_shreys_message(msg: dict, contact_obj: dict = None):
         if profile_name:
             contact_name = profile_name
 
-    customer_obj, created = Customer.objects.get_or_create(phone=number, defaults={"name": contact_name})
-    if not created and contact_name != number and (customer_obj.name == number or not customer_obj.name):
+    customer_obj = Customer.objects.filter(phone__in=[number, number.lstrip("+")]).first()
+    if not customer_obj:
+        customer_obj, created = Customer.objects.get_or_create(phone=number, defaults={"name": contact_name})
+    else:
+        created = False
+
+    if not created and contact_name != number and (customer_obj.name in (number, number.lstrip("+"), "Unknown") or not customer_obj.name):
         customer_obj.name = contact_name
         customer_obj.save(update_fields=["name"])
 
-    client_account_obj = ClientAccount.objects.filter(phone_number_id=shreys_PHONE_NUMBER_ID).first()
-    conv_obj, _ = Conversation.objects.get_or_create(
+    client_account_obj = _get_cached_shreys_client()
+    conv_obj = Conversation.objects.filter(
         customer=customer_obj,
         phone_number_id=shreys_PHONE_NUMBER_ID,
-        defaults={"client": client_account_obj},
-    )
+    ).order_by("-created_at").first()
+    if not conv_obj:
+        conv_obj = Conversation.objects.create(
+            customer=customer_obj,
+            phone_number_id=shreys_PHONE_NUMBER_ID,
+            client=client_account_obj,
+        )
+    elif client_account_obj and not conv_obj.client:
+        conv_obj.client = client_account_obj
+        conv_obj.save(update_fields=["client"])
+
     Message.objects.create(
         conversation=conv_obj,
         client=client_account_obj,
@@ -224,3 +338,13 @@ def handle_shreys_message(msg: dict, contact_obj: dict = None):
         content=display_body,
         status="delivered",
     )
+    return {
+        "event": "inbound_message",
+        "message_id": msg_id,
+        "from": number,
+        "name": customer_obj.name,
+        "type": msg_type,
+        "content": display_body,
+        "conversation_id": conv_obj.id,
+        "forwarded_to_shreyas": bool(raw_meta_payload and SHREYS_DEFAULT_CALLBACK_URL),
+    }

@@ -666,13 +666,47 @@ class WhatsAppWebhookView(APIView):
                 logger.exception("[InsightsLog] Error saving outbound message")
                 return HttpResponse("Error", status=500)
 
+        # ── Handle Shreyas Direct Outbound Log / Template Intercept ───────
+        if payload.get("event") in ("TRIGGER_TEMPLATE", "LOG_TEMPLATE") or (
+            payload.get("template_name")
+            and payload.get("object") != "whatsapp_business_account"
+        ):
+            try:
+                from django.http import JsonResponse
+                res_data = handle_shreys_message(payload) or {}
+                logger.info("[ShreysLog] Processed Shreyas outbound template/log via webhook")
+                return JsonResponse({"status": "success", **res_data}, status=200)
+            except Exception as e:
+                from django.http import JsonResponse
+                logger.exception("[ShreysLog] Error saving Shreyas outbound template/log")
+                return JsonResponse({"status": "error", "error": str(e)}, status=500)
+
         if not _verify_meta_signature(request):
-            logger.error("[Webhook] Bad signature")
-            return HttpResponse("Forbidden", status=403)
+            is_shreys_payload = False
+            if payload.get("object") == "whatsapp_business_account":
+                try:
+                    entries = payload.get("entry", [])
+                    if entries:
+                        for e in entries:
+                            for ch in e.get("changes", []):
+                                pid = ch.get("value", {}).get("metadata", {}).get("phone_number_id", "")
+                                if pid == shreys_PHONE_NUMBER_ID:
+                                    is_shreys_payload = True
+                                else:
+                                    is_shreys_payload = False
+                                    break
+                except Exception:
+                    is_shreys_payload = False
+
+            if not is_shreys_payload:
+                logger.error("[Webhook] Bad signature")
+                return HttpResponse("Forbidden", status=403)
 
 
         if payload.get("object") != "whatsapp_business_account":
             return HttpResponse("OK", status=200)
+
+        shreys_results = []
 
         for entry in payload.get("entry", []):
             for change in entry.get("changes", []):
@@ -860,7 +894,15 @@ class WhatsAppWebhookView(APIView):
                             handle_khodiyar_seasonal_message(msg, contacts[0] if contacts else {})
                         elif shreys_phone_id and phone_number_id == shreys_phone_id:
                             logger.info("[Webhook] Routing message to Shreys Bot")
-                            handle_shreys_message(msg, contacts[0] if contacts else {})
+                            sig = request.META.get("HTTP_X_HUB_SIGNATURE_256", "")
+                            s_res = handle_shreys_message(
+                                msg,
+                                contacts[0] if contacts else {},
+                                raw_meta_payload=payload,
+                                sig_header=sig,
+                            )
+                            if s_res:
+                                shreys_results.append(s_res)
                         elif phone_number_id == "1168578376348442":
                             logger.info(f"[Webhook] Saving message for disabled bot number {phone_number_id}")
 
@@ -962,9 +1004,28 @@ class WhatsAppWebhookView(APIView):
                     try:
                         _handle_status_update(stat)
                         if phone_number_id == shreys_PHONE_NUMBER_ID:
-                            handle_shreys_status_update(stat)
+                            sig = request.META.get("HTTP_X_HUB_SIGNATURE_256", "")
+                            st_res = handle_shreys_status_update(
+                                stat,
+                                raw_meta_payload=payload,
+                                sig_header=sig,
+                            )
+                            if st_res:
+                                shreys_results.append(st_res)
                     except Exception:
                         logger.exception("[Webhook] Error processing status update")
+
+        if shreys_results:
+            from django.http import JsonResponse
+            return JsonResponse(
+                {
+                    "status": "success",
+                    "phone_number_id": shreys_PHONE_NUMBER_ID,
+                    "processed_count": len(shreys_results),
+                    "results": shreys_results,
+                },
+                status=200,
+            )
 
         return HttpResponse("OK", status=200)
 
