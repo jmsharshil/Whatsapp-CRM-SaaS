@@ -115,7 +115,7 @@ from CRM.rk_voyagers_views import handle_rk_voyagers_message
 from CRM.rk_voyagers_utils import rk_voyagers_PHONE_NUMBER_ID
 from CRM.khodiyar_seasonal_views import handle_khodiyar_seasonal_message, KHODIYAR_SEASONAL_PHONE_NUMBER_ID
 from CRM.shreys_views import handle_shreys_message, handle_shreys_status_update
-from CRM.shreys_utils import shreys_PHONE_NUMBER_ID
+from CRM.shreys_utils import shreys_PHONE_NUMBER_ID, SHREYS_PHONE_NUMBER_IDS
 
 logger = logging.getLogger(__name__)
 
@@ -690,7 +690,7 @@ class WhatsAppWebhookView(APIView):
                         for e in entries:
                             for ch in e.get("changes", []):
                                 pid = ch.get("value", {}).get("metadata", {}).get("phone_number_id", "")
-                                if pid == shreys_PHONE_NUMBER_ID:
+                                if pid in SHREYS_PHONE_NUMBER_IDS:
                                     is_shreys_payload = True
                                 else:
                                     is_shreys_payload = False
@@ -892,14 +892,15 @@ class WhatsAppWebhookView(APIView):
                         elif khodiyar_phone_id and phone_number_id == khodiyar_phone_id:
                             logger.info("[Webhook] Routing message to Khodiyar Seasonal Handler (Phone ID: %s)", phone_number_id)
                             handle_khodiyar_seasonal_message(msg, contacts[0] if contacts else {})
-                        elif shreys_phone_id and phone_number_id == shreys_phone_id:
-                            logger.info("[Webhook] Routing message to Shreys Bot")
+                        elif phone_number_id in SHREYS_PHONE_NUMBER_IDS:
+                            logger.info("[Webhook] Routing message to Shreys Bot (Phone ID: %s)", phone_number_id)
                             sig = request.META.get("HTTP_X_HUB_SIGNATURE_256", "")
                             s_res = handle_shreys_message(
                                 msg,
                                 contacts[0] if contacts else {},
                                 raw_meta_payload=payload,
                                 sig_header=sig,
+                                phone_number_id=phone_number_id,
                             )
                             if s_res:
                                 shreys_results.append(s_res)
@@ -1003,12 +1004,13 @@ class WhatsAppWebhookView(APIView):
                 for stat in value.get("statuses", []):
                     try:
                         _handle_status_update(stat)
-                        if phone_number_id == shreys_PHONE_NUMBER_ID:
+                        if phone_number_id in SHREYS_PHONE_NUMBER_IDS:
                             sig = request.META.get("HTTP_X_HUB_SIGNATURE_256", "")
                             st_res = handle_shreys_status_update(
                                 stat,
                                 raw_meta_payload=payload,
                                 sig_header=sig,
+                                phone_number_id=phone_number_id,
                             )
                             if st_res:
                                 shreys_results.append(st_res)
@@ -1020,7 +1022,7 @@ class WhatsAppWebhookView(APIView):
             return JsonResponse(
                 {
                     "status": "success",
-                    "phone_number_id": shreys_PHONE_NUMBER_ID,
+                    "phone_number_id": shreys_results[0].get("phone_number_id", shreys_PHONE_NUMBER_ID),
                     "processed_count": len(shreys_results),
                     "results": shreys_results,
                 },

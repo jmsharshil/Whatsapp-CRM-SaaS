@@ -9,6 +9,8 @@ from django.core.files.base import ContentFile
 from CRM.models import Customer, Conversation, Message, ClientAccount
 from .shreys_utils import (
     shreys_PHONE_NUMBER_ID,
+    SHREYS_SECONDARY_PHONE_NUMBER_ID,
+    SHREYS_PHONE_NUMBER_IDS,
     SHREYS_DEFAULT_CALLBACK_URL,
     send_shreys_template,
     forward_shreys_status_callback,
@@ -79,16 +81,18 @@ def handle_shreys_status_update(
     status_payload: dict,
     raw_meta_payload: dict = None,
     sig_header: str = "",
+    phone_number_id: str = "",
 ):
     """
     Forwards Meta delivery status ('sent', 'delivered', 'read', 'failed')
-    for Shreys (1481244255068012) back to Shreyas Foundation's webhook.
+    for Shreys (1481244255068012 / 635086059677025) back to Shreyas Foundation's webhook.
     Uses cache deduplication on (wamid, status) so if Shreyas webhook forwards
     the event back to WHATSAPP_CRM_FORWARD_URL, it never loops.
     """
     if raw_meta_payload and raw_meta_payload.get("forwarded_from_saas_crm"):
         return {"skipped": True, "reason": "already_forwarded_from_saas_crm"}
 
+    active_phone_id = (phone_number_id or shreys_PHONE_NUMBER_ID).strip()
     wa_msg_id = status_payload.get("id", "")
     new_status = status_payload.get("status", "")
     recipient_id = status_payload.get("recipient_id", "")
@@ -131,10 +135,12 @@ def handle_shreys_status_update(
             submission_id=sub_id,
             raw_meta_payload=raw_meta_payload,
             sig_header=sig_header,
+            phone_number_id=active_phone_id,
         )
 
     return {
         "event": "status_update",
+        "phone_number_id": active_phone_id,
         "message_id": wa_msg_id,
         "recipient_id": recipient_id,
         "status": new_status,
@@ -152,7 +158,16 @@ def handle_shreys_message(
     contact_obj: dict = None,
     raw_meta_payload: dict = None,
     sig_header: str = "",
+    phone_number_id: str = "",
 ):
+    active_phone_id = str(
+        phone_number_id
+        or msg.get("phone_number_id")
+        or shreys_PHONE_NUMBER_ID
+    ).strip()
+    if active_phone_id not in SHREYS_PHONE_NUMBER_IDS:
+        active_phone_id = shreys_PHONE_NUMBER_ID
+
     # 1. If Shreyas Backend triggers or logs a template via webhook payload -> send/save template in CRM
     if msg.get("event") in ("TRIGGER_TEMPLATE", "LOG_TEMPLATE") or msg.get("template_name"):
         raw_phone = str(
@@ -192,10 +207,12 @@ def handle_shreys_message(
                 webhook_callback_url=webhook_callback_url,
                 existing_message_id=existing_msg_id,
                 log_only=log_only,
+                phone_number_id=active_phone_id,
             )
             return {
                 "success": ok,
                 "event": "LOG_TEMPLATE" if log_only else "TRIGGER_TEMPLATE",
+                "phone_number_id": active_phone_id,
                 "phone": raw_phone,
                 "template_name": template_name,
                 "submission_id": submission_id,
@@ -271,7 +288,7 @@ def handle_shreys_message(
         media_id = msg.get(msg_type, {}).get("id")
         caption = msg.get(msg_type, {}).get("caption", "").strip()
         if media_id:
-            client_account_obj = _get_cached_shreys_client()
+            client_account_obj = _get_cached_shreys_client(active_phone_id)
             token = (
                 client_account_obj.access_token
                 if client_account_obj and client_account_obj.access_token
@@ -313,15 +330,15 @@ def handle_shreys_message(
         customer_obj.name = contact_name
         customer_obj.save(update_fields=["name"])
 
-    client_account_obj = _get_cached_shreys_client()
+    client_account_obj = _get_cached_shreys_client(active_phone_id)
     conv_obj = Conversation.objects.filter(
         customer=customer_obj,
-        phone_number_id=shreys_PHONE_NUMBER_ID,
+        phone_number_id=active_phone_id,
     ).order_by("-created_at").first()
     if not conv_obj:
         conv_obj = Conversation.objects.create(
             customer=customer_obj,
-            phone_number_id=shreys_PHONE_NUMBER_ID,
+            phone_number_id=active_phone_id,
             client=client_account_obj,
         )
     elif client_account_obj and not conv_obj.client:
@@ -340,6 +357,7 @@ def handle_shreys_message(
     )
     return {
         "event": "inbound_message",
+        "phone_number_id": active_phone_id,
         "message_id": msg_id,
         "from": number,
         "name": customer_obj.name,

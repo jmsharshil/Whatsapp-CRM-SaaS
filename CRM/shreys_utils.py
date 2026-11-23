@@ -8,7 +8,9 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-shreys_PHONE_NUMBER_ID = "1481244255068012"
+shreys_PHONE_NUMBER_ID = "635086059677025"
+SHREYS_SECONDARY_PHONE_NUMBER_ID = "1481244255068012"
+SHREYS_PHONE_NUMBER_IDS = (shreys_PHONE_NUMBER_ID, SHREYS_SECONDARY_PHONE_NUMBER_ID)
 SHREYS_DEFAULT_CALLBACK_URL = "https://shreyashfoundation-e6eagcdeebbbhwgd.centralindia-01.azurewebsites.net/api/whatsapp/webhook/"
 META_SEND_URL = "https://graph.facebook.com/v22.0/{phone_id}/messages"
 
@@ -23,6 +25,7 @@ def forward_shreys_status_callback(
     submission_id=None,
     raw_meta_payload: dict = None,
     sig_header: str = "",
+    phone_number_id: str = "",
 ):
     """
     POSTs delivery status ('sent', 'delivered', 'read', 'failed') back to Shreyas webhook URL.
@@ -31,6 +34,7 @@ def forward_shreys_status_callback(
     if not target_url:
         return
 
+    active_phone_id = (phone_number_id or shreys_PHONE_NUMBER_ID).strip()
     clean_recipient = re.sub(r"[^\d]", "", str(recipient_id or ""))
     ts = str(timestamp or int(time.time()))
 
@@ -40,6 +44,7 @@ def forward_shreys_status_callback(
         "status": status,
         "timestamp": ts,
         "template_name": template_name or "",
+        "phone_number_id": active_phone_id,
         "forwarded_from_saas_crm": True,
     }
     if submission_id is not None:
@@ -55,13 +60,13 @@ def forward_shreys_status_callback(
         payload["object"] = "whatsapp_business_account"
         payload["entry"] = [
             {
-                "id": shreys_PHONE_NUMBER_ID,
+                "id": active_phone_id,
                 "changes": [
                     {
                         "field": "messages",
                         "value": {
                             "messaging_product": "whatsapp",
-                            "metadata": {"phone_number_id": shreys_PHONE_NUMBER_ID},
+                            "metadata": {"phone_number_id": active_phone_id},
                             "statuses": [
                                 {
                                     "id": message_id or "",
@@ -100,17 +105,20 @@ def forward_shreys_status_callback(
 
 # In-memory cache to avoid redundant DB & Meta API queries on every request
 _SHREYS_TEMPLATE_CACHE = {}
-_SHREYS_CLIENT_CACHE = {"obj": None, "ts": 0}
+_SHREYS_CLIENT_CACHE = {}
 
 
-def _get_cached_shreys_client():
+def _get_cached_shreys_client(phone_number_id: str = None):
     from CRM.models import ClientAccount
+    pid = (phone_number_id or shreys_PHONE_NUMBER_ID).strip()
+    if pid not in SHREYS_PHONE_NUMBER_IDS:
+        pid = shreys_PHONE_NUMBER_ID
     now = time.time()
-    if _SHREYS_CLIENT_CACHE["obj"] is not None and (now - _SHREYS_CLIENT_CACHE["ts"]) < 300:
-        return _SHREYS_CLIENT_CACHE["obj"]
-    obj = ClientAccount.objects.filter(phone_number_id=shreys_PHONE_NUMBER_ID).first()
-    _SHREYS_CLIENT_CACHE["obj"] = obj
-    _SHREYS_CLIENT_CACHE["ts"] = now
+    cached = _SHREYS_CLIENT_CACHE.get(pid)
+    if cached and cached["obj"] is not None and (now - cached["ts"]) < 300:
+        return cached["obj"]
+    obj = ClientAccount.objects.filter(phone_number_id=pid).first()
+    _SHREYS_CLIENT_CACHE[pid] = {"obj": obj, "ts": now}
     return obj
 
 
@@ -439,17 +447,19 @@ def send_shreys_template(
     webhook_callback_url: str = None,
     existing_message_id: str = None,
     log_only: bool = False,
+    phone_number_id: str = None,
 ) -> tuple:
     """
-    Sends WhatsApp template via Shreys Phone Number ID (1481244255068012)
+    Sends WhatsApp template via Shreys Phone Number ID (1481244255068012 or 635086059677025)
     (or logs an already-sent template if log_only=True / existing_message_id is provided)
     and saves outbound message in CRM.
     """
     from CRM.models import Customer, Conversation, Message
     from CRM.META.webhook_views import _normalize_e164_phone
 
-    phone_id = shreys_PHONE_NUMBER_ID
-    client_account_obj = _get_cached_shreys_client()
+    req_pid = str(phone_number_id or "").strip()
+    phone_id = req_pid if req_pid in SHREYS_PHONE_NUMBER_IDS else shreys_PHONE_NUMBER_ID
+    client_account_obj = _get_cached_shreys_client(phone_id)
     token = (
         client_account_obj.access_token
         if (client_account_obj and client_account_obj.access_token)
@@ -583,6 +593,7 @@ def send_shreys_template(
                 template_name=clean_template_name,
                 callback_url=callback_url,
                 submission_id=submission_id,
+                phone_number_id=phone_id,
             )
             return False, err_msg
 
