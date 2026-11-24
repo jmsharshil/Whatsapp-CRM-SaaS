@@ -397,28 +397,26 @@ def handle_globestar_message(msg: dict):
 
 class GlobestarDataAPIView(APIView):
     """
-    API to fetch all Globestar data, formatted similarly to Gigatel data export.
+    API to fetch Globestar leads data, formatted similarly to Gigatel data export.
     """
     authentication_classes = []
     permission_classes = [AllowAny]
 
     def get(self, request, *args, **kwargs):
         phone_number_id = request.GET.get('phone_number_id')
-        token = request.GET.get('token')
-
-        if not phone_number_id or not token:
-            return Response({"error": "phone_number_id and token are required in query params"}, status=400)
+        if not phone_number_id:
+            return Response({"error": "phone_number_id is required in query params"}, status=400)
 
         client = ClientAccount.objects.filter(phone_number_id=phone_number_id).first()
         if not client:
             return Response({"error": "Invalid phone_number_id"}, status=401)
-        
-        if token != client.access_token and token != settings.META_PERMANENT_TOKEN:
-            return Response({"error": "Invalid token"}, status=401)
 
+        # Filter only leads (conversations with status='confirmed' or completed state)
+        from django.db.models import Q
         conversations = Conversation.objects.filter(
-            phone_number_id=phone_number_id
-        ).select_related('customer', 'chatbot_state').prefetch_related('messages').order_by('-created_at')
+            Q(phone_number_id=phone_number_id) | Q(client=client),
+            Q(status="confirmed") | Q(chatbot_state__is_complete=True)
+        ).distinct().select_related('customer', 'chatbot_state').prefetch_related('messages').order_by('-created_at')
 
         export_data = {
             "client": {
