@@ -424,6 +424,7 @@ class GlobestarDataAPIView(APIView):
                 "phone_number_id": client.phone_number_id if client else phone_number_id,
                 "waba_id": client.waba_id if client else "",
             },
+            "total_count": 0,
             "conversations": []
         }
 
@@ -452,6 +453,8 @@ class GlobestarDataAPIView(APIView):
                 })
             
             export_data["conversations"].append(conv_data)
+
+        export_data["total_count"] = len(export_data["conversations"])
 
         return Response(export_data)
 
