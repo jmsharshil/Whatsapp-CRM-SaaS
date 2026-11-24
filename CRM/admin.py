@@ -1,6 +1,24 @@
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import *
 # Register your models here.
+
+class CustomUserAdmin(BaseUserAdmin):
+    list_display = ('email', 'full_name', 'is_staff', 'is_active')
+    list_filter = ('is_staff', 'is_active')
+    fieldsets = (
+        (None, {'fields': ('email', 'password')}),
+        ('Personal info', {'fields': ('full_name',)}),
+        ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
+    )
+    add_fieldsets = (
+        (None, {
+            'classes': ('wide',),
+            'fields': ('email', 'password', 'full_name', 'is_staff', 'is_active'),
+        }),
+    )
+    search_fields = ('email', 'full_name')
+    ordering = ('email',)
 
 class CustomerAdmin(admin.ModelAdmin):
     search_fields = ['phone', 'name']
@@ -9,7 +27,7 @@ class CustomerAdmin(admin.ModelAdmin):
 admin.site.register(Customer, CustomerAdmin)
 admin.site.register(Message)
 admin.site.register(Conversation)
-admin.site.register(User)
+admin.site.register(User, CustomUserAdmin)
 admin.site.register(EmailVerificationCode)
 admin.site.register(Organization)
 admin.site.register(OrganizationMember)
