@@ -1065,15 +1065,20 @@ class TemplateListCreateView(APIView):
         if err:
             return Response(err, status=400)
 
-        # Disallow template creation for Ai4Trades by phone number ID
+        # Disallow template creation for Ai4Trades by phone number ID with Meta error structure
         from CRM.ai4trades_utils import AI4TRADES_PHONE_NUMBER_ID
         waba_phone_id = str(getattr(waba, 'phone_number_id', '') or '').strip()
         configured_ai4trades_phone = str(getattr(settings, 'AI4TRADES_PHONE_NUMBER_ID', AI4TRADES_PHONE_NUMBER_ID) or '').strip()
         if waba_phone_id and configured_ai4trades_phone and waba_phone_id == configured_ai4trades_phone:
             return Response({
-                "status": "error",
-                "error": "Template creation is not allowed for Ai4Trades."
-            }, status=403)
+                "error": {
+                    "message": "(#100) Failed to create message template. This WABA account is restricted from creating new message templates.",
+                    "type": "OAuthException",
+                    "code": 100,
+                    "error_subcode": 2388040,
+                    "fbtrace_id": "ABcDeF12345"
+                }
+            }, status=400)
 
         # Convert request.data to a regular dict to avoid pickling errors with files
         data = {}
