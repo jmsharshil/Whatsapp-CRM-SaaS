@@ -303,6 +303,17 @@ class CampaignListCreateView(APIView):
         if err:
             return Response(err, status=400)
 
+        # Disallow campaign run for Ai4Trades by phone number ID
+        from django.conf import settings
+        from CRM.ai4trades_utils import AI4TRADES_PHONE_NUMBER_ID
+        waba_phone_id = str(getattr(waba, 'phone_number_id', '') or '').strip()
+        configured_ai4trades_phone = str(getattr(settings, 'AI4TRADES_PHONE_NUMBER_ID', AI4TRADES_PHONE_NUMBER_ID) or '').strip()
+        if waba_phone_id and configured_ai4trades_phone and waba_phone_id == configured_ai4trades_phone:
+            return Response({
+                "status": "error",
+                "error": "Campaign execution is not allowed for Ai4Trades."
+            }, status=403)
+
         # Convert request.data to a regular dict
         data = {}
         for key, value in request.data.items():
