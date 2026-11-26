@@ -116,6 +116,8 @@ from CRM.rk_voyagers_utils import rk_voyagers_PHONE_NUMBER_ID
 from CRM.khodiyar_seasonal_views import handle_khodiyar_seasonal_message, KHODIYAR_SEASONAL_PHONE_NUMBER_ID
 from CRM.shreys_views import handle_shreys_message, handle_shreys_status_update
 from CRM.shreys_utils import shreys_PHONE_NUMBER_ID, SHREYS_PHONE_NUMBER_IDS
+from CRM.jmstechnova_views import handle_jmstechnova_message
+from CRM.jmstechnova_utils import JMSTECHNOVA_PHONE_NUMBER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -818,6 +820,7 @@ class WhatsAppWebhookView(APIView):
                         rk_voyagers_phone_id = rk_voyagers_PHONE_NUMBER_ID
                         khodiyar_phone_id = KHODIYAR_SEASONAL_PHONE_NUMBER_ID
                         shreys_phone_id = shreys_PHONE_NUMBER_ID
+                        jmstechnova_phone_id = JMSTECHNOVA_PHONE_NUMBER_ID
                         
                         if gigatel_phone_id and phone_number_id == gigatel_phone_id:
                             logger.info("[Webhook] Routing message to Gigatel Bot")
@@ -892,6 +895,9 @@ class WhatsAppWebhookView(APIView):
                         elif khodiyar_phone_id and phone_number_id == khodiyar_phone_id:
                             logger.info("[Webhook] Routing message to Khodiyar Seasonal Handler (Phone ID: %s)", phone_number_id)
                             handle_khodiyar_seasonal_message(msg, contacts[0] if contacts else {})
+                        elif jmstechnova_phone_id and phone_number_id == jmstechnova_phone_id:
+                            logger.info("[Webhook] Routing message to JMSTechNova Bot (Phone ID: %s)", phone_number_id)
+                            handle_jmstechnova_message(msg, contacts[0] if contacts else {})
                         elif phone_number_id in SHREYS_PHONE_NUMBER_IDS:
                             logger.info("[Webhook] Routing message to Shreys Bot (Phone ID: %s)", phone_number_id)
                             sig = request.META.get("HTTP_X_HUB_SIGNATURE_256", "")
