@@ -72,104 +72,107 @@ def download_media_from_whatsapp(media_id: str, access_token: str) -> str:
         return ""
 
 def handle_jmstechnova_message(msg: dict, contact: dict = None):
-    raw_from = msg.get("from", "")
-    number = _normalize_e164_phone(raw_from)
-    msg_id = msg.get("id", "")
-    msg_type = msg.get("type", "text")
+    try:
+        raw_from = msg.get("from", "")
+        number = _normalize_e164_phone(raw_from)
+        msg_id = msg.get("id", "")
+        msg_type = msg.get("type", "text")
 
-    contact = contact or {}
-    profile_name = contact.get("profile", {}).get("name", "")
+        contact = contact or {}
+        profile_name = contact.get("profile", {}).get("name", "")
 
-    body = ""
-    display_body = ""
-    if msg_type == "text":
-        body = msg.get("text", {}).get("body", "").strip()
-        display_body = body
-    elif msg_type == "interactive":
-        idata = msg.get("interactive", {})
-        itype = idata.get("type")
-        if itype == "button_reply":
-            body = idata["button_reply"]["id"]
-            display_body = idata["button_reply"].get("title", body)
-        elif itype == "list_reply":
-            body = idata["list_reply"]["id"]
-            display_body = idata["list_reply"].get("title", body)
-    elif msg_type == "button":
-        body = msg.get("button", {}).get("payload", "").strip()
-        display_body = msg.get("button", {}).get("text", body).strip()
-    elif msg_type in ["image", "video", "audio", "document", "sticker"]:
-        media_id = msg.get(msg_type, {}).get("id")
-        caption = msg.get(msg_type, {}).get("caption", "").strip()
-        if media_id:
-            phone_id = getattr(settings, 'JMSTECHNOVA_PHONE_NUMBER_ID', JMSTECHNOVA_PHONE_NUMBER_ID)
-            client_account_obj = ClientAccount.objects.filter(phone_number_id=phone_id).first()
-            token = client_account_obj.access_token if client_account_obj and client_account_obj.access_token else getattr(settings, "META_PERMANENT_TOKEN", "")
-            dl_url = download_media_from_whatsapp(media_id, token)
-            prefix = f"[{msg_type.upper()}]"
-            if dl_url:
-                body = f"{prefix} {dl_url}"
-                display_body = f"{body}\n{caption}" if caption else body
+        body = ""
+        display_body = ""
+        if msg_type == "text":
+            body = msg.get("text", {}).get("body", "").strip()
+            display_body = body
+        elif msg_type == "interactive":
+            idata = msg.get("interactive", {})
+            itype = idata.get("type")
+            if itype == "button_reply":
+                body = idata["button_reply"]["id"]
+                display_body = idata["button_reply"].get("title", body)
+            elif itype == "list_reply":
+                body = idata["list_reply"]["id"]
+                display_body = idata["list_reply"].get("title", body)
+        elif msg_type == "button":
+            body = msg.get("button", {}).get("payload", "").strip()
+            display_body = msg.get("button", {}).get("text", body).strip()
+        elif msg_type in ["image", "video", "audio", "document", "sticker"]:
+            media_id = msg.get(msg_type, {}).get("id")
+            caption = msg.get(msg_type, {}).get("caption", "").strip()
+            if media_id:
+                phone_id = getattr(settings, 'JMSTECHNOVA_PHONE_NUMBER_ID', JMSTECHNOVA_PHONE_NUMBER_ID)
+                client_account_obj = ClientAccount.objects.filter(phone_number_id=phone_id).first()
+                token = client_account_obj.access_token if client_account_obj and client_account_obj.access_token else getattr(settings, "META_PERMANENT_TOKEN", "")
+                dl_url = download_media_from_whatsapp(media_id, token)
+                prefix = f"[{msg_type.upper()}]"
+                if dl_url:
+                    body = f"{prefix} {dl_url}"
+                    display_body = f"{body}\n{caption}" if caption else body
+                else:
+                    body = prefix
+                    display_body = f"{body}\n{caption}" if caption else body
             else:
-                body = prefix
+                body = f"[{msg_type}]"
                 display_body = f"{body}\n{caption}" if caption else body
-        else:
-            body = f"[{msg_type}]"
-            display_body = f"{body}\n{caption}" if caption else body
+                
+        elif msg_type == "location":
+            lat = msg.get("location", {}).get("latitude")
+            lng = msg.get("location", {}).get("longitude")
+            name = msg.get("location", {}).get("name", "")
+            address = msg.get("location", {}).get("address", "")
+            loc_str = []
+            if name: loc_str.append(name)
+            if address: loc_str.append(address)
+            loc_str.append(f"https://maps.google.com/?q={lat},{lng}")
             
-    elif msg_type == "location":
-        lat = msg.get("location", {}).get("latitude")
-        lng = msg.get("location", {}).get("longitude")
-        name = msg.get("location", {}).get("name", "")
-        address = msg.get("location", {}).get("address", "")
-        loc_str = []
-        if name: loc_str.append(name)
-        if address: loc_str.append(address)
-        loc_str.append(f"https://maps.google.com/?q={lat},{lng}")
-        
-        body = "📍 Location: " + " - ".join(loc_str)
-        display_body = body
+            body = "📍 Location: " + " - ".join(loc_str)
+            display_body = body
 
-    elif msg_type == "contacts":
-        contacts_data = msg.get("contacts", [])
-        c_list = []
-        for c in contacts_data:
-            c_name = c.get("name", {}).get("formatted_name", "Unknown")
-            phones = c.get("phones", [])
-            c_phone = phones[0].get("phone", "") if phones else ""
-            c_list.append(f"{c_name} ({c_phone})" if c_phone else c_name)
-        
-        body = "👤 Contact: " + ", ".join(c_list)
-        display_body = body
+        elif msg_type == "contacts":
+            contacts_data = msg.get("contacts", [])
+            c_list = []
+            for c in contacts_data:
+                c_name = c.get("name", {}).get("formatted_name", "Unknown")
+                phones = c.get("phones", [])
+                c_phone = phones[0].get("phone", "") if phones else ""
+                c_list.append(f"{c_name} ({c_phone})" if c_phone else c_name)
+            
+            body = "👤 Contact: " + ", ".join(c_list)
+            display_body = body
 
-    if not display_body:
-        body = f"[{msg_type}] " + json.dumps(msg.get(msg_type, msg))
-        display_body = body
+        if not display_body:
+            body = f"[{msg_type}] " + json.dumps(msg.get(msg_type, msg))
+            display_body = body
 
-    logger.info("[JMSTECHNOVA DEBUG] msg payload: %s", json.dumps(msg))
-    logger.info("[JMSTECHNOVA] from=%s type=%s body=%r display_body=%r id=%s", number, msg_type, body, display_body, msg_id)
+        logger.info("[JMSTECHNOVA DEBUG] msg payload: %s", json.dumps(msg))
+        logger.info("[JMSTECHNOVA] from=%s type=%s body=%r display_body=%r id=%s", number, msg_type, body, display_body, msg_id)
 
-    customer_name = profile_name if profile_name else number
-    customer_obj, _ = Customer.objects.get_or_create(phone=number, defaults={'name': customer_name})
-    if profile_name and customer_obj.name == number:
-        customer_obj.name = profile_name
-        customer_obj.save(update_fields=['name'])
+        customer_name = profile_name if profile_name else number
+        customer_obj, _ = Customer.objects.get_or_create(phone=number, defaults={'name': customer_name})
+        if profile_name and customer_obj.name == number:
+            customer_obj.name = profile_name
+            customer_obj.save(update_fields=['name'])
 
-    phone_id = JMSTECHNOVA_PHONE_NUMBER_ID
-    client_account_obj = ClientAccount.objects.filter(phone_number_id=phone_id).first()
+        phone_id = JMSTECHNOVA_PHONE_NUMBER_ID
+        client_account_obj = ClientAccount.objects.filter(phone_number_id=phone_id).first()
 
-    conv_obj, _ = Conversation.objects.get_or_create(
-        customer=customer_obj, 
-        phone_number_id=phone_id, 
-        defaults={'client': client_account_obj}
-    )
+        conv_obj, _ = Conversation.objects.get_or_create(
+            customer=customer_obj, 
+            phone_number_id=phone_id, 
+            defaults={'client': client_account_obj}
+        )
 
-    Message.objects.create(
-        conversation=conv_obj,
-        client=client_account_obj,
-        customer=customer_obj,
-        meta_message_id=msg_id,
-        direction="inbound",
-        message_type=msg_type if msg_type in ['text', 'template', 'image', 'document', 'video'] else 'text',
-        content=display_body,
-        status='delivered'
-    )
+        Message.objects.create(
+            conversation=conv_obj,
+            client=client_account_obj,
+            customer=customer_obj,
+            meta_message_id=msg_id,
+            direction="inbound",
+            message_type=msg_type if msg_type in ['text', 'template', 'image', 'document', 'video'] else 'text',
+            content=display_body,
+            status='delivered'
+        )
+    except Exception as e:
+        logger.exception("[JMSTECHNOVA] Error handling message: %s", e)
