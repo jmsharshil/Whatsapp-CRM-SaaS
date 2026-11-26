@@ -10,7 +10,6 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 
 from CRM.models import Customer, Conversation, Message, ClientAccount
-from CRM.META.webhook_views import _normalize_e164_phone
 from .jmstechnova_utils import JMSTECHNOVA_PHONE_NUMBER_ID
 
 logger = logging.getLogger(__name__)
@@ -73,6 +72,7 @@ def download_media_from_whatsapp(media_id: str, access_token: str) -> str:
 
 def handle_jmstechnova_message(msg: dict, contact: dict = None):
     try:
+        from CRM.META.webhook_views import _normalize_e164_phone
         raw_from = msg.get("from", "")
         number = _normalize_e164_phone(raw_from)
         msg_id = msg.get("id", "")
