@@ -151,9 +151,16 @@ def handle_globestar_message(msg: dict):
         media_id = msg.get(msg_type, {}).get("id")
         if media_id:
             gs_phone_id = getattr(settings, 'GLOBESTAR_PHONE_NUMBER_ID', GLOBESTAR_PHONE_NUMBER_ID)
-            client_account_obj = ClientAccount.objects.filter(phone_number_id=gs_phone_id).first()
-            token = client_account_obj.access_token if client_account_obj and client_account_obj.access_token else getattr(settings, "META_PERMANENT_TOKEN", "")
-            dl_url = download_media_from_whatsapp(media_id, token)
+            token = getattr(settings, "META_PERMANENT_TOKEN", "") or os.getenv("WHATSAPP_TOKEN", "")
+            if not token:
+                client_account_obj = ClientAccount.objects.filter(phone_number_id=gs_phone_id).first()
+                token = client_account_obj.access_token if (client_account_obj and client_account_obj.access_token) else None
+                if not token:
+                    from CRM.models import WABAAccount
+                    w_acc = WABAAccount.objects.filter(phone_number_id=gs_phone_id).first()
+                    token = w_acc.access_token if (w_acc and w_acc.access_token) else None
+
+            dl_url = download_media_from_whatsapp(media_id, token) if token else ""
             if dl_url:
                 prefix = f"[{msg_type.upper()}]"
                 body = f"{prefix} {dl_url}"
