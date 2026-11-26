@@ -413,8 +413,13 @@ class CampaignListCreateView(APIView):
                 status=400,
             )
 
-        import os
-        token = os.environ.get("WHATSAPP_TOKEN", waba.access_token)
+        # Enforce strict multi-tenant isolation: client must have their own access token
+        token = getattr(waba, "access_token", None)
+        if not token:
+            return Response(
+                {"error": "No WhatsApp access token found for your organization. Please connect via Embedded Signup."},
+                status=400,
+            )
 
         # ── 3.5 Upload Media File (if provided) ──────────────────────────────
         if media_file:

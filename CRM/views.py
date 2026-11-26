@@ -1130,7 +1130,10 @@ class TemplateListCreateView(APIView):
         header_type = data.get("header_type", "")
         
         import os
-        token = os.environ.get("WHATSAPP_TOKEN", waba.access_token)
+        token = getattr(waba, "access_token", None)
+        if not token:
+            template.delete()
+            return Response({"error": "No WhatsApp access token found for your organization. Please reconnect via Embedded Signup."}, status=400)
         
         if example_media and header_type in ("IMAGE", "VIDEO", "DOCUMENT"):
             app_id = os.environ.get("META_APP_ID")
@@ -1188,7 +1191,10 @@ class TemplateListCreateView(APIView):
         }
 
         meta_url = f"{META_GRAPH_URL}/{waba.waba_id}/message_templates"
-        token = os.environ.get("WHATSAPP_TOKEN", waba.access_token)
+        token = getattr(waba, "access_token", None)
+        if not token:
+            template.delete()
+            return Response({"error": "No WhatsApp access token found for your organization. Please reconnect via Embedded Signup."}, status=400)
         headers  = {
             "Authorization": f"Bearer {token}",
             "Content-Type":  "application/json",
@@ -1292,7 +1298,9 @@ class TemplateDetailView(APIView):
             components = _build_meta_components(comp_data)
 
             import os
-            token = os.environ.get("WHATSAPP_TOKEN", waba.access_token)
+            token = getattr(waba, "access_token", None)
+            if not token:
+                return Response({"error": "No WhatsApp access token found for your organization. Please reconnect via Embedded Signup."}, status=400)
 
             # Handle media upload for header (IMAGE, VIDEO, DOCUMENT)
             example_media = request.FILES.get("example_media")
@@ -1398,7 +1406,9 @@ class TemplateDetailView(APIView):
         if template.template_id and waba:
             try:
                 import os
-                token = os.environ.get("WHATSAPP_TOKEN", waba.access_token)
+                token = getattr(waba, "access_token", None)
+                if not token:
+                    return Response({"error": "No WhatsApp access token found for your organization. Please reconnect via Embedded Signup."}, status=400)
                 meta_url = f"{META_GRAPH_URL}/{waba.waba_id}/message_templates"
                 headers  = {"Authorization": f"Bearer {token}"}
                 params   = {"name": template.name}
@@ -1504,8 +1514,9 @@ class TemplateSyncAllView(APIView):
 
         meta_url = f"{META_GRAPH_URL}/{waba.waba_id}/message_templates"
         
-        # Use permanent TechProvider token if available, else fallback
-        token = os.environ.get("WHATSAPP_TOKEN", waba.access_token)
+        token = getattr(waba, "access_token", None)
+        if not token:
+            return Response({"error": "No WhatsApp access token found for your organization. Please reconnect via Embedded Signup."}, status=400)
         headers  = {"Authorization": f"Bearer {token}"}
         params   = {"fields": "id,name,status,category,language,components", "limit": 250}
 
@@ -1842,9 +1853,7 @@ class MetaDirectMessageSendView(APIView):
             phone_number_id = getattr(waba.waba_account, "phone_number_id", None) if hasattr(waba, "waba_account") else None
             
         import os
-        token = os.environ.get("WHATSAPP_TOKEN")
-        if not token and hasattr(waba, "access_token"):
-            token = waba.access_token
+        token = getattr(waba, "access_token", None) if hasattr(waba, "access_token") else None
         if not token and hasattr(waba, "waba_account"):
             token = getattr(waba.waba_account, "access_token", None)
 
@@ -3059,9 +3068,9 @@ class MetaTemplateAnalyticsView(APIView):
         if err:
             return Response(err, status=400)
             
-        waba_id = req_waba_id or waba.waba_id
-        import os
-        access_token = req_token or os.environ.get("WHATSAPP_TOKEN", waba.access_token)
+        # Enforce tenant isolation: strictly use the organization's WABA and token
+        waba_id = getattr(waba, "waba_id", None)
+        access_token = getattr(waba, "access_token", None)
         
         if not waba_id or not access_token:
             return Response({"error": "waba_id and access_token are required, or organization must have WABA connected"}, status=400)
@@ -3195,9 +3204,8 @@ class WhatsAppBusinessProfileView(APIView):
                 "error": err.get("error", "WABA not connected. Please connect WhatsApp first.")
             }, status=400)
 
-        import os
         phone_number_id = getattr(waba, "phone_number_id", None)
-        token = os.environ.get("WHATSAPP_TOKEN", getattr(waba, "access_token", None))
+        token = getattr(waba, "access_token", None)
 
         if not phone_number_id or not token:
             return None, None, Response({
