@@ -14,7 +14,17 @@ def _meta_post_mahindra(payload: dict) -> bool:
         logger.error("[mahindra] mahindra_PHONE_NUMBER_ID is not set in code")
         return False
         
-    token = getattr(settings, "META_PERMANENT_TOKEN", "")
+    from CRM.models import ClientAccount, WABAAccount
+    client_acc = ClientAccount.objects.filter(phone_number_id=phone_id).first()
+    token = client_acc.access_token if (client_acc and client_acc.access_token) else None
+    if not token:
+        waba_acc = WABAAccount.objects.filter(phone_number_id=phone_id).first()
+        token = waba_acc.access_token if (waba_acc and waba_acc.access_token) else None
+
+    if not token:
+        logger.error("[mahindra] No access token found in database for phone_id=%s. Please reconnect via Embedded Signup.", phone_id)
+        return False
+
     url = META_SEND_URL.format(phone_id=phone_id)
     
     headers = {

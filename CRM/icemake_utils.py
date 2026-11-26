@@ -82,7 +82,17 @@ META_SEND_URL = "https://graph.facebook.com/v22.0/{phone_id}/messages"
 from CRM.models import Customer, Conversation, ClientAccount, Message
 
 def _meta_post_icemake(payload: dict) -> bool:
-    token = getattr(settings, "META_PERMANENT_TOKEN", "")
+    from CRM.models import ClientAccount, WABAAccount
+    client_acc = ClientAccount.objects.filter(phone_number_id=ICEMAKE_PHONE_NUMBER_ID).first()
+    token = client_acc.access_token if (client_acc and client_acc.access_token) else None
+    if not token:
+        waba_acc = WABAAccount.objects.filter(phone_number_id=ICEMAKE_PHONE_NUMBER_ID).first()
+        token = waba_acc.access_token if (waba_acc and waba_acc.access_token) else None
+
+    if not token:
+        logger.error("[IceMake] No access token found in database for phone_id=%s. Please reconnect via Embedded Signup.", ICEMAKE_PHONE_NUMBER_ID)
+        return False
+
     url = META_SEND_URL.format(phone_id=ICEMAKE_PHONE_NUMBER_ID)
     headers = {
         "Authorization": f"Bearer {token}",

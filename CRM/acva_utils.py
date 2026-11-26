@@ -15,10 +15,16 @@ ACVA_PHONE_NUMBER_ID = "104557535819026" # Actual ACVA phone number ID
 META_SEND_URL = "https://graph.facebook.com/v20.0/{phone_id}/messages"
 
 def _meta_post_acva(payload: dict) -> bool:
-    token = getattr(settings, "META_PERMANENT_TOKEN", "")
+    from CRM.models import ClientAccount, WABAAccount
     client_account = ClientAccount.objects.filter(phone_number_id=ACVA_PHONE_NUMBER_ID).first()
-    if client_account and client_account.access_token:
-        token = client_account.access_token
+    token = client_account.access_token if (client_account and client_account.access_token) else None
+    if not token:
+        waba_acc = WABAAccount.objects.filter(phone_number_id=ACVA_PHONE_NUMBER_ID).first()
+        token = waba_acc.access_token if (waba_acc and waba_acc.access_token) else None
+
+    if not token:
+        logger.error("[ACVA] No access token found in database for phone_id=%s. Please reconnect via Embedded Signup.", ACVA_PHONE_NUMBER_ID)
+        return False
         
     url = META_SEND_URL.format(phone_id=ACVA_PHONE_NUMBER_ID)
     headers = {

@@ -38,7 +38,7 @@ from django.utils.decorators import method_decorator
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 
-from CRM.models import ClientAccount, Customer, Conversation, Message, CampaignRecipient
+from CRM.models import ClientAccount, Customer, Conversation, Message, CampaignRecipient, WABAAccount
 
 # ── Client bot flow (multi-tenant) ────────────────────────────────────────────
 from CRM.META.client_views import handle_client_message
@@ -209,6 +209,9 @@ def _get_client_by_phone_number_id(phone_number_id: str):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def download_insight_media_from_whatsapp(media_id: str, access_token: str) -> str:
+    if not access_token:
+        logger.warning("[INSIGHT] Cannot download media %s: No access_token provided", media_id)
+        return ""
     import uuid
     import requests
     from django.core.files.storage import default_storage
@@ -517,22 +520,32 @@ def _handle_jms_internal_message(msg: dict, value: dict, phone_number_id: str = 
                     media_id = msg.get("image", {}).get("id")
                     if media_id:
                         try:
-                            token = getattr(settings, "META_PERMANENT_TOKEN", os.getenv("META_ACCESS_TOKEN", ""))
-                            # 1. Get media URL
-                            media_url_req = requests.get(f"https://graph.facebook.com/v22.0/{media_id}", headers={"Authorization": f"Bearer {token}"})
-                            if media_url_req.status_code == 200:
-                                media_url = media_url_req.json().get("url")
-                                # 2. Download binary data
-                                img_resp = requests.get(media_url, headers={"Authorization": f"Bearer {token}"})
-                                if img_resp.status_code == 200:
-                                    # Save to media folder
-                                    import os
-                                    save_dir = os.path.join(settings.BASE_DIR, 'media', 'navratri_payments')
-                                    os.makedirs(save_dir, exist_ok=True)
-                                    file_path = os.path.join(save_dir, f"{reg.id}_{media_id}.jpg")
-                                    with open(file_path, 'wb') as f:
-                                        f.write(img_resp.content)
-                                    logger.info(f"Downloaded Navratri payment screenshot for reg {reg.id}")
+                            # Resolve token for Navratri phone
+                            from CRM.navratri_views import NAVRATRI_PHONE_NUMBER_ID
+                            c_acc = ClientAccount.objects.filter(phone_number_id=NAVRATRI_PHONE_NUMBER_ID).first()
+                            token = c_acc.access_token if (c_acc and c_acc.access_token) else None
+                            if not token:
+                                w_acc = WABAAccount.objects.filter(phone_number_id=NAVRATRI_PHONE_NUMBER_ID).first()
+                                token = w_acc.access_token if (w_acc and w_acc.access_token) else getattr(settings, "META_PERMANENT_TOKEN", "")
+
+                            if not token:
+                                logger.warning("[Navratri] No access token found for downloading payment screenshot")
+                            else:
+                                # 1. Get media URL
+                                media_url_req = requests.get(f"https://graph.facebook.com/v22.0/{media_id}", headers={"Authorization": f"Bearer {token}"}, timeout=10)
+                                if media_url_req.status_code == 200:
+                                    media_url = media_url_req.json().get("url")
+                                    # 2. Download binary data
+                                    img_resp = requests.get(media_url, headers={"Authorization": f"Bearer {token}"}, timeout=15)
+                                    if img_resp.status_code == 200:
+                                        # Save to media folder
+                                        import os
+                                        save_dir = os.path.join(settings.BASE_DIR, 'media', 'navratri_payments')
+                                        os.makedirs(save_dir, exist_ok=True)
+                                        file_path = os.path.join(save_dir, f"{reg.id}_{media_id}.jpg")
+                                        with open(file_path, 'wb') as f:
+                                            f.write(img_resp.content)
+                                        logger.info(f"Downloaded Navratri payment screenshot for reg {reg.id}")
                         except Exception as dl_err:
                             logger.error(f"Failed to download Navratri image: {dl_err}")
                 
@@ -739,8 +752,11 @@ class WhatsAppWebhookView(APIView):
                             elif msg_type in ["image", "video", "audio", "document", "sticker"]:
                                 media_id = echo.get(msg_type, {}).get("id")
                                 caption = echo.get(msg_type, {}).get("caption", "")
-                                token = client.access_token if client and client.access_token else getattr(settings, "META_PERMANENT_TOKEN", getattr(settings, "META_ACCESS_TOKEN", ""))
-                                dl_url = download_insight_media_from_whatsapp(media_id, token) if media_id else ""
+                                token = client.access_token if (client and client.access_token) else None
+                                if not token:
+                                    w_acc = WABAAccount.objects.filter(phone_number_id=phone_number_id).first()
+                                    token = w_acc.access_token if (w_acc and w_acc.access_token) else None
+                                dl_url = download_insight_media_from_whatsapp(media_id, token) if (media_id and token) else ""
                                 prefix = f"[{msg_type.upper()}]"
                                 content = f"{prefix} {dl_url}" if dl_url else prefix
                                 if caption:
@@ -945,9 +961,12 @@ class WhatsAppWebhookView(APIView):
                             if msg_type in ["image", "video", "audio", "document", "sticker"]:
                                 media_id = msg.get(msg_type, {}).get("id")
                                 if media_id:
-                                    token = client_acc.access_token if client_acc and client_acc.access_token else getattr(settings, "META_PERMANENT_TOKEN", getattr(settings, "META_ACCESS_TOKEN", ""))
+                                    token = client_acc.access_token if (client_acc and client_acc.access_token) else None
+                                    if not token:
+                                        w_acc = WABAAccount.objects.filter(phone_number_id=phone_number_id).first()
+                                        token = w_acc.access_token if (w_acc and w_acc.access_token) else None
                                     
-                                    dl_url = download_insight_media_from_whatsapp(media_id, token)
+                                    dl_url = download_insight_media_from_whatsapp(media_id, token) if token else ""
                                     if dl_url:
                                         prefix = f"[{msg_type.upper()}]"
                                         media_text = f"{prefix} {dl_url}"
@@ -989,12 +1008,23 @@ class WhatsAppWebhookView(APIView):
                             raw_phone = msg.get("from", "").strip()
                             if raw_phone:
                                 try:
-                                    token = getattr(settings, "META_PERMANENT_TOKEN", os.environ.get("META_ACCESS_TOKEN", ""))
-                                    url = f"https://graph.facebook.com/v22.0/{phone_number_id}/messages"
-                                    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-                                    reply_text = "Thank you for connecting with us. Our team will contact you shortly!"
-                                    payload = {"messaging_product": "whatsapp", "to": raw_phone, "type": "text", "text": {"body": reply_text}}
-                                    requests.post(url, json=payload, headers=headers)
+                                    # Fetch token strictly for this phone_number_id
+                                    token = client.access_token if (client and client.access_token) else None
+                                    if not token:
+                                        c_acc = ClientAccount.objects.filter(phone_number_id=phone_number_id).first()
+                                        token = c_acc.access_token if (c_acc and c_acc.access_token) else None
+                                    if not token:
+                                        w_acc = WABAAccount.objects.filter(phone_number_id=phone_number_id).first()
+                                        token = w_acc.access_token if (w_acc and w_acc.access_token) else None
+
+                                    if not token:
+                                        logger.warning(f"[Webhook] Cannot send fallback auto-reply: No token found for phone_number_id={phone_number_id}")
+                                    else:
+                                        url = f"https://graph.facebook.com/v22.0/{phone_number_id}/messages"
+                                        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+                                        reply_text = "Thank you for connecting with us. Our team will contact you shortly!"
+                                        payload = {"messaging_product": "whatsapp", "to": raw_phone, "type": "text", "text": {"body": reply_text}}
+                                        requests.post(url, json=payload, headers=headers, timeout=10)
                                 except Exception as e:
                                     logger.error(f"[Webhook] Fallback auto-reply send error: {e}")
 

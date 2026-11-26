@@ -12,7 +12,17 @@ logger = logging.getLogger(__name__)
 GKD_PHONE_NUMBER_ID = "1251906908002889"
 META_SEND_URL = "https://graph.facebook.com/v22.0/{phone_id}/messages"
 def _meta_post_gkd(payload: dict) -> bool:
-    token = getattr(settings, "META_PERMANENT_TOKEN", "")
+    from CRM.models import ClientAccount, WABAAccount
+    client_acc = ClientAccount.objects.filter(phone_number_id=GKD_PHONE_NUMBER_ID).first()
+    token = client_acc.access_token if (client_acc and client_acc.access_token) else None
+    if not token:
+        waba_acc = WABAAccount.objects.filter(phone_number_id=GKD_PHONE_NUMBER_ID).first()
+        token = waba_acc.access_token if (waba_acc and waba_acc.access_token) else None
+
+    if not token:
+        logger.error("[GKD] No access token found in database for phone_id=%s. Please reconnect via Embedded Signup.", GKD_PHONE_NUMBER_ID)
+        return False
+
     url = META_SEND_URL.format(phone_id=GKD_PHONE_NUMBER_ID)
     headers = {
         "Authorization": f"Bearer {token}",
