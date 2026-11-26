@@ -373,15 +373,18 @@ def _meta_post_gs(payload: dict) -> bool:
         logger.error("[GLOBESTAR] GLOBESTAR_PHONE_NUMBER_ID is not set in code")
         return False
 
-    from CRM.models import ClientAccount, WABAAccount
-    client_acc = ClientAccount.objects.filter(phone_number_id=phone_id).first()
-    token = client_acc.access_token if (client_acc and client_acc.access_token) else None
+    # Use permanent token for Globe Star
+    token = getattr(settings, "META_PERMANENT_TOKEN", "") or os.getenv("WHATSAPP_TOKEN", "")
     if not token:
-        waba_acc = WABAAccount.objects.filter(phone_number_id=phone_id).first()
-        token = waba_acc.access_token if (waba_acc and waba_acc.access_token) else None
+        from CRM.models import ClientAccount, WABAAccount
+        client_acc = ClientAccount.objects.filter(phone_number_id=phone_id).first()
+        token = client_acc.access_token if (client_acc and client_acc.access_token) else None
+        if not token:
+            waba_acc = WABAAccount.objects.filter(phone_number_id=phone_id).first()
+            token = waba_acc.access_token if (waba_acc and waba_acc.access_token) else None
 
     if not token:
-        logger.error("[GLOBESTAR] No access token found in database for phone_id=%s. Please reconnect via Embedded Signup.", phone_id)
+        logger.error("[GLOBESTAR] No token found for phone_id=%s.", phone_id)
         return False
 
     url = META_SEND_URL.format(phone_id=phone_id)
